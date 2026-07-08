@@ -1,0 +1,70 @@
+# =========================================================================
+# JudgeX — Local Development Infrastructure
+# Brings up ONLY the stateful backing services the app depends on:
+#   - PostgreSQL (source of truth)   see docs/DATABASE_DESIGN.md
+#   - Redis      (queue + cache + rate limits)   see docs/ARCHITECTURE.md §6
+#   - Ollama     (default local, free AI provider)   see docs/ARCHITECTURE.md §9.1
+#
+# The backend API and judge workers run on the HOST during development and
+# connect to these services via localhost (see backend/.env.example).
+# No application code is built or packaged here.
+# =========================================================================
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: judgex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: judgex
+      POSTGRES_PASSWORD: judgex
+      POSTGRES_DB: judgex
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U judgex -d judgex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: judgex-redis
+    restart: unless-stopped
+    # Enable AOF so queue/cache state survives restarts (persistent volume).
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: judgex-ollama
+    restart: unless-stopped
+    # Exposes the Ollama HTTP API so the backend can reach it at
+    # http://localhost:11434 (matches OLLAMA_BASE_URL in backend/.env.example).
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  pgdata:
+  redisdata:
+  ollamadata:

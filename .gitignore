@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Environment & secrets
+.env
+*.env
+.env.*
+!.env.example
+!*.env.example
+
+# Build output
+dist/
+build/
+frontend/dist/
+backend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Runtime / temp judge workspaces
+tmp/
+.judge-workspaces/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Coverage
+coverage/
+
+# Vite / frontend caches
+.vite/
+*.local

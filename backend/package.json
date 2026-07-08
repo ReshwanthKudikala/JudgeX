@@ -1,0 +1,36 @@
+{
+  "name": "judgex-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JudgeX backend: modular monolith API + background judge workers.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "worker:judge": "node src/workers/judge.worker.js",
+    "worker:judge:dev": "nodemon src/workers/judge.worker.js",
+    "worker:cleanup": "node src/workers/cleanup.worker.js",
+    "test": "echo \"tests not implemented yet\" && exit 0"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "ioredis": "^5.4.2",
+    "bullmq": "^5.34.5",
+    "dockerode": "^4.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.7",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0",
+    "zod": "^3.24.1",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

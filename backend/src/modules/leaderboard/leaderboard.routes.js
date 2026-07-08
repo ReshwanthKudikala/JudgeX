@@ -1,0 +1,1 @@
+// Declares leaderboard HTTP endpoints.
