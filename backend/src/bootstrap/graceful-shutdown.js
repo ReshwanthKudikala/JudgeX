@@ -44,7 +44,7 @@ function registerGracefulShutdown(server, { onShutdown = [], timeoutMs = DEFAULT
       logger.info('Shutdown complete');
       process.exit(0);
     } catch (err) {
-      logger.error('Error during shutdown', { message: err.message, stack: err.stack });
+      logger.error('Error during shutdown', { error: err.message, stack: err.stack });
       process.exit(1);
     }
   }
@@ -54,12 +54,12 @@ function registerGracefulShutdown(server, { onShutdown = [], timeoutMs = DEFAULT
 
   // Last-resort safety nets: log and shut down rather than crashing silently.
   process.on('uncaughtException', (err) => {
-    logger.error('Uncaught exception', { message: err.message, stack: err.stack });
+    logger.error('Uncaught exception', { error: err.message, stack: err.stack });
     shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled promise rejection', {
-      message: reason instanceof Error ? reason.message : String(reason),
+      error: reason instanceof Error ? reason.message : String(reason),
       stack: reason instanceof Error ? reason.stack : undefined,
     });
     shutdown('unhandledRejection');

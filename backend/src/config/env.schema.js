@@ -16,14 +16,24 @@ const envSchema = z
     // Comma-separated list of allowed CORS origins.
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
 
-    // --- PostgreSQL (connectivity is NOT verified at boot) ---
+    // --- PostgreSQL ---
     DATABASE_URL: z
       .string()
       .default('postgres://judgex:judgex@localhost:5432/judgex'),
     DB_POOL_MAX: z.coerce.number().int().positive().default(10),
+    DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+    DB_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30000),
+    // When true, the app aborts startup if PostgreSQL cannot be reached.
+    DB_REQUIRED: booleanish.default('true'),
 
     // --- Redis ---
     REDIS_URL: z.string().default('redis://localhost:6379'),
+    // When true, the app aborts startup if Redis cannot be reached.
+    REDIS_REQUIRED: booleanish.default('true'),
+
+    // --- Infrastructure startup retry policy ---
+    INFRA_STARTUP_RETRIES: z.coerce.number().int().nonnegative().default(5),
+    INFRA_STARTUP_RETRY_DELAY_MS: z.coerce.number().int().positive().default(1000),
 
     // --- JWT ---
     JWT_SECRET: z.string().min(1).default('dev-insecure-secret-change-me'),

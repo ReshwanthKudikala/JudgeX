@@ -38,10 +38,19 @@ const config = Object.freeze({
   database: Object.freeze({
     url: env.DATABASE_URL,
     poolMax: env.DB_POOL_MAX,
+    connectionTimeoutMs: env.DB_CONNECTION_TIMEOUT_MS,
+    idleTimeoutMs: env.DB_IDLE_TIMEOUT_MS,
+    required: env.DB_REQUIRED,
   }),
 
   redis: Object.freeze({
     url: env.REDIS_URL,
+    required: env.REDIS_REQUIRED,
+  }),
+
+  infra: Object.freeze({
+    startupRetries: env.INFRA_STARTUP_RETRIES,
+    startupRetryDelayMs: env.INFRA_STARTUP_RETRY_DELAY_MS,
   }),
 
   jwt: Object.freeze({
