@@ -15,6 +15,7 @@ const { initInfrastructure, shutdownInfrastructure, getRedis } = require('../inf
 const { SUBMISSIONS_QUEUE_NAME } = require('../infrastructure/queue/queues');
 const { SCHEMA_VERSION } = require('../infrastructure/queue/queue.service');
 const { submissionService } = require('../modules/submissions/submissions.service');
+const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
 const { NotFoundError } = require('../shared/errors/http-errors');
 
 const log = createLogger({ component: 'judge-worker' });
@@ -73,14 +74,13 @@ async function processJob(job) {
   }
 
   // Transition queued → running (worker has picked it up).
-  const running = await submissionService.markSubmissionRunning(submissionId);
+  await submissionService.markSubmissionRunning(submissionId);
 
-  // Skeleton stops here — the Docker/compile/execute/verdict pipeline lands next.
-  log.info('Submission marked running; judging pipeline not yet implemented (skeleton)', {
-    submissionId,
-    status: running.status,
-  });
-  return { submissionId, status: running.status };
+  // Delegate the compile → run → compare → verdict → persist flow to the pipeline.
+  const outcome = await runJudgePipeline(submissionId);
+
+  log.info('Submission judged', { submissionId, verdict: outcome.verdict });
+  return { submissionId, verdict: outcome.verdict };
 }
 
 let worker = null;
