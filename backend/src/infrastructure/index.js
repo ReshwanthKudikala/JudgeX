@@ -16,6 +16,7 @@ const {
   checkRedisHealth,
   closeRedis,
 } = require('./cache/redis.cache');
+const { closeSubmissionsQueue } = require('./queue/queues');
 
 // Connect one service; fail fast if it is required, otherwise degrade.
 async function connectService(name, connectFn, required) {
@@ -51,7 +52,9 @@ async function initInfrastructure() {
 }
 
 // Close everything, tolerating individual failures so one hang can't block others.
+// The BullMQ queue is closed BEFORE Redis, since it borrows the shared client.
 async function shutdownInfrastructure() {
+  await closeSubmissionsQueue();
   await Promise.allSettled([closePostgres(), closeRedis()]);
 }
 
