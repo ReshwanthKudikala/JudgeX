@@ -10,6 +10,7 @@ const { logger } = require('./shared/logger/logger');
 const { correlationId } = require('./middlewares/correlation-id');
 const { notFound } = require('./middlewares/not-found');
 const { errorHandler } = require('./middlewares/error-handler');
+const { registerModules } = require('./bootstrap/module-registry');
 
 const pkg = require('../package.json');
 
@@ -49,7 +50,8 @@ function createApp() {
     });
   });
 
-  // No other routes are mounted yet (auth/problems/submissions/etc. come later).
+  // --- Feature module routers (mounted under /api/v1) ---
+  registerModules(app);
 
   // --- Terminal middleware ---
   app.use(notFound);
