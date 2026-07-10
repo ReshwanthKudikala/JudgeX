@@ -80,6 +80,25 @@ class UserRepository extends BaseRepository {
       client,
     );
   }
+
+  /**
+   * Fetch a single active (non-soft-deleted) user by username.
+   * Backs the registration uniqueness check; returns public fields only.
+   *
+   * @param {string} username
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>} the users row, or null if none.
+   */
+  findByUsername(username, client) {
+    return this.queryOne(
+      `SELECT ${PUBLIC_COLUMNS}
+         FROM users
+        WHERE username = $1
+          AND is_deleted = false`,
+      [username],
+      client,
+    );
+  }
 }
 
 module.exports = { UserRepository, userRepository: new UserRepository() };
