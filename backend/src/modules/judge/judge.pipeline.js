@@ -19,15 +19,22 @@ const { compareOutputs } = require('./comparator');
 const { generateVerdict } = require('./verdict-engine');
 const { submissionService } = require('../submissions/submissions.service');
 const { problemService } = require('../problems/problems.service');
+const { testCaseService } = require('../problems/testcase.service');
+const { resolveTestCase } = require('../../infrastructure/storage/storage.adapter');
 const { logger } = require('../../shared/logger/logger');
 const { JudgeError } = require('../../shared/errors/domain-errors');
 
 // Prebuilt sandbox image per language (built ahead of time; ARCHITECTURE.md §5.2).
 const LANGUAGE_IMAGES = Object.freeze({ cpp: 'judgex-cpp', python: 'judgex-python' });
 
-// Until the test-case data layer exists, refuse to judge (never falsely accept).
-async function defaultLoadTestCases() {
-  throw new JudgeError('Test case loading is not yet implemented.');
+// Load metadata rows (ordered by display_order) then hydrate each payload via the
+// storage adapter. Inline payloads resolve to text; external payloads currently
+// throw NotImplementedError, which is propagated unchanged (never swallowed).
+// The pipeline consumes the resulting { input, expectedOutput } items unchanged,
+// so it stays storage-agnostic.
+async function defaultLoadTestCases(problemId) {
+  const rows = await testCaseService.getJudgeTestCases(problemId);
+  return rows.map((row) => resolveTestCase(row));
 }
 
 /**
