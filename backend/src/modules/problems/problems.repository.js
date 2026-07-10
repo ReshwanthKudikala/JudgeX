@@ -53,6 +53,19 @@ const OPTIONAL_INSERT_COLUMNS = Object.freeze({
   created_by: 'createdBy',
 });
 
+// Mutable columns for updates -> the request field that supplies them. Counters
+// (total_*) and authorship (created_by) are intentionally not updatable here.
+const UPDATABLE_COLUMNS = Object.freeze({
+  slug: 'slug',
+  title: 'title',
+  statement: 'statement',
+  constraints_text: 'constraintsText',
+  difficulty: 'difficulty',
+  time_limit_ms: 'timeLimitMs',
+  memory_limit_mb: 'memoryLimitMb',
+  is_published: 'isPublished',
+});
+
 class ProblemRepository extends BaseRepository {
   /**
    * Fetch a single active (non-soft-deleted) problem by its unique slug.
@@ -171,6 +184,68 @@ class ProblemRepository extends BaseRepository {
        VALUES (${placeholders})
        RETURNING ${DETAIL_COLUMNS}`,
       params,
+      client,
+    );
+  }
+
+  /**
+   * Patch the mutable columns of an active problem and bump updated_at.
+   * Only fields present in `data` (mapped via UPDATABLE_COLUMNS) are changed.
+   *
+   * @param {string} id - UUID.
+   * @param {Object} data - camelCase partial of updatable fields.
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>} the updated row, or null if no active
+   *          problem with that id exists (not found or already soft-deleted).
+   */
+  updateProblem(id, data, client) {
+    const assignments = [];
+    const params = [];
+    let index = 1;
+
+    for (const [column, field] of Object.entries(UPDATABLE_COLUMNS)) {
+      if (data[field] !== undefined) {
+        assignments.push(`${column} = $${index}`);
+        params.push(data[field]);
+        index += 1;
+      }
+    }
+    assignments.push('updated_at = now()');
+
+    params.push(id);
+
+    return this.queryOne(
+      `UPDATE problems
+          SET ${assignments.join(', ')}
+        WHERE id = $${index}
+          AND is_deleted = false
+       RETURNING ${DETAIL_COLUMNS}`,
+      params,
+      client,
+    );
+  }
+
+  /**
+   * Soft-delete an active problem: flag it deleted, stamp deleted_at, and
+   * unpublish it. The row is preserved so historical submissions stay valid
+   * (the FK is ON DELETE RESTRICT) — never a physical delete.
+   *
+   * @param {string} id - UUID.
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<{id: string}|null>} the id when a row was soft-deleted,
+   *          or null if none was active (not found or already deleted).
+   */
+  softDeleteProblem(id, client) {
+    return this.queryOne(
+      `UPDATE problems
+          SET is_deleted = true,
+              deleted_at = now(),
+              is_published = false,
+              updated_at = now()
+        WHERE id = $1
+          AND is_deleted = false
+       RETURNING id`,
+      [id],
       client,
     );
   }

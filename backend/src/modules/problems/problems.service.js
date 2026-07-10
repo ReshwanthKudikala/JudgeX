@@ -147,6 +147,68 @@ class ProblemService {
     });
   }
 
+  /**
+   * Update an existing active problem.
+   *
+   * Runs in a transaction: confirm the problem exists, reject a slug that is
+   * already taken by a *different* active problem (friendly pre-check), then
+   * update. The DB UNIQUE constraint stays authoritative for races and for
+   * slugs reserved by soft-deleted problems (caught as ConflictError).
+   *
+   * @param {string} id - UUID.
+   * @param {Object} data - partial of updatable fields (validated upstream).
+   * @returns {Promise<Object>} the updated problem domain object.
+   * @throws {NotFoundError} when no active problem has that id.
+   * @throws {ConflictError} when the new slug is already in use.
+   */
+  async updateProblem(id, data) {
+    return withTransaction(async (client) => {
+      const existing = await this.problemRepository.findById(id, client);
+      if (!existing) {
+        throw new NotFoundError('Problem not found.');
+      }
+
+      if (data.slug !== undefined && data.slug !== existing.slug) {
+        const clash = await this.problemRepository.findBySlug(data.slug, client);
+        if (clash && clash.id !== id) {
+          throw ProblemService.#slugConflict();
+        }
+      }
+
+      try {
+        const row = await this.problemRepository.updateProblem(id, data, client);
+        if (!row) {
+          // Lost a race with a concurrent soft-delete between load and update.
+          throw new NotFoundError('Problem not found.');
+        }
+        return toProblemDetail(row);
+      } catch (err) {
+        if (err instanceof ConflictError) {
+          throw ProblemService.#slugConflict();
+        }
+        throw err;
+      }
+    });
+  }
+
+  /**
+   * Soft-delete a problem (never a physical delete). Idempotency is not
+   * assumed: deleting an unknown/already-deleted problem is a NotFoundError.
+   *
+   * @param {string} id - UUID.
+   * @returns {Promise<{ id: string, deleted: true }>}
+   * @throws {NotFoundError} when no active problem has that id.
+   */
+  async deleteProblem(id) {
+    return withTransaction(async (client) => {
+      const deleted = await this.problemRepository.softDeleteProblem(id, client);
+      if (!deleted) {
+        throw new NotFoundError('Problem not found.');
+      }
+      return { id: deleted.id, deleted: true };
+    });
+  }
+
   static #slugConflict() {
     return new AppError('A problem with this slug already exists.', {
       statusCode: 409,

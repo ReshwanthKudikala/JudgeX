@@ -47,4 +47,31 @@ async function createProblem(req, res, next) {
   }
 }
 
-module.exports = { listProblems, getProblemBySlug, getProblemById, createProblem };
+// PATCH /admin/problems/:id → 200 { ...problem }
+async function updateProblem(req, res, next) {
+  try {
+    const problem = await problemService.updateProblem(req.params.id, req.body);
+    sendSuccess(req, res, 200, problem);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /admin/problems/:id → 200 { id, deleted: true } (soft delete)
+async function deleteProblem(req, res, next) {
+  try {
+    const result = await problemService.deleteProblem(req.params.id);
+    sendSuccess(req, res, 200, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  listProblems,
+  getProblemBySlug,
+  getProblemById,
+  createProblem,
+  updateProblem,
+  deleteProblem,
+};
