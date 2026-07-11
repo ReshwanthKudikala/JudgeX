@@ -101,17 +101,25 @@ export function LoginForm() {
             />
           </FormField>
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className={cn(
-                'h-4 w-4 rounded border-border bg-background text-primary',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-              )}
-              {...register('rememberMe')}
-            />
-            Remember me
-          </label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className={cn(
+                  'h-4 w-4 rounded border-border bg-background text-primary',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                )}
+                {...register('rememberMe')}
+              />
+              Remember me
+            </label>
+            <Link
+              to={paths.forgotPassword}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           <Button type="submit" className="w-full" loading={isLoading} disabled={isLoading}>
             Sign in

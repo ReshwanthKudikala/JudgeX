@@ -11,6 +11,10 @@ import { AuthLayout } from '@/layouts/AuthLayout';
 import { MainLayout } from '@/layouts/MainLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
+import { VerifyEmailPage } from '@/pages/VerifyEmailPage';
+import { ResendVerificationPage } from '@/pages/ResendVerificationPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const DashboardPage = lazy(() =>
@@ -92,9 +96,16 @@ export const router = createBrowserRouter([
             children: [
               { path: paths.login, element: <LoginPage /> },
               { path: paths.register, element: <RegisterPage /> },
+              { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
+              { path: paths.resetPassword, element: <ResetPasswordPage /> },
+              { path: paths.resendVerification, element: <ResendVerificationPage /> },
             ],
           },
         ],
+      },
+      {
+        element: <AuthLayout />,
+        children: [{ path: paths.verifyEmail, element: <VerifyEmailPage /> }],
       },
       {
         element: <MainLayout />,

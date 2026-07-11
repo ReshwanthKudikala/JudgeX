@@ -50,3 +50,44 @@ export const registerSchema = z
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
 export type RegisterFormValues = z.infer<typeof registerSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, 'Reset token is required.'),
+    newPassword: z
+      .string()
+      .min(8, 'Password must be at least 8 characters.')
+      .max(128, 'Password must be at most 128 characters.'),
+    confirmPassword: z.string().min(1, 'Confirm your password.'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
+export const resendVerificationSchema = z.object({
+  email: emailSchema,
+});
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required.'),
+    newPassword: z
+      .string()
+      .min(8, 'Password must be at least 8 characters.')
+      .max(128, 'Password must be at most 128 characters.'),
+    confirmPassword: z.string().min(1, 'Confirm your password.'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
+export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
+export type ResendVerificationFormValues = z.infer<typeof resendVerificationSchema>;
+export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;

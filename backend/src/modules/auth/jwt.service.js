@@ -1,8 +1,5 @@
 // JWT utilities: issue and verify short-lived access tokens.
-//
-// Framework-agnostic: no Express req/res, no cookies, no middleware, no routes.
-// Secret and expiration come from the config module; errors use the existing
-// application error hierarchy. Only minimal claims are embedded (sub, role).
+// Claims: sub, role, tv (token_version for password-reset revocation).
 
 const jwt = require('jsonwebtoken');
 
@@ -10,16 +7,11 @@ const { config } = require('../../config');
 const { AppError } = require('../../shared/errors/base.error');
 const { UnauthorizedError } = require('../../shared/errors/http-errors');
 
-// Pin the algorithm on both sign and verify to prevent algorithm-confusion
-// attacks (e.g. a forged token claiming "alg": "none").
 const ALGORITHM = 'HS256';
 
 /**
- * Build the minimal custom claims for an access token.
- * Only non-sensitive authorization data — never email/username/PII/hashes.
- *
- * @param {{ id: string, role: string }} user
- * @returns {{ sub: string, role: string }}
+ * @param {{ id: string, role: string, token_version?: number }} user
+ * @returns {{ sub: string, role: string, tv: number }}
  */
 function buildAccessTokenPayload(user) {
   if (!user || !user.id || !user.role) {
@@ -28,17 +20,12 @@ function buildAccessTokenPayload(user) {
       code: 'INTERNAL_ERROR',
     });
   }
-  // `sub` is the standard subject claim (the user id); `iat`/`exp` are added by
-  // jsonwebtoken from `expiresIn`.
-  return { sub: user.id, role: user.role };
+  const tv = Number.isFinite(Number(user.token_version))
+    ? Number(user.token_version)
+    : 0;
+  return { sub: user.id, role: user.role, tv };
 }
 
-/**
- * Issue a signed access token for a user.
- *
- * @param {{ id: string, role: string }} user
- * @returns {string} the signed JWT.
- */
 function generateAccessToken(user) {
   const payload = buildAccessTokenPayload(user);
   return jwt.sign(payload, config.jwt.secret, {
@@ -47,13 +34,6 @@ function generateAccessToken(user) {
   });
 }
 
-/**
- * Verify and decode an access token.
- *
- * @param {string} token - the raw JWT (no "Bearer " prefix).
- * @returns {{ sub: string, role: string, iat: number, exp: number }} decoded claims.
- * @throws {AppError} TOKEN_EXPIRED (401) if expired; UNAUTHENTICATED (401) otherwise.
- */
 function verifyAccessToken(token) {
   if (!token || typeof token !== 'string') {
     throw new UnauthorizedError('Access token is missing.');
@@ -68,7 +48,6 @@ function verifyAccessToken(token) {
         code: 'TOKEN_EXPIRED',
       });
     }
-    // JsonWebTokenError, NotBeforeError, malformed tokens, bad signature, etc.
     throw new UnauthorizedError('Access token is invalid.');
   }
 }

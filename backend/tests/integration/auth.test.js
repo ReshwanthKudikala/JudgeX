@@ -22,6 +22,7 @@ describe('Authentication', () => {
     assert.equal(res.body.data.user.username, username);
     assert.equal(res.body.data.user.email, `${username}@example.com`);
     assert.equal(res.body.data.user.role, 'user');
+    assert.equal(res.body.data.user.email_verified, false);
     assert.equal(res.body.data.user.password_hash, undefined);
   });
 

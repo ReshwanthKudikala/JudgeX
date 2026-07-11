@@ -66,6 +66,25 @@ const envSchema = z
     RATE_LIMIT_CONTEST_JOIN_WINDOW_MS: z.coerce.number().int().positive().default(60000),
     RATE_LIMIT_PROBLEMS_MAX: z.coerce.number().int().positive().default(240),
     RATE_LIMIT_PROBLEMS_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_FORGOT_PASSWORD_MAX: z.coerce.number().int().positive().default(5),
+    RATE_LIMIT_FORGOT_PASSWORD_WINDOW_MS: z.coerce.number().int().positive().default(900000),
+    RATE_LIMIT_RESEND_VERIFICATION_MAX: z.coerce.number().int().positive().default(5),
+    RATE_LIMIT_RESEND_VERIFICATION_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(900000),
+
+    // --- Email (console by default; SMTP optional) ---
+    EMAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
+    EMAIL_FROM: z.string().default('JudgeX <noreply@judgex.local>'),
+    // Public frontend origin used in verification / reset links.
+    APP_PUBLIC_URL: z.string().default('http://localhost:5173'),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().default(587),
+    SMTP_SECURE: booleanish.default('false'),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
 
     // --- AI provider (default is free local Ollama) ---
     AI_PROVIDER: z.enum(['ollama', 'openai']).default('ollama'),

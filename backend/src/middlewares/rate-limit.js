@@ -10,7 +10,7 @@ const {
   isRateLimitStoreReady,
 } = require('../infrastructure/cache/rate-limit.store');
 
-/** @typedef {'auth'|'submission'|'ai'|'admin'|'contestJoin'|'problems'|'global'} RateLimitTier */
+/** @typedef {'auth'|'submission'|'ai'|'admin'|'contestJoin'|'problems'|'forgotPassword'|'resendVerification'|'global'} RateLimitTier */
 
 const DEFAULT_PRESETS = Object.freeze({
   auth: { windowMs: 60_000, max: 10, keyBy: 'ip', failClosed: true },
@@ -19,6 +19,8 @@ const DEFAULT_PRESETS = Object.freeze({
   admin: { windowMs: 60_000, max: 120, keyBy: 'user', failClosed: true },
   contestJoin: { windowMs: 60_000, max: 15, keyBy: 'user', failClosed: false },
   problems: { windowMs: 60_000, max: 240, keyBy: 'ip', failClosed: false },
+  forgotPassword: { windowMs: 900_000, max: 5, keyBy: 'ip', failClosed: true },
+  resendVerification: { windowMs: 900_000, max: 5, keyBy: 'ip', failClosed: true },
   global: { windowMs: 60_000, max: 100, keyBy: 'ip', failClosed: false },
 });
 
@@ -143,6 +145,8 @@ const aiRateLimit = rateLimit('ai');
 const adminRateLimit = rateLimit('admin');
 const contestJoinRateLimit = rateLimit('contestJoin');
 const problemsRateLimit = rateLimit('problems');
+const forgotPasswordRateLimit = rateLimit('forgotPassword');
+const resendVerificationRateLimit = rateLimit('resendVerification');
 
 module.exports = {
   rateLimit,
@@ -153,5 +157,7 @@ module.exports = {
   adminRateLimit,
   contestJoinRateLimit,
   problemsRateLimit,
+  forgotPasswordRateLimit,
+  resendVerificationRateLimit,
   DEFAULT_PRESETS,
 };

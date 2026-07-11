@@ -9,7 +9,7 @@ const { BaseRepository } = require('../../infrastructure/database/base.repositor
 
 // Non-sensitive user fields safe to return to callers (never password_hash).
 const PUBLIC_COLUMNS =
-  'id, username, email, role, is_suspended, last_login_at, created_at, updated_at';
+  'id, username, email, role, is_suspended, last_login_at, email_verified_at, token_version, created_at, updated_at';
 
 class UserRepository extends BaseRepository {
   /**
@@ -17,14 +17,12 @@ class UserRepository extends BaseRepository {
    * The caller supplies an already-hashed password; hashing is not done here.
    *
    * @param {{ username: string, email: string, passwordHash: string, role?: string }} data
-   * @param {import('pg').PoolClient} [client] - optional transaction client so
-   *        this insert can join a caller's unit of work (e.g. user + stats row).
+   * @param {import('pg').PoolClient} [client]
    * @returns {Promise<Object>} the inserted users row.
    */
   createUser({ username, email, passwordHash, role }, client) {
     const id = this.newId();
 
-    // `role` is optional: when omitted, the column's DB default (`'user'`) applies.
     if (role !== undefined) {
       return this.queryOne(
         `INSERT INTO users (id, username, email, password_hash, role)
@@ -44,19 +42,10 @@ class UserRepository extends BaseRepository {
     );
   }
 
-  /**
-   * Fetch a single active (non-soft-deleted) user by email.
-   * `email` is CITEXT, so the match is case-insensitive at the DB level.
-   *
-   * @param {string} email
-   * @param {import('pg').PoolClient} [client]
-   * @returns {Promise<Object|null>} the users row (incl. password_hash), or null.
-   */
   findByEmail(email, client) {
-    // Includes password_hash because this read backs credential verification.
     return this.queryOne(
       `SELECT id, username, email, password_hash, role, is_suspended, last_login_at,
-              created_at, updated_at
+              email_verified_at, token_version, created_at, updated_at
          FROM users
         WHERE email = $1
           AND is_deleted = false`,
@@ -65,13 +54,6 @@ class UserRepository extends BaseRepository {
     );
   }
 
-  /**
-   * Fetch a single active (non-soft-deleted) user by primary key.
-   *
-   * @param {string} id - UUID.
-   * @param {import('pg').PoolClient} [client]
-   * @returns {Promise<Object|null>} the users row, or null if none.
-   */
   findById(id, client) {
     return this.queryOne(
       `SELECT ${PUBLIC_COLUMNS}
@@ -83,14 +65,19 @@ class UserRepository extends BaseRepository {
     );
   }
 
-  /**
-   * Fetch a single active (non-soft-deleted) user by username.
-   * Backs the registration uniqueness check; returns public fields only.
-   *
-   * @param {string} username
-   * @param {import('pg').PoolClient} [client]
-   * @returns {Promise<Object|null>} the users row, or null if none.
-   */
+  /** Like findById but includes password_hash for credential checks. */
+  findByIdWithPassword(id, client) {
+    return this.queryOne(
+      `SELECT id, username, email, password_hash, role, is_suspended, last_login_at,
+              email_verified_at, token_version, created_at, updated_at
+         FROM users
+        WHERE id = $1
+          AND is_deleted = false`,
+      [id],
+      client,
+    );
+  }
+
   findByUsername(username, client) {
     return this.queryOne(
       `SELECT ${PUBLIC_COLUMNS}
@@ -110,6 +97,46 @@ class UserRepository extends BaseRepository {
       client,
     );
   }
+
+  markEmailVerified(id, client) {
+    return this.queryOne(
+      `UPDATE users
+          SET email_verified_at = COALESCE(email_verified_at, now()),
+              updated_at = now()
+        WHERE id = $1
+          AND is_deleted = false
+        RETURNING ${PUBLIC_COLUMNS}`,
+      [id],
+      client,
+    );
+  }
+
+  updatePasswordHash(id, passwordHash, client) {
+    return this.queryOne(
+      `UPDATE users
+          SET password_hash = $2,
+              token_version = token_version + 1,
+              updated_at = now()
+        WHERE id = $1
+          AND is_deleted = false
+        RETURNING ${PUBLIC_COLUMNS}`,
+      [id, passwordHash],
+      client,
+    );
+  }
+
+  bumpTokenVersion(id, client) {
+    return this.queryOne(
+      `UPDATE users
+          SET token_version = token_version + 1,
+              updated_at = now()
+        WHERE id = $1
+          AND is_deleted = false
+        RETURNING ${PUBLIC_COLUMNS}`,
+      [id],
+      client,
+    );
+  }
 }
 
-module.exports = { UserRepository, userRepository: new UserRepository() };
+module.exports = { UserRepository, userRepository: new UserRepository(), PUBLIC_COLUMNS };

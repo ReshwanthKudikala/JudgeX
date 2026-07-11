@@ -1,19 +1,33 @@
-// Auth business logic: registration and login (password hashing/comparison).
-//
-// Business logic only: no Express req/res, no JWT/cookies/refresh tokens, no
-// HTTP status codes, no validation/DTO mapping. Persistence is delegated to
-// UserRepository; multi-step atomicity uses the database transaction manager.
+// Auth business logic: registration, login, email verification, password recovery.
+// No Express req/res, no JWT issuance (controller), no HTTP status construction.
 
 const bcrypt = require('bcrypt');
 
 const { config } = require('../../config');
 const { withTransaction } = require('../../infrastructure/database/transaction');
+const {
+  sendEmail,
+  buildVerifyEmailMessage,
+  buildPasswordResetMessage,
+} = require('../../infrastructure/email/email.service');
 const { AppError } = require('../../shared/errors/base.error');
-const { ConflictError } = require('../../shared/errors/http-errors');
+const { ConflictError, NotFoundError, ValidationError } = require('../../shared/errors/http-errors');
+const { logger } = require('../../shared/logger/logger');
 const { userRepository } = require('./auth.repository');
+const {
+  authTokenRepository,
+  PURPOSE,
+} = require('./auth-token.repository');
+const { toPublicUser } = require('./auth.helpers');
 
-// A fixed hash compared against when no user matches, so login timing does not
-// reveal whether an email exists (no user enumeration — PRD/API_SPEC).
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+const RESET_TTL_MS = 30 * 60 * 1000;
+
+const GENERIC_VERIFY_RESEND =
+  'If an account exists for that email and is unverified, a verification link has been sent.';
+const GENERIC_FORGOT =
+  'If an account exists for that email, a password reset link has been sent.';
+
 let dummyHashPromise;
 function getDummyHash() {
   if (!dummyHashPromise) {
@@ -22,25 +36,30 @@ function getDummyHash() {
   return dummyHashPromise;
 }
 
+function frontendUrl(path, query) {
+  const base = config.email.appPublicUrl.replace(/\/$/, '');
+  const url = new URL(path, `${base}/`);
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      url.searchParams.set(k, v);
+    }
+  }
+  return url.toString();
+}
+
 class AuthService {
-  constructor({ userRepository: repo } = {}) {
+  constructor({
+    userRepository: repo,
+    authTokenRepository: tokenRepo,
+  } = {}) {
     this.userRepository = repo || userRepository;
+    this.authTokenRepository = tokenRepo || authTokenRepository;
   }
 
-  /**
-   * Register a new account: ensure email/username are free, hash the password,
-   * and persist the user. Runs inside a transaction so the uniqueness checks and
-   * the insert form one unit of work (and future user_statistics init joins it).
-   *
-   * @param {{ username: string, email: string, password: string }} input
-   * @returns {Promise<Object>} the created user (without password_hash).
-   */
   async register({ username, email, password }) {
-    // Hash outside the transaction — CPU-bound work shouldn't hold a DB client.
     const passwordHash = await bcrypt.hash(password, config.security.bcryptSaltRounds);
 
-    return withTransaction(async (client) => {
-      // Friendly pre-checks; the DB unique constraints remain the real guarantee.
+    const user = await withTransaction(async (client) => {
       if (await this.userRepository.findByEmail(email, client)) {
         throw new AppError('An account with this email already exists.', {
           statusCode: 409,
@@ -55,29 +74,35 @@ class AuthService {
       }
 
       try {
-        return await this.userRepository.createUser({ username, email, passwordHash }, client);
+        return await this.userRepository.createUser(
+          { username, email, passwordHash },
+          client,
+        );
       } catch (err) {
-        // Handle the race where a concurrent insert wins between check and insert:
-        // translate the generic unique-violation conflict into a specific code.
         if (err instanceof ConflictError) {
           throw AuthService.#mapUniqueConflict(err);
         }
         throw err;
       }
     });
+
+    // Best-effort verification email — account remains usable.
+    try {
+      await this.#issueAndSendVerification(user);
+    } catch (err) {
+      logger.warn('Failed to send verification email after register', {
+        userId: user.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    return toPublicUser(user);
   }
 
-  /**
-   * Authenticate by email + password.
-   *
-   * @param {{ email: string, password: string }} input
-   * @returns {Promise<Object>} the authenticated user (without password_hash).
-   */
   async login({ email, password }) {
     const user = await this.userRepository.findByEmail(email);
 
     if (!user) {
-      // Equalize timing with the success path, then fail identically.
       await bcrypt.compare(password, await getDummyHash());
       throw AuthService.#invalidCredentials();
     }
@@ -96,16 +121,244 @@ class AuthService {
 
     await this.userRepository.touchLastLogin(user.id);
 
-    // Never return the hash to callers.
-    const { password_hash: _passwordHash, ...safeUser } = user;
-    return {
-      ...safeUser,
+    return toPublicUser({
+      ...user,
       last_login_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Confirm email via single-use token (24h).
+   * @param {string} rawToken
+   */
+  async verifyEmail(rawToken) {
+    if (!rawToken || typeof rawToken !== 'string') {
+      throw new ValidationError('A verification token is required.', [
+        { field: 'token', issue: 'required' },
+      ]);
+    }
+
+    return withTransaction(async (client) => {
+      const tokenRow = await this.authTokenRepository.findValidByRawToken(
+        rawToken,
+        PURPOSE.EMAIL_VERIFICATION,
+        client,
+      );
+      if (!tokenRow) {
+        throw new AppError('This verification link is invalid or has expired.', {
+          statusCode: 400,
+          code: 'INVALID_VERIFICATION_TOKEN',
+        });
+      }
+
+      const marked = await this.authTokenRepository.markUsed(tokenRow.id, client);
+      if (!marked) {
+        throw new AppError('This verification link is invalid or has expired.', {
+          statusCode: 400,
+          code: 'INVALID_VERIFICATION_TOKEN',
+        });
+      }
+
+      const user = await this.userRepository.markEmailVerified(tokenRow.user_id, client);
+      if (!user) {
+        throw new NotFoundError('User not found.');
+      }
+
+      await this.authTokenRepository.invalidateUnusedForUser(
+        tokenRow.user_id,
+        PURPOSE.EMAIL_VERIFICATION,
+        client,
+      );
+
+      return {
+        user: toPublicUser(user),
+        message: 'Email verified successfully.',
+      };
+    });
+  }
+
+  /**
+   * Resend verification email. Always returns the same message (no enumeration).
+   * @param {{ email?: string, userId?: string }} input
+   */
+  async resendVerification({ email, userId } = {}) {
+    let user = null;
+    if (userId) {
+      user = await this.userRepository.findById(userId);
+    } else if (email) {
+      user = await this.userRepository.findByEmail(email);
+    }
+
+    if (user && !user.email_verified_at && !user.is_suspended) {
+      try {
+        await this.#issueAndSendVerification(user);
+      } catch (err) {
+        logger.warn('Failed to resend verification email', {
+          userId: user.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else if (!user && email) {
+      // Timing equalization when no account.
+      await getDummyHash();
+    }
+
+    return { message: GENERIC_VERIFY_RESEND };
+  }
+
+  /**
+   * Always generic response (no user enumeration).
+   * @param {{ email: string }} input
+   */
+  async forgotPassword({ email }) {
+    const user = await this.userRepository.findByEmail(email);
+
+    if (user && !user.is_suspended) {
+      try {
+        await withTransaction(async (client) => {
+          await this.authTokenRepository.invalidateUnusedForUser(
+            user.id,
+            PURPOSE.PASSWORD_RESET,
+            client,
+          );
+          const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+          const issued = await this.authTokenRepository.createToken(
+            {
+              userId: user.id,
+              purpose: PURPOSE.PASSWORD_RESET,
+              expiresAt,
+            },
+            client,
+          );
+          const resetUrl = frontendUrl('/reset-password', { token: issued.rawToken });
+          await sendEmail(
+            buildPasswordResetMessage({
+              to: user.email,
+              username: user.username,
+              resetUrl,
+            }),
+          );
+        });
+      } catch (err) {
+        logger.warn('Failed to send password reset email', {
+          userId: user.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      await getDummyHash();
+    }
+
+    return { message: GENERIC_FORGOT };
+  }
+
+  /**
+   * Reset password with single-use token; bumps token_version (revokes JWTs).
+   * @param {{ token: string, newPassword: string }} input
+   */
+  async resetPassword({ token, newPassword }) {
+    const passwordHash = await bcrypt.hash(newPassword, config.security.bcryptSaltRounds);
+
+    return withTransaction(async (client) => {
+      const tokenRow = await this.authTokenRepository.findValidByRawToken(
+        token,
+        PURPOSE.PASSWORD_RESET,
+        client,
+      );
+      if (!tokenRow) {
+        throw new AppError('This reset link is invalid or has expired.', {
+          statusCode: 400,
+          code: 'INVALID_RESET_TOKEN',
+        });
+      }
+
+      const marked = await this.authTokenRepository.markUsed(tokenRow.id, client);
+      if (!marked) {
+        throw new AppError('This reset link is invalid or has expired.', {
+          statusCode: 400,
+          code: 'INVALID_RESET_TOKEN',
+        });
+      }
+
+      const user = await this.userRepository.updatePasswordHash(
+        tokenRow.user_id,
+        passwordHash,
+        client,
+      );
+      if (!user) {
+        throw new NotFoundError('User not found.');
+      }
+
+      await this.authTokenRepository.invalidateUnusedForUser(
+        tokenRow.user_id,
+        PURPOSE.PASSWORD_RESET,
+        client,
+      );
+
+      return {
+        message: 'Password has been reset. Please sign in with your new password.',
+      };
+    });
+  }
+
+  /**
+   * Change password while authenticated (requires current password).
+   * Bumps token_version so existing JWTs stop working.
+   * @param {{ userId: string, currentPassword: string, newPassword: string }} input
+   */
+  async changePassword({ userId, currentPassword, newPassword }) {
+    const full = await this.userRepository.findByIdWithPassword(userId);
+    if (!full) {
+      throw new AppError('User account no longer exists.', {
+        statusCode: 401,
+        code: 'UNAUTHENTICATED',
+      });
+    }
+
+    const matches = await bcrypt.compare(currentPassword, full.password_hash);
+    if (!matches) {
+      throw new AppError('Current password is incorrect.', {
+        statusCode: 400,
+        code: 'INVALID_CURRENT_PASSWORD',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, config.security.bcryptSaltRounds);
+    const updated = await this.userRepository.updatePasswordHash(userId, passwordHash);
+    return {
+      user: toPublicUser(updated),
+      message: 'Password updated. Please sign in again on other devices.',
     };
   }
 
+  async #issueAndSendVerification(user) {
+    await withTransaction(async (client) => {
+      await this.authTokenRepository.invalidateUnusedForUser(
+        user.id,
+        PURPOSE.EMAIL_VERIFICATION,
+        client,
+      );
+      const expiresAt = new Date(Date.now() + VERIFY_TTL_MS);
+      const issued = await this.authTokenRepository.createToken(
+        {
+          userId: user.id,
+          purpose: PURPOSE.EMAIL_VERIFICATION,
+          expiresAt,
+        },
+        client,
+      );
+      const verifyUrl = frontendUrl('/verify-email', { token: issued.rawToken });
+      await sendEmail(
+        buildVerifyEmailMessage({
+          to: user.email,
+          username: user.username,
+          verifyUrl,
+        }),
+      );
+    });
+  }
+
   static #invalidCredentials() {
-    // Same error for "no such user" and "wrong password" (no enumeration).
     return new AppError('Invalid email or password.', {
       statusCode: 401,
       code: 'INVALID_CREDENTIALS',
@@ -130,4 +383,10 @@ class AuthService {
   }
 }
 
-module.exports = { AuthService, authService: new AuthService() };
+module.exports = {
+  AuthService,
+  authService: new AuthService(),
+  toPublicUser,
+  GENERIC_VERIFY_RESEND,
+  GENERIC_FORGOT,
+};

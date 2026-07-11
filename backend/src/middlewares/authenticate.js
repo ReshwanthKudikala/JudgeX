@@ -32,7 +32,6 @@ async function authenticate(req, _res, next) {
     const claims = verifyAccessToken(token);
 
     // Never trust the token alone: confirm the user still exists and is active.
-    // findById already filters out soft-deleted users (returns null).
     const user = await userRepository.findById(claims.sub);
     if (!user) {
       throw new UnauthorizedError('User account no longer exists.');
@@ -42,7 +41,15 @@ async function authenticate(req, _res, next) {
       throw new UnauthorizedError('This account has been suspended.');
     }
 
-    req.user = user;
+    // Password reset / change bumps token_version — reject stale JWTs.
+    const currentTv = Number(user.token_version) || 0;
+    const claimTv = claims.tv === undefined || claims.tv === null ? 0 : Number(claims.tv);
+    if (claimTv !== currentTv) {
+      throw new UnauthorizedError('Access token is no longer valid.');
+    }
+
+    const { toPublicUser } = require('../modules/auth/auth.helpers');
+    req.user = toPublicUser(user);
     req.auth = claims;
     next();
   } catch (err) {

@@ -95,7 +95,28 @@ const config = Object.freeze({
           windowMs: env.RATE_LIMIT_PROBLEMS_WINDOW_MS,
           max: env.RATE_LIMIT_PROBLEMS_MAX,
         }),
+        forgotPassword: Object.freeze({
+          windowMs: env.RATE_LIMIT_FORGOT_PASSWORD_WINDOW_MS,
+          max: env.RATE_LIMIT_FORGOT_PASSWORD_MAX,
+        }),
+        resendVerification: Object.freeze({
+          windowMs: env.RATE_LIMIT_RESEND_VERIFICATION_WINDOW_MS,
+          max: env.RATE_LIMIT_RESEND_VERIFICATION_MAX,
+        }),
       }),
+    }),
+  }),
+
+  email: Object.freeze({
+    provider: env.EMAIL_PROVIDER,
+    from: env.EMAIL_FROM,
+    appPublicUrl: env.APP_PUBLIC_URL.replace(/\/$/, ''),
+    smtp: Object.freeze({
+      host: env.SMTP_HOST || null,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
+      user: env.SMTP_USER || null,
+      pass: env.SMTP_PASS || null,
     }),
   }),
 

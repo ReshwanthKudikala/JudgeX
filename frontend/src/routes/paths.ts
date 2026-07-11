@@ -2,6 +2,10 @@ export const paths = {
   home: '/',
   login: '/login',
   register: '/register',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
+  verifyEmail: '/verify-email',
+  resendVerification: '/resend-verification',
   problems: '/problems',
   /** Detail route uses the problem slug (backend resource key). */
   problemDetail: (slug = ':slug') => `/problems/${slug}`,

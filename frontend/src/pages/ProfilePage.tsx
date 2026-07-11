@@ -1,9 +1,19 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 
+import { changePassword, resendVerificationMe } from '@/api/auth.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { FormField } from '@/components/ui/FormField';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Skeleton } from '@/components/common/Skeleton';
+import {
+  changePasswordSchema,
+  type ChangePasswordFormValues,
+} from '@/features/auth/schemas/auth.schemas';
 import { useUserRank } from '@/features/leaderboard/hooks/useUserRank';
 import { SubmissionsErrorState } from '@/features/submissions/components/SubmissionsErrorState';
 import { SubmissionsTable } from '@/features/submissions/components/SubmissionsTable';
@@ -12,6 +22,8 @@ import { useSubmissionStats } from '@/features/submissions/hooks/useSubmissionSt
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 import { LANGUAGE_LABELS, type SubmissionLanguage } from '@/types/submissions';
+import { applyApiFormErrors } from '@/utils/apply-api-form-errors';
+import { getFriendlyErrorMessage } from '@/utils/errors';
 
 function formatJoinedDate(value?: string): string | null {
   if (!value) return null;
@@ -52,10 +64,26 @@ function StatCard({
 export function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
+  const setSession = useAuthStore((s) => s.setSession);
+  const rememberMe = useAuthStore((s) => s.rememberMe);
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
   const statsQuery = useSubmissionStats(Boolean(token));
   const rankQuery = useUserRank(user?.id, Boolean(token));
+
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+
+  const passwordForm = useForm<ChangePasswordFormValues>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    },
+  });
 
   if (isValidatingSession || !user) {
     return (
@@ -76,6 +104,35 @@ export function ProfilePage() {
 
   const rankDisplay =
     rankQuery.data?.rank != null ? `#${rankQuery.data.rank}` : 'Unranked';
+
+  const onResend = async () => {
+    setResendLoading(true);
+    setResendError(null);
+    setResendMessage(null);
+    try {
+      const result = await resendVerificationMe();
+      setResendMessage(result.message);
+    } catch (err) {
+      setResendError(getFriendlyErrorMessage(err, 'Unable to resend verification email.'));
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const onChangePassword = passwordForm.handleSubmit(async (values) => {
+    setPasswordMessage(null);
+    try {
+      const result = await changePassword({
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
+      });
+      setSession(result.user, result.accessToken, rememberMe);
+      setPasswordMessage(result.message);
+      passwordForm.reset();
+    } catch (err) {
+      applyApiFormErrors(err, passwordForm.setError, 'Unable to change password.');
+    }
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -148,17 +205,51 @@ export function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>
-          <CardDescription>Your JudgeX identity (read-only).</CardDescription>
+          <CardDescription>Your JudgeX identity.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-1 text-sm">
           <div className="flex items-center justify-between border-b border-border py-3">
             <span className="text-muted">Username</span>
             <span className="font-medium text-white">{user.username}</span>
           </div>
-          <div className="flex items-center justify-between border-b border-border py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border py-3">
             <span className="text-muted">Email</span>
-            <span className="text-muted-foreground">{user.email}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">{user.email}</span>
+              {user.emailVerified ? (
+                <Badge variant="success">Verified</Badge>
+              ) : (
+                <Badge variant="default">Unverified</Badge>
+              )}
+            </div>
           </div>
+          {!user.emailVerified ? (
+            <div className="space-y-2 border-b border-border py-3">
+              <p className="text-muted">
+                Verify your email to unlock the full account experience.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={resendLoading}
+                disabled={resendLoading}
+                onClick={() => void onResend()}
+              >
+                Resend verification email
+              </Button>
+              {resendMessage ? (
+                <p className="text-sm text-success" role="status">
+                  {resendMessage}
+                </p>
+              ) : null}
+              {resendError ? (
+                <p className="text-sm text-error" role="alert">
+                  {resendError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex items-center justify-between border-b border-border py-3">
             <span className="text-muted">Role</span>
             <Badge variant={user.role === 'admin' ? 'primary' : 'default'}>{user.role}</Badge>
@@ -169,6 +260,84 @@ export function ProfilePage() {
               <span className="text-muted-foreground">{joined}</span>
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Change password</CardTitle>
+          <CardDescription>
+            Requires your current password. Other sessions will be signed out.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onChangePassword} className="max-w-md space-y-4" noValidate>
+            {passwordForm.formState.errors.root?.message ? (
+              <div
+                role="alert"
+                className="rounded-md border border-error/40 bg-error/10 px-3 py-2 text-sm text-error"
+              >
+                {passwordForm.formState.errors.root.message}
+              </div>
+            ) : null}
+            {passwordMessage ? (
+              <div
+                role="status"
+                className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
+              >
+                {passwordMessage}
+              </div>
+            ) : null}
+            <FormField
+              label="Current password"
+              htmlFor="currentPassword"
+              error={passwordForm.formState.errors.currentPassword?.message}
+              required
+            >
+              <Input
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                error={Boolean(passwordForm.formState.errors.currentPassword)}
+                {...passwordForm.register('currentPassword')}
+              />
+            </FormField>
+            <FormField
+              label="New password"
+              htmlFor="newPassword"
+              error={passwordForm.formState.errors.newPassword?.message}
+              required
+            >
+              <Input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                error={Boolean(passwordForm.formState.errors.newPassword)}
+                {...passwordForm.register('newPassword')}
+              />
+            </FormField>
+            <FormField
+              label="Confirm new password"
+              htmlFor="confirmPassword"
+              error={passwordForm.formState.errors.confirmPassword?.message}
+              required
+            >
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                error={Boolean(passwordForm.formState.errors.confirmPassword)}
+                {...passwordForm.register('confirmPassword')}
+              />
+            </FormField>
+            <Button
+              type="submit"
+              loading={passwordForm.formState.isSubmitting}
+              disabled={passwordForm.formState.isSubmitting}
+            >
+              Update password
+            </Button>
+          </form>
         </CardContent>
       </Card>
 

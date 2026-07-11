@@ -146,6 +146,15 @@ export function RegisterForm() {
             Sign in
           </Link>
         </p>
+        <p className="mt-2 text-center text-sm text-muted">
+          Didn&apos;t get a verification email?{' '}
+          <Link
+            to={paths.resendVerification}
+            className="font-medium text-primary hover:underline"
+          >
+            Resend verification
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );
