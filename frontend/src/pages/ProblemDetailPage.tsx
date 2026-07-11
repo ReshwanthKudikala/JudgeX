@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 
 import { ApiError } from '@/types';
-import { EditorPlaceholder } from '@/features/problems/components/EditorPlaceholder';
+import { ProblemCodeEditor } from '@/features/editor';
 import { ProblemBreadcrumb } from '@/features/problems/components/ProblemBreadcrumb';
 import { ProblemErrorState } from '@/features/problems/components/ProblemErrorState';
 import { ProblemLayout } from '@/features/problems/components/ProblemLayout';
@@ -11,7 +11,6 @@ import { useProblem } from '@/features/problems/hooks/useProblem';
 
 export function ProblemDetailPage() {
   const { slug, problemId } = useParams<{ slug?: string; problemId?: string }>();
-  // Support both `:slug` and legacy `:problemId` param names.
   const problemSlug = slug ?? problemId;
 
   const { data: problem, isLoading, isError, error, refetch } = useProblem(problemSlug);
@@ -41,7 +40,12 @@ export function ProblemDetailPage() {
     <ProblemLayout
       breadcrumb={<ProblemBreadcrumb title={problem.title} />}
       statement={<ProblemStatementPanel problem={problem} />}
-      editor={<EditorPlaceholder className="h-full border-0 lg:rounded-none" />}
+      editor={
+        <ProblemCodeEditor
+          problemSlug={problem.slug}
+          className="h-full border-0 lg:rounded-none"
+        />
+      }
     />
   );
 }
