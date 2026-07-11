@@ -17,7 +17,11 @@ function baseCfg(overrides = {}) {
   return {
     isProduction: true,
     env: 'production',
-    server: { port: 4000 },
+    server: {
+      port: 4000,
+      corsOrigins: ['https://judgex.app'],
+      jsonBodyLimit: '1mb',
+    },
     database: {
       required: true,
       url: 'postgres://app:secret@db.internal:5432/judgex',
@@ -31,6 +35,9 @@ function baseCfg(overrides = {}) {
     featureFlags: { aiCompileExplanation: true },
     reaper: { intervalMs: 60000, stuckThresholdMs: 60000, batchSize: 100 },
     judge: { timeLimitMs: 2000, memoryLimitMb: 256, workerConcurrency: 2 },
+    security: {
+      rateLimit: { enabled: true },
+    },
     ...overrides,
   };
 }
@@ -54,6 +61,23 @@ describe('Production configuration validation', () => {
             database: { required: false, url: 'postgres://judgex:judgex@localhost:5432/judgex' },
             redis: { required: false, url: 'redis://localhost:6379' },
             jwt: { secret: 'short' },
+          }),
+        ),
+      /Production configuration invalid/,
+    );
+  });
+
+  it('rejects disabled rate limiting and localhost CORS in production', () => {
+    assert.throws(
+      () =>
+        assertProductionReady(
+          baseCfg({
+            security: { rateLimit: { enabled: false } },
+            server: {
+              port: 4000,
+              corsOrigins: ['http://localhost:5173'],
+              jsonBodyLimit: '1mb',
+            },
           }),
         ),
       /Production configuration invalid/,

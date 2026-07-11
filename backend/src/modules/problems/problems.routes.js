@@ -8,10 +8,16 @@ const { Router } = require('express');
 
 const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
+const { problemsRateLimit } = require('../../middlewares/rate-limit');
 const controller = require('./problems.controller');
 const editorialController = require('../editorials/editorials.controller');
 const discussionController = require('../discussions/discussions.controller');
-const { listProblemsQuerySchema, createProblemSchema } = require('./problems.validators');
+const {
+  listProblemsQuerySchema,
+  createProblemSchema,
+  problemIdParamsSchema,
+  problemSlugRouteParamsSchema,
+} = require('./problems.validators');
 const { problemSlugParamsSchema } = require('../editorials/editorials.validators');
 const {
   listDiscussionsQuerySchema,
@@ -21,16 +27,28 @@ const {
 
 const router = Router();
 
-router.get('/', validate(listProblemsQuerySchema, 'query'), controller.listProblems);
-router.post('/', validate(createProblemSchema), controller.createProblem);
-router.get('/id/:id', controller.getProblemById);
+router.get(
+  '/',
+  problemsRateLimit,
+  validate(listProblemsQuerySchema, 'query'),
+  controller.listProblems,
+);
+router.post('/', problemsRateLimit, validate(createProblemSchema), controller.createProblem);
+router.get(
+  '/id/:id',
+  problemsRateLimit,
+  validate(problemIdParamsSchema, 'params'),
+  controller.getProblemById,
+);
 router.get(
   '/:slug/editorial',
+  problemsRateLimit,
   validate(problemSlugParamsSchema, 'params'),
   editorialController.getPublishedBySlug,
 );
 router.get(
   '/:slug/discussions',
+  problemsRateLimit,
   validate(discussionSlugParamsSchema, 'params'),
   validate(listDiscussionsQuerySchema, 'query'),
   discussionController.listDiscussions,
@@ -38,10 +56,16 @@ router.get(
 router.post(
   '/:slug/discussions',
   authenticate,
+  problemsRateLimit,
   validate(discussionSlugParamsSchema, 'params'),
   validate(createDiscussionSchema),
   discussionController.createDiscussion,
 );
-router.get('/:slug', controller.getProblemBySlug);
+router.get(
+  '/:slug',
+  problemsRateLimit,
+  validate(problemSlugRouteParamsSchema, 'params'),
+  controller.getProblemBySlug,
+);
 
 module.exports = { problemRoutes: router };

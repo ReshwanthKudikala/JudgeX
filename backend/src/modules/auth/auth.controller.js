@@ -7,6 +7,7 @@
 const { authService } = require('./auth.service');
 const { generateAccessToken } = require('./jwt.service');
 const { sendSuccess } = require('../../shared/http/response');
+const { logSecurityEvent } = require('../../shared/security/security-log');
 
 // POST /auth/register → 201 { user, accessToken }
 async function register(req, res, next) {
@@ -26,6 +27,17 @@ async function login(req, res, next) {
     const accessToken = generateAccessToken(user);
     sendSuccess(req, res, 200, { user, accessToken });
   } catch (err) {
+    if (err && (err.code === 'INVALID_CREDENTIALS' || err.code === 'ACCOUNT_SUSPENDED')) {
+      // Email is not logged — only a stable event + IP/path via the request logger.
+      logSecurityEvent(
+        'failed_login',
+        {
+          code: err.code,
+          reason: err.code === 'ACCOUNT_SUSPENDED' ? 'suspended' : 'bad_credentials',
+        },
+        req,
+      );
+    }
     next(err);
   }
 }

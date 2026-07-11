@@ -14,9 +14,9 @@ const SLUG = z
 
 // Shared inline test-case fields (create / replace / patch).
 const testCaseFields = {
-  input: z.string(),
-  expectedOutput: z.string(),
-  explanation: z.string().nullable().optional(),
+  input: z.string().max(1_000_000),
+  expectedOutput: z.string().max(1_000_000),
+  explanation: z.string().max(10_000).nullable().optional(),
   isHidden: z.boolean().optional(),
   isSample: z.boolean().optional(),
   displayOrder: z.coerce.number().int().min(0).optional(),
@@ -29,9 +29,9 @@ const testCaseBodySchema = z.object(testCaseFields);
 const createProblemSchema = z.object({
   slug: SLUG,
   title: z.string().trim().min(1).max(200),
-  statement: z.string().min(1),
+  statement: z.string().min(1).max(200_000),
   difficulty: DIFFICULTY,
-  constraintsText: z.string().optional(),
+  constraintsText: z.string().max(50_000).optional(),
   timeLimitMs: z.coerce.number().int().positive().optional(),
   memoryLimitMb: z.coerce.number().int().positive().optional(),
   isPublished: z.boolean().optional(),
@@ -42,9 +42,9 @@ const updateProblemSchema = z
   .object({
     slug: SLUG.optional(),
     title: z.string().trim().min(1).max(200).optional(),
-    statement: z.string().min(1).optional(),
+    statement: z.string().min(1).max(200_000).optional(),
     difficulty: DIFFICULTY.optional(),
-    constraintsText: z.string().optional(),
+    constraintsText: z.string().max(50_000).optional(),
     timeLimitMs: z.coerce.number().int().positive().optional(),
     memoryLimitMb: z.coerce.number().int().positive().optional(),
     isPublished: z.boolean().optional(),

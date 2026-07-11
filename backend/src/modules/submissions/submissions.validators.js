@@ -20,6 +20,22 @@ const VERDICT = z.enum([
 // Cap source size to a reasonable bound to protect memory/DB (64 KiB).
 const MAX_SOURCE_BYTES = 64 * 1024;
 
+const SUBMISSION_SORT_FIELDS = ['submittedAt', 'runtimeMs', 'memoryKb'];
+
+const sortSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine((value) => {
+    const field = value.startsWith('-')
+      ? value.slice(1)
+      : value.includes(':')
+        ? value.split(':')[0]
+        : value;
+    return SUBMISSION_SORT_FIELDS.includes(field);
+  }, { message: 'Invalid sort field.' });
+
 // POST /submissions — submit code for judging.
 const createSubmissionSchema = z.object({
   problemId: z.string().uuid(),
@@ -41,7 +57,15 @@ const listSubmissionsQuerySchema = z.object({
   problemId: z.string().uuid().optional(),
   /** Case-insensitive problem title search (joined problems.title). */
   q: z.string().trim().min(1).max(200).optional(),
-  sort: z.string().trim().min(1).optional(),
+  sort: sortSchema.optional(),
 });
 
-module.exports = { createSubmissionSchema, listSubmissionsQuerySchema };
+const submissionIdParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+module.exports = {
+  createSubmissionSchema,
+  listSubmissionsQuerySchema,
+  submissionIdParamsSchema,
+};

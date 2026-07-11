@@ -32,7 +32,7 @@ const config = Object.freeze({
     corsOrigins: env.CORS_ORIGIN.split(',')
       .map((o) => o.trim())
       .filter(Boolean),
-    jsonBodyLimit: '1mb',
+    jsonBodyLimit: env.JSON_BODY_LIMIT,
   }),
 
   database: Object.freeze({
@@ -61,8 +61,40 @@ const config = Object.freeze({
   security: Object.freeze({
     bcryptSaltRounds: env.BCRYPT_SALT_ROUNDS,
     rateLimit: Object.freeze({
+      enabled: env.RATE_LIMIT_ENABLED,
+      forceInTest: env.RATE_LIMIT_FORCE_IN_TEST,
       windowMs: env.RATE_LIMIT_WINDOW_MS,
       max: env.RATE_LIMIT_MAX,
+      tiers: Object.freeze({
+        global: Object.freeze({
+          windowMs: env.RATE_LIMIT_WINDOW_MS,
+          max: env.RATE_LIMIT_MAX,
+        }),
+        auth: Object.freeze({
+          windowMs: env.RATE_LIMIT_AUTH_WINDOW_MS,
+          max: env.RATE_LIMIT_AUTH_MAX,
+        }),
+        submission: Object.freeze({
+          windowMs: env.RATE_LIMIT_SUBMISSION_WINDOW_MS,
+          max: env.RATE_LIMIT_SUBMISSION_MAX,
+        }),
+        ai: Object.freeze({
+          windowMs: env.RATE_LIMIT_AI_WINDOW_MS,
+          max: env.RATE_LIMIT_AI_MAX,
+        }),
+        admin: Object.freeze({
+          windowMs: env.RATE_LIMIT_ADMIN_WINDOW_MS,
+          max: env.RATE_LIMIT_ADMIN_MAX,
+        }),
+        contestJoin: Object.freeze({
+          windowMs: env.RATE_LIMIT_CONTEST_JOIN_WINDOW_MS,
+          max: env.RATE_LIMIT_CONTEST_JOIN_MAX,
+        }),
+        problems: Object.freeze({
+          windowMs: env.RATE_LIMIT_PROBLEMS_WINDOW_MS,
+          max: env.RATE_LIMIT_PROBLEMS_MAX,
+        }),
+      }),
     }),
   }),
 

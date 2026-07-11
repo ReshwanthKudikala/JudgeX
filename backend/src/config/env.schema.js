@@ -15,6 +15,8 @@ const envSchema = z
     PORT: z.coerce.number().int().positive().default(4000),
     // Comma-separated list of allowed CORS origins.
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
+    // Max JSON body size (express body-parser syntax, e.g. 1mb, 512kb).
+    JSON_BODY_LIMIT: z.string().default('1mb'),
 
     // --- PostgreSQL ---
     DATABASE_URL: z
@@ -42,9 +44,24 @@ const envSchema = z
     // --- Password hashing ---
     BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
 
-    // --- Rate limiting ---
+    // --- Rate limiting (Redis fixed-window; tier overrides optional) ---
+    RATE_LIMIT_ENABLED: booleanish.default('true'),
+    // When true, apply limits even under NODE_ENV=test (for dedicated suites).
+    RATE_LIMIT_FORCE_IN_TEST: booleanish.default('false'),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
+    RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
+    RATE_LIMIT_AUTH_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_SUBMISSION_MAX: z.coerce.number().int().positive().default(60),
+    RATE_LIMIT_SUBMISSION_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_AI_MAX: z.coerce.number().int().positive().default(20),
+    RATE_LIMIT_AI_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_ADMIN_MAX: z.coerce.number().int().positive().default(120),
+    RATE_LIMIT_ADMIN_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_CONTEST_JOIN_MAX: z.coerce.number().int().positive().default(15),
+    RATE_LIMIT_CONTEST_JOIN_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_PROBLEMS_MAX: z.coerce.number().int().positive().default(240),
+    RATE_LIMIT_PROBLEMS_WINDOW_MS: z.coerce.number().int().positive().default(60000),
 
     // --- AI provider (default is free local Ollama) ---
     AI_PROVIDER: z.enum(['ollama', 'openai']).default('ollama'),
@@ -117,6 +134,30 @@ const envSchema = z
         path: ['REDIS_REQUIRED'],
         message: 'REDIS_REQUIRED must be true in production',
       });
+    }
+    if (env.NODE_ENV === 'production' && env.RATE_LIMIT_ENABLED === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['RATE_LIMIT_ENABLED'],
+        message: 'RATE_LIMIT_ENABLED must be true in production',
+      });
+    }
+    if (env.NODE_ENV === 'production') {
+      const origins = env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean);
+      if (origins.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['CORS_ORIGIN'],
+          message: 'CORS_ORIGIN must list at least one production frontend origin',
+        });
+      }
+      if (origins.some((o) => o.includes('localhost') || o.includes('127.0.0.1'))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['CORS_ORIGIN'],
+          message: 'CORS_ORIGIN must not include localhost in production',
+        });
+      }
     }
   });
 

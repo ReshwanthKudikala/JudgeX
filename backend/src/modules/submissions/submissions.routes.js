@@ -8,15 +8,31 @@ const { Router } = require('express');
 
 const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
-const { createSubmissionSchema, listSubmissionsQuerySchema } = require('./submissions.validators');
+const { submissionRateLimit } = require('../../middlewares/rate-limit');
+const {
+  createSubmissionSchema,
+  listSubmissionsQuerySchema,
+  submissionIdParamsSchema,
+} = require('./submissions.validators');
 const controller = require('./submissions.controller');
 
 const router = Router();
 
-router.post('/', authenticate, validate(createSubmissionSchema), controller.createSubmission);
+router.post(
+  '/',
+  authenticate,
+  submissionRateLimit,
+  validate(createSubmissionSchema),
+  controller.createSubmission,
+);
 router.get('/', authenticate, validate(listSubmissionsQuerySchema, 'query'), controller.getUserSubmissions);
 // Static path before /:id so "stats" is not treated as a UUID.
 router.get('/stats', authenticate, controller.getUserProgress);
-router.get('/:id', authenticate, controller.getSubmissionById);
+router.get(
+  '/:id',
+  authenticate,
+  validate(submissionIdParamsSchema, 'params'),
+  controller.getSubmissionById,
+);
 
 module.exports = { submissionRoutes: router };

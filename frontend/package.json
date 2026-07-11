@@ -17,7 +17,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@monaco-editor/react": "^4.6.0",
     "@tanstack/react-query": "^5.62.8",
-    "axios": "^1.7.9",
+    "axios": "^1.18.1",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.469.0",
@@ -50,5 +50,8 @@
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.18.2",
     "vite": "^6.0.7"
+  },
+  "overrides": {
+    "dompurify": "^3.4.11"
   }
 }

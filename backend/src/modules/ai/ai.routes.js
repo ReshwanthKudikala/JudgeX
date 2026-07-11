@@ -5,6 +5,7 @@ const { Router } = require('express');
 
 const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
+const { aiRateLimit } = require('../../middlewares/rate-limit');
 const {
   explainCompileErrorSchema,
   explainSubmissionSchema,
@@ -20,6 +21,7 @@ const router = Router();
 router.post(
   '/explain-compile-error',
   authenticate,
+  aiRateLimit,
   validate(explainCompileErrorSchema),
   controller.explainCompileError,
 );
@@ -27,6 +29,7 @@ router.post(
 router.post(
   '/explain-submission',
   authenticate,
+  aiRateLimit,
   validate(explainSubmissionSchema),
   controller.explainSubmission,
 );
@@ -34,6 +37,7 @@ router.post(
 router.post(
   '/analyze-complexity',
   authenticate,
+  aiRateLimit,
   validate(analyzeComplexitySchema),
   controller.analyzeComplexity,
 );
@@ -41,6 +45,7 @@ router.post(
 router.post(
   '/suggest-optimizations',
   authenticate,
+  aiRateLimit,
   validate(suggestOptimizationsSchema),
   controller.suggestOptimizations,
 );
@@ -48,6 +53,7 @@ router.post(
 router.post(
   '/generate-hint',
   authenticate,
+  aiRateLimit,
   validate(generateHintSchema),
   controller.generateHint,
 );
@@ -55,6 +61,7 @@ router.post(
 router.post(
   '/learning-assist',
   authenticate,
+  aiRateLimit,
   validate(learningAssistSchema),
   controller.learningAssist,
 );

@@ -9,6 +9,7 @@ const { Router } = require('express');
 const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
 const { authorize } = require('../../middlewares/authorize');
+const { adminRateLimit } = require('../../middlewares/rate-limit');
 const controller = require('./admin.controller');
 const contestController = require('./admin.contests.controller');
 const editorialController = require('./admin.editorials.controller');
@@ -44,7 +45,7 @@ const {
 const router = Router();
 
 // Shared gate for every admin route: prove identity, then require the admin role.
-const requireAdmin = [authenticate, authorize('admin')];
+const requireAdmin = [authenticate, authorize('admin'), adminRateLimit];
 
 router.post(
   '/problems',

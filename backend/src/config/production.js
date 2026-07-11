@@ -33,6 +33,16 @@ function assertProductionReady(cfg = config) {
   if (cfg.ai.provider === 'openai' && !cfg.ai.openai.apiKey) {
     problems.push('OPENAI_API_KEY is required when AI_PROVIDER=openai');
   }
+  if (cfg.security?.rateLimit && cfg.security.rateLimit.enabled === false) {
+    problems.push('RATE_LIMIT_ENABLED must be true in production');
+  }
+  const origins = cfg.server?.corsOrigins || [];
+  if (origins.length === 0) {
+    problems.push('CORS_ORIGIN must list at least one production frontend origin');
+  }
+  if (origins.some((o) => o.includes('localhost') || o.includes('127.0.0.1'))) {
+    problems.push('CORS_ORIGIN must not include localhost in production');
+  }
 
   if (problems.length > 0) {
     const message = `Production configuration invalid:\n${problems.map((p) => `  - ${p}`).join('\n')}`;
@@ -60,6 +70,11 @@ function getStartupDiagnostics(cfg = config) {
       timeLimitMs: cfg.judge.timeLimitMs,
       memoryLimitMb: cfg.judge.memoryLimitMb,
       workerConcurrency: cfg.judge.workerConcurrency,
+    },
+    security: {
+      rateLimitEnabled: cfg.security?.rateLimit?.enabled ?? true,
+      corsOriginCount: cfg.server?.corsOrigins?.length ?? 0,
+      jsonBodyLimit: cfg.server?.jsonBodyLimit,
     },
   };
 }

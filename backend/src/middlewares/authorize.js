@@ -5,6 +5,7 @@
 // verifies tokens or loads users (that is `authenticate`).
 
 const { ForbiddenError, UnauthorizedError } = require('../shared/errors/http-errors');
+const { logSecurityEvent } = require('../shared/security/security-log');
 
 /**
  * Factory: returns Express middleware that allows the request only when
@@ -24,6 +25,11 @@ function authorize(...roles) {
       }
 
       if (!allowed.has(req.user.role)) {
+        logSecurityEvent(
+          'permission_denied',
+          { requiredRoles: [...allowed], actualRole: req.user.role },
+          req,
+        );
         throw new ForbiddenError('You do not have permission to perform this action.');
       }
 

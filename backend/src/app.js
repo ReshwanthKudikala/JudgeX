@@ -7,6 +7,8 @@ const morgan = require('morgan');
 
 const { config } = require('./config');
 const { logger } = require('./shared/logger/logger');
+const { buildHelmetOptions } = require('./shared/security/helmet');
+const { buildCorsOptions } = require('./shared/security/cors');
 const { correlationId } = require('./middlewares/correlation-id');
 const { notFound } = require('./middlewares/not-found');
 const { errorHandler } = require('./middlewares/error-handler');
@@ -16,15 +18,15 @@ const { getLiveness, getReadiness } = require('./modules/health/health.service')
 function createApp() {
   const app = express();
 
-  // Trust the reverse proxy (correct client IPs for future rate limiting).
+  // Trust the reverse proxy (correct client IPs for rate limiting).
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
 
   // --- Global middleware (order matters) ---
-  app.use(helmet());
-  app.use(cors({ origin: config.server.corsOrigins, credentials: true }));
+  app.use(helmet(buildHelmetOptions({ isProduction: config.isProduction })));
+  app.use(cors(buildCorsOptions(config.server.corsOrigins)));
   app.use(express.json({ limit: config.server.jsonBodyLimit }));
-  app.use(express.urlencoded({ extended: false }));
+  app.use(express.urlencoded({ extended: false, limit: config.server.jsonBodyLimit }));
 
   // Correlation ID must run before request logging so logs carry the ID.
   app.use(correlationId);

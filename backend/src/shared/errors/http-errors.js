@@ -33,10 +33,33 @@ class ValidationError extends AppError {
   }
 }
 
+class RateLimitError extends AppError {
+  /**
+   * @param {string} [message]
+   * @param {{ retryAfterSec?: number, details?: unknown }} [opts]
+   */
+  constructor(message = 'Too many requests. Please try again later.', opts = {}) {
+    super(message, {
+      statusCode: 429,
+      code: 'RATE_LIMITED',
+      details: opts.details ?? null,
+    });
+    this.retryAfterSec = Math.max(1, Number(opts.retryAfterSec) || 60);
+  }
+}
+
+class PayloadTooLargeError extends AppError {
+  constructor(message = 'Request payload is too large.', details = null) {
+    super(message, { statusCode: 413, code: 'PAYLOAD_TOO_LARGE', details });
+  }
+}
+
 module.exports = {
   NotFoundError,
   UnauthorizedError,
   ForbiddenError,
   ConflictError,
   ValidationError,
+  RateLimitError,
+  PayloadTooLargeError,
 };

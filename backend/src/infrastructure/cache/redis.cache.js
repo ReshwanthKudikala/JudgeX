@@ -1,6 +1,6 @@
 // Redis-backed cache and rate-limit counter store.
-// Sprint 2 scope: owns the singleton Redis connection (startup/health/shutdown).
-// Cache and rate-limit operations are added in a later sprint.
+// Owns the singleton Redis connection (startup/health/shutdown).
+// Rate-limit counters live in rate-limit.store.js.
 
 const Redis = require('ioredis');
 const { config } = require('../../config');

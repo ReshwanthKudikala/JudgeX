@@ -17,7 +17,9 @@
     "test": "node tests/integration/run.js",
     "test:integration": "node tests/integration/run.js",
     "test:e2e": "node tests/e2e/run.js",
-    "test:unit": "node tests/unit/run.js"
+    "test:unit": "node tests/unit/run.js",
+    "benchmark:security": "node scripts/benchmark-security.js",
+    "audit:deps": "npm audit --omit=dev"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -31,11 +33,15 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "pg": "^8.13.1",
-    "uuid": "^11.0.5",
+    "uuid": "11.1.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",
     "supertest": "^7.2.2"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "tar": "^7.5.16"
   }
 }

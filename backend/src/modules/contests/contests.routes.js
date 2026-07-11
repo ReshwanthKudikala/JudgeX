@@ -5,6 +5,7 @@ const { Router } = require('express');
 
 const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
+const { contestJoinRateLimit } = require('../../middlewares/rate-limit');
 const controller = require('./contests.controller');
 const {
   listContestsQuerySchema,
@@ -33,6 +34,7 @@ router.get(
 router.post(
   '/:id/join',
   authenticate,
+  contestJoinRateLimit,
   validate(contestIdParamsSchema, 'params'),
   controller.joinContest,
 );
