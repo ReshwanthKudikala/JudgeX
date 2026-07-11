@@ -2,11 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { loadDraft, saveDraft } from '@/features/editor/persistence';
 import { getTemplate } from '@/features/editor/templates';
-import {
-  EMPTY_CONSOLE,
-  type ConsoleState,
-  type EditorLanguage,
-} from '@/features/editor/types';
+import type { EditorLanguage } from '@/features/editor/types';
 
 const DEFAULT_LANGUAGE: EditorLanguage = 'python';
 const LANGUAGE_PREF_KEY = 'judgex.editor.language';
@@ -28,43 +24,44 @@ function resolveInitialCode(slug: string, language: EditorLanguage): string {
 
 export interface UseEditorOptions {
   problemSlug: string;
-  /** Called when Ctrl+S is pressed (Run placeholder). */
-  onRunPlaceholder?: () => void;
-  /** Called when Ctrl+Enter is pressed (Submit placeholder). */
-  onSubmitPlaceholder?: () => void;
+  /** Ctrl/Cmd+S — Run placeholder. */
+  onRun?: () => void;
+  /** Ctrl/Cmd+Enter — Submit (Sprint 24). */
+  onSubmit?: () => void;
+  /** When true, keyboard submit is ignored. */
+  submitDisabled?: boolean;
 }
 
 /**
  * Local editor state (not Zustand).
  * Owns language, code, draft persistence, templates, and keyboard shortcuts.
- * No API calls — Sprint 24 wires Run/Submit here.
  */
 export function useEditor({
   problemSlug,
-  onRunPlaceholder,
-  onSubmitPlaceholder,
+  onRun,
+  onSubmit,
+  submitDisabled = false,
 }: UseEditorOptions) {
   const [language, setLanguageState] = useState<EditorLanguage>(loadLanguagePreference);
   const [code, setCodeState] = useState(() =>
     resolveInitialCode(problemSlug, loadLanguagePreference()),
   );
-  const [consoleState] = useState<ConsoleState>(EMPTY_CONSOLE);
   const [isDirty, setIsDirty] = useState(false);
 
   const languageRef = useRef(language);
   const codeRef = useRef(code);
   const slugRef = useRef(problemSlug);
-  const runRef = useRef(onRunPlaceholder);
-  const submitRef = useRef(onSubmitPlaceholder);
+  const runRef = useRef(onRun);
+  const submitRef = useRef(onSubmit);
+  const submitDisabledRef = useRef(submitDisabled);
 
   languageRef.current = language;
   codeRef.current = code;
   slugRef.current = problemSlug;
-  runRef.current = onRunPlaceholder;
-  submitRef.current = onSubmitPlaceholder;
+  runRef.current = onRun;
+  submitRef.current = onSubmit;
+  submitDisabledRef.current = submitDisabled;
 
-  // Persist current draft whenever code changes (debounced lightly via rAF batching is optional;
-  // synchronous write is fine for coding drafts).
   const setCode = useCallback((next: string) => {
     setCodeState(next);
     codeRef.current = next;
@@ -76,7 +73,6 @@ export function useEditor({
     const prev = languageRef.current;
     if (next === prev) return;
 
-    // Persist outgoing language draft before switching.
     saveDraft(slugRef.current, prev, codeRef.current);
 
     const incoming = resolveInitialCode(slugRef.current, next);
@@ -93,7 +89,6 @@ export function useEditor({
     }
   }, []);
 
-  // When navigating to another problem, reload drafts for the active language.
   useEffect(() => {
     const nextCode = resolveInitialCode(problemSlug, languageRef.current);
     slugRef.current = problemSlug;
@@ -102,7 +97,6 @@ export function useEditor({
     setIsDirty(false);
   }, [problemSlug]);
 
-  // Keyboard shortcuts: Ctrl/Cmd+S → Run placeholder; Ctrl/Cmd+Enter → Submit placeholder.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
@@ -116,6 +110,7 @@ export function useEditor({
 
       if (event.key === 'Enter') {
         event.preventDefault();
+        if (submitDisabledRef.current) return;
         submitRef.current?.();
       }
     };
@@ -124,21 +119,11 @@ export function useEditor({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const resetToTemplate = useCallback(() => {
-    const template = getTemplate(languageRef.current);
-    setCode(template);
-  }, [setCode]);
-
   return {
     language,
     code,
     setCode,
     setLanguage,
-    consoleState,
     isDirty,
-    resetToTemplate,
-    /** Sprint 24: replace these no-ops with real run/submit handlers. */
-    run: onRunPlaceholder,
-    submit: onSubmitPlaceholder,
   };
 }

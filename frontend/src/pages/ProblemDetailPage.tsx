@@ -43,6 +43,7 @@ export function ProblemDetailPage() {
       editor={
         <ProblemCodeEditor
           problemSlug={problem.slug}
+          problemId={problem.id}
           className="h-full border-0 lg:rounded-none"
         />
       }

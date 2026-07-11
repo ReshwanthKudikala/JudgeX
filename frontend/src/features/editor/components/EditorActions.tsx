@@ -6,18 +6,23 @@ import { Button } from '@/components/ui/Button';
 interface EditorActionsProps {
   onRun: () => void;
   onSubmit: () => void;
-  /** When true, buttons stay visually enabled but still call placeholders. */
-  disabled?: boolean;
+  /** Disables Run (placeholder stays clickable unless true). */
+  runDisabled?: boolean;
+  /** Disables Submit while submitting/polling. */
+  submitDisabled?: boolean;
+  submitLoading?: boolean;
 }
 
 /**
  * Run / Submit actions.
- * Sprint 24: wire these to POST /submissions + polling — keep this API stable.
+ * Run remains a Sprint-23 placeholder; Submit is wired in Sprint 24.
  */
 export const EditorActions = memo(function EditorActions({
   onRun,
   onSubmit,
-  disabled = false,
+  runDisabled = false,
+  submitDisabled = false,
+  submitLoading = false,
 }: EditorActionsProps) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-2">
@@ -25,7 +30,7 @@ export const EditorActions = memo(function EditorActions({
         type="button"
         variant="secondary"
         size="sm"
-        disabled={disabled}
+        disabled={runDisabled}
         onClick={onRun}
         aria-label="Run code"
       >
@@ -35,7 +40,8 @@ export const EditorActions = memo(function EditorActions({
       <Button
         type="button"
         size="sm"
-        disabled={disabled}
+        disabled={submitDisabled || submitLoading}
+        loading={submitLoading}
         onClick={onSubmit}
         aria-label="Submit solution"
       >

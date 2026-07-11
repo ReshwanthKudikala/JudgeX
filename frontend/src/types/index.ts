@@ -11,3 +11,10 @@ export type {
   ProblemListResult,
   PaginationMeta,
 } from './problems';
+export type {
+  Submission,
+  SubmissionStatus,
+  SubmissionVerdict,
+  CreateSubmissionInput,
+  AiCompileExplanation,
+} from './submissions';
