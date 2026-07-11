@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { ApiError } from '@/types';
+import { EditorialPanel, useEditorial } from '@/features/editorials';
 import { ProblemCodeEditor } from '@/features/editor';
 import { ProblemBreadcrumb } from '@/features/problems/components/ProblemBreadcrumb';
 import { ProblemErrorState } from '@/features/problems/components/ProblemErrorState';
@@ -18,6 +19,10 @@ export function ProblemDetailPage() {
   const token = useAuthStore((s) => s.token);
 
   const { data: problem, isLoading, isError, error, refetch } = useProblem(problemSlug);
+  const {
+    data: editorial,
+  } = useEditorial(problem?.slug);
+
 
   if (!problemSlug) {
     return <ProblemErrorState notFound />;
@@ -40,6 +45,8 @@ export function ProblemDetailPage() {
     );
   }
 
+  const showEditorialTab = Boolean(editorial);
+
   return (
     <ProblemLayout
       breadcrumb={<ProblemBreadcrumb title={problem.title} />}
@@ -52,6 +59,11 @@ export function ProblemDetailPage() {
             <TabsTrigger value="submissions" className="px-3 text-xs">
               Submissions
             </TabsTrigger>
+            {showEditorialTab ? (
+              <TabsTrigger value="editorial" className="px-3 text-xs">
+                Editorial
+              </TabsTrigger>
+            ) : null}
           </TabsList>
           <TabsContent value="description">
             <ProblemStatementPanel problem={problem} />
@@ -69,6 +81,11 @@ export function ProblemDetailPage() {
               </p>
             )}
           </TabsContent>
+          {editorial ? (
+            <TabsContent value="editorial">
+              <EditorialPanel editorial={editorial} />
+            </TabsContent>
+          ) : null}
         </Tabs>
       }
       editor={

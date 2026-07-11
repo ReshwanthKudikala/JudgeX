@@ -14,6 +14,7 @@ const TRUNCATE_SQL = `
     contest_participants,
     contest_problems,
     contests,
+    editorials,
     test_cases,
     problem_examples,
     problem_tags,

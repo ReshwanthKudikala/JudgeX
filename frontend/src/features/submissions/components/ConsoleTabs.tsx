@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/Button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { AiExplanation } from '@/features/submissions/components/AiExplanation';
 import { CompileOutput } from '@/features/submissions/components/CompileOutput';
@@ -15,21 +16,28 @@ interface ConsoleTabsProps {
   aiExplanation: AiCompileExplanation | null;
   aiAvailable: boolean;
   aiLoading?: boolean;
+  /** Explicit user action — AI is never auto-requested. */
+  onRequestCompileExplanation?: () => void;
+  /** When true, omit outer chrome (used inside EditorBottomPanel). */
+  embedded?: boolean;
   className?: string;
 }
 
 /**
  * Console region under the editor.
- * Tabs: Output | Error | Result | AI Explanation (AI hidden when unavailable).
+ * Tabs: Output | Error | Result | AI Explanation (CE only, on demand).
  */
 export const ConsoleTabs = memo(function ConsoleTabs({
   submission,
   aiExplanation,
   aiAvailable,
   aiLoading = false,
+  onRequestCompileExplanation,
+  embedded = false,
   className,
 }: ConsoleTabsProps) {
-  const showAi = aiAvailable || (submission?.verdict === 'compile_error' && aiLoading);
+  const isCompileError = submission?.verdict === 'compile_error';
+  const showAi = isCompileError;
 
   const defaultTab: ConsoleTab = useMemo(() => {
     if (submission?.verdict === 'compile_error') return showAi ? 'ai' : 'error';
@@ -52,26 +60,28 @@ export const ConsoleTabs = memo(function ConsoleTabs({
   const outputText = buildOutputText(submission);
   const errorText = buildErrorText(submission);
 
-  return (
-    <div
-      className={cn('border-t border-border bg-[#0c0e12] px-3 py-2', className)}
-      aria-label="Execution console"
-      role="region"
-    >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
-          Console
-        </p>
-        {submission ? (
+  const body = (
+    <>
+      {!embedded ? (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
+            Console
+          </p>
+          {submission ? (
+            <VerdictBadge verdict={submission.verdict} status={submission.status} />
+          ) : null}
+        </div>
+      ) : submission ? (
+        <div className="mb-2 flex justify-end">
           <VerdictBadge verdict={submission.verdict} status={submission.status} />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <Tabs
         value={tab}
         onValueChange={(v) => setTab(v as ConsoleTab)}
         defaultValue={defaultTab}
-        className="mt-3"
+        className={embedded ? 'mt-1' : 'mt-3'}
       >
         <TabsList className="h-8">
           <TabsTrigger value="output" className="px-2.5 py-1 text-xs">
@@ -135,15 +145,46 @@ export const ConsoleTabs = memo(function ConsoleTabs({
         </TabsContent>
 
         {showAi ? (
-          <TabsContent value="ai" className="mt-2">
-            <AiExplanation
-              explanation={aiExplanation}
-              loading={aiLoading}
-              unavailable={!aiAvailable && !aiLoading}
-            />
+          <TabsContent value="ai" className="mt-2 space-y-2">
+            {!aiAvailable && !aiLoading ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted">
+                  Compile-error explanations are available on request.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={!onRequestCompileExplanation}
+                  onClick={() => onRequestCompileExplanation?.()}
+                >
+                  Explain compile error
+                </Button>
+              </div>
+            ) : (
+              <AiExplanation
+                explanation={aiExplanation}
+                loading={aiLoading}
+                unavailable={!aiAvailable && !aiLoading}
+              />
+            )}
           </TabsContent>
         ) : null}
       </Tabs>
+    </>
+  );
+
+  if (embedded) {
+    return <div className={cn(className)}>{body}</div>;
+  }
+
+  return (
+    <div
+      className={cn('border-t border-border bg-[#0c0e12] px-3 py-2', className)}
+      aria-label="Execution console"
+      role="region"
+    >
+      {body}
     </div>
   );
 });

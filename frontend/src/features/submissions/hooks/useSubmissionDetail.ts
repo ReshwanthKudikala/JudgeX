@@ -22,7 +22,8 @@ export function useSubmissionDetail(submissionId: string | undefined) {
   const aiQuery = useQuery({
     queryKey: ['ai-compile-explanation', submissionId],
     queryFn: () => explainCompileError(submissionId!),
-    enabled: Boolean(submissionId) && isCompileError,
+    // Sprint 29: only fetch when explicitly requested via refetch.
+    enabled: false,
     staleTime: 60_000,
     retry: false,
   });
@@ -36,5 +37,9 @@ export function useSubmissionDetail(submissionId: string | undefined) {
     aiExplanation: aiQuery.data ?? null,
     aiLoading: aiQuery.isFetching,
     aiAvailable: Boolean(aiQuery.data) && !aiQuery.isError,
+    requestCompileExplanation: () => {
+      if (!submissionId || !isCompileError) return;
+      void aiQuery.refetch();
+    },
   };
 }

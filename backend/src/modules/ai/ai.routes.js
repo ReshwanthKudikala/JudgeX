@@ -5,7 +5,14 @@ const { Router } = require('express');
 
 const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
-const { explainCompileErrorSchema } = require('./ai.validators');
+const {
+  explainCompileErrorSchema,
+  explainSubmissionSchema,
+  analyzeComplexitySchema,
+  suggestOptimizationsSchema,
+  generateHintSchema,
+  learningAssistSchema,
+} = require('./ai.validators');
 const controller = require('./ai.controller');
 
 const router = Router();
@@ -15,6 +22,41 @@ router.post(
   authenticate,
   validate(explainCompileErrorSchema),
   controller.explainCompileError,
+);
+
+router.post(
+  '/explain-submission',
+  authenticate,
+  validate(explainSubmissionSchema),
+  controller.explainSubmission,
+);
+
+router.post(
+  '/analyze-complexity',
+  authenticate,
+  validate(analyzeComplexitySchema),
+  controller.analyzeComplexity,
+);
+
+router.post(
+  '/suggest-optimizations',
+  authenticate,
+  validate(suggestOptimizationsSchema),
+  controller.suggestOptimizations,
+);
+
+router.post(
+  '/generate-hint',
+  authenticate,
+  validate(generateHintSchema),
+  controller.generateHint,
+);
+
+router.post(
+  '/learning-assist',
+  authenticate,
+  validate(learningAssistSchema),
+  controller.learningAssist,
 );
 
 module.exports = { aiRoutes: router };

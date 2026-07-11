@@ -4,9 +4,10 @@ function resolveFeatureFlags(env) {
   return Object.freeze({
     // MVP AI capability: compile-error explanation (provider-agnostic).
     aiCompileExplanation: env.FEATURE_AI_COMPILE_EXPLANATION,
-    // Placeholders for post-MVP features (default off until shipped).
-    aiAdvanced: false,
+    // Sprint 29 — learning assistant (hints, complexity, verdict help).
+    aiAdvanced: env.FEATURE_AI_ADVANCED,
     contests: true,
+    editorials: true,
   });
 }
 

@@ -39,3 +39,10 @@ export type {
   ScoreboardEntry,
   ScoreboardResult,
 } from './contests';
+export type { ProblemEditorial, EditorialAdmin } from './editorials';
+export type {
+  AiAssistAction,
+  AiLearningReply,
+  AiLearningAssistInput,
+  AiConversationMessage,
+} from './ai-assistant';

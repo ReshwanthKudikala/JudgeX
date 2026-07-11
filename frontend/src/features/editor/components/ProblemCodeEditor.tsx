@@ -1,10 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { EditorBottomPanel } from '@/features/ai-assistant';
 import { EditorActions } from '@/features/editor/components/EditorActions';
 import { EditorToolbar } from '@/features/editor/components/EditorToolbar';
 import { useEditor } from '@/features/editor/hooks/useEditor';
-import { ConsoleTabs } from '@/features/submissions/components/ConsoleTabs';
 import { SubmissionStatus } from '@/features/submissions/components/SubmissionStatus';
 import {
   getSubmissionErrorMessage,
@@ -31,7 +31,7 @@ interface ProblemCodeEditorProps {
 
 /**
  * Editor panel with Submit → poll → verdict/console (Sprint 24).
- * Layout chrome unchanged from Sprint 23.
+ * Sprint 29: Console | AI learning assistant under the editor.
  */
 export const ProblemCodeEditor = memo(function ProblemCodeEditor({
   problemSlug,
@@ -54,6 +54,7 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
     aiExplanation,
     aiAvailable,
     aiLoading,
+    requestCompileExplanation,
   } = useSubmission();
 
   const busy = isSubmitting || isPolling;
@@ -100,6 +101,8 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
 
   languageRef.current = language;
   codeRef.current = code;
+
+  const getSourceCode = useCallback(() => codeRef.current, []);
 
   useEffect(() => {
     if (!submitError) return;
@@ -180,11 +183,15 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
         isPolling={isPolling}
       />
 
-      <ConsoleTabs
+      <EditorBottomPanel
+        problemId={problemId}
+        language={language}
+        getSourceCode={getSourceCode}
         submission={submission}
         aiExplanation={aiExplanation}
         aiAvailable={aiAvailable}
         aiLoading={aiLoading}
+        onRequestCompileExplanation={requestCompileExplanation}
       />
     </div>
   );

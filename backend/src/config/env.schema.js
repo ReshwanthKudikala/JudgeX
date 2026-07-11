@@ -72,6 +72,7 @@ const envSchema = z
 
     // --- Feature flags ---
     FEATURE_AI_COMPILE_EXPLANATION: booleanish.default('true'),
+    FEATURE_AI_ADVANCED: booleanish.default('true'),
 
     // --- Stuck-submission reaper (persist-before-enqueue safety net) ---
     // How often the cleanup worker scans for orphaned queued rows.

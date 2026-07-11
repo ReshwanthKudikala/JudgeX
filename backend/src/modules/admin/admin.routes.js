@@ -11,6 +11,7 @@ const { authenticate } = require('../../middlewares/authenticate');
 const { authorize } = require('../../middlewares/authorize');
 const controller = require('./admin.controller');
 const contestController = require('./admin.contests.controller');
+const editorialController = require('./admin.editorials.controller');
 const {
   createProblemSchema,
   updateProblemSchema,
@@ -23,6 +24,12 @@ const {
   updateContestSchema,
   contestIdParamsSchema,
 } = require('../contests/contests.validators');
+const {
+  createEditorialSchema,
+  updateEditorialSchema,
+  problemIdParamsSchema,
+  editorialIdParamsSchema,
+} = require('../editorials/editorials.validators');
 
 const router = Router();
 
@@ -92,6 +99,34 @@ router.delete(
   ...requireAdmin,
   validate(contestIdParamsSchema, 'params'),
   contestController.deleteContest,
+);
+
+// Sprint 29 — editorial admin CRUD.
+router.post(
+  '/problems/:problemId/editorial',
+  ...requireAdmin,
+  validate(problemIdParamsSchema, 'params'),
+  validate(createEditorialSchema),
+  editorialController.createEditorial,
+);
+router.get(
+  '/editorials/:id',
+  ...requireAdmin,
+  validate(editorialIdParamsSchema, 'params'),
+  editorialController.getEditorial,
+);
+router.patch(
+  '/editorials/:id',
+  ...requireAdmin,
+  validate(editorialIdParamsSchema, 'params'),
+  validate(updateEditorialSchema),
+  editorialController.updateEditorial,
+);
+router.delete(
+  '/editorials/:id',
+  ...requireAdmin,
+  validate(editorialIdParamsSchema, 'params'),
+  editorialController.deleteEditorial,
 );
 
 module.exports = { adminRoutes: router };

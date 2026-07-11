@@ -82,13 +82,16 @@ export function useSubmission() {
   const aiQuery = useQuery({
     queryKey: ['ai-explain', submissionId],
     queryFn: () => explainCompileError(submissionId as string),
-    enabled:
-      Boolean(submissionId) &&
-      isTerminal &&
-      submission?.verdict === 'compile_error',
+    // Sprint 29: never auto-request AI — wait for an explicit user action.
+    enabled: false,
     retry: false,
     staleTime: Infinity,
   });
+
+  const requestCompileExplanation = useCallback(() => {
+    if (!submissionId || submission?.verdict !== 'compile_error') return;
+    void aiQuery.refetch();
+  }, [submissionId, submission?.verdict, aiQuery]);
 
   const submit = useCallback(async (input: SubmitCodeInput) => {
     setPollTimedOut(false);
@@ -127,8 +130,9 @@ export function useSubmission() {
     pollError: submissionQuery.error,
     aiExplanation,
     aiAvailable,
-    aiLoading: aiQuery.isLoading || aiQuery.isFetching,
+    aiLoading: aiQuery.isFetching,
     aiError: aiQuery.error,
+    requestCompileExplanation,
   };
 }
 

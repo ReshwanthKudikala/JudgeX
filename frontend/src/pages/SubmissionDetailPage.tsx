@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { Skeleton } from '@/components/common/Skeleton';
+import { Button } from '@/components/ui/Button';
 import { AiExplanation } from '@/features/submissions/components/AiExplanation';
 import { CompileOutput } from '@/features/submissions/components/CompileOutput';
 import { SubmissionDetails } from '@/features/submissions/components/SubmissionDetails';
@@ -44,6 +45,7 @@ export function SubmissionDetailPage() {
     aiExplanation,
     aiLoading,
     aiAvailable,
+    requestCompileExplanation,
   } = useSubmissionDetail(submissionId);
 
   if (isLoading) {
@@ -144,11 +146,22 @@ export function SubmissionDetailPage() {
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
               AI explanation
             </p>
-            <AiExplanation
-              explanation={aiExplanation}
-              loading={aiLoading}
-              unavailable={!aiAvailable && !aiLoading}
-            />
+            {!aiAvailable && !aiLoading ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => requestCompileExplanation()}
+              >
+                Explain compile error
+              </Button>
+            ) : (
+              <AiExplanation
+                explanation={aiExplanation}
+                loading={aiLoading}
+                unavailable={!aiAvailable && !aiLoading}
+              />
+            )}
           </div>
         ) : null}
       </section>
