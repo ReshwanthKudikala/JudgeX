@@ -99,3 +99,19 @@ export async function unwrapData<T>(
   }
   return envelope.data;
 }
+
+/** Unwrap data + meta (used for paginated list endpoints). */
+export async function unwrapEnvelope<T>(
+  promise: Promise<{ data: ApiEnvelope<T> }>,
+): Promise<{ data: T; meta: NonNullable<ApiEnvelope<T>['meta']> }> {
+  const { data: envelope } = await promise;
+  if (!envelope.success) {
+    throw new ApiError(
+      0,
+      envelope.error?.code ?? 'REQUEST_FAILED',
+      envelope.error?.message ?? 'Request failed.',
+      envelope.error?.details,
+    );
+  }
+  return { data: envelope.data, meta: envelope.meta ?? {} };
+}

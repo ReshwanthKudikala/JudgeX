@@ -62,7 +62,7 @@ export function DashboardPage() {
             <CardContent>
               <Link to={paths.problems}>
                 <Button variant="secondary" size="sm">
-                  View problems
+                  View Problems
                 </Button>
               </Link>
             </CardContent>
