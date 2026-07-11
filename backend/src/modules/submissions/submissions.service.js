@@ -15,13 +15,15 @@ const { submissionRepository } = require('./submissions.repository');
 const { userRepository } = require('../auth/auth.repository');
 const { problemRepository } = require('../problems/problems.repository');
 
-// The MVP verdicts the worker may report (DATABASE_DESIGN.md §3.7 `verdict` enum).
+// Terminal verdicts the worker may report (DB enum + Sprint 25 extensions).
 const TERMINAL_VERDICTS = new Set([
   'accepted',
   'wrong_answer',
   'tle',
   'runtime_error',
   'compile_error',
+  'memory_limit_exceeded',
+  'internal_error',
 ]);
 
 // Map a full submissions row into a camelCase domain object.
@@ -36,8 +38,14 @@ function toSubmissionDetail(row) {
     verdict: row.verdict,
     compileOutput: row.compile_output,
     runtimeMs: row.runtime_ms,
+    // Alias for Sprint 25 "executionTime" clients; same persisted value.
+    executionTime: row.runtime_ms,
     memoryKb: row.memory_kb,
     failedTestIndex: row.failed_test_index,
+    passedTests: row.passed_tests ?? null,
+    totalTests: row.total_tests ?? null,
+    stdout: row.stdout ?? null,
+    stderr: row.stderr ?? null,
     submittedAt: row.submitted_at,
     judgedAt: row.judged_at,
     createdAt: row.created_at,
@@ -55,8 +63,11 @@ function toSubmissionSummary(row) {
     status: row.status,
     verdict: row.verdict,
     runtimeMs: row.runtime_ms,
+    executionTime: row.runtime_ms,
     memoryKb: row.memory_kb,
     failedTestIndex: row.failed_test_index,
+    passedTests: row.passed_tests ?? null,
+    totalTests: row.total_tests ?? null,
     submittedAt: row.submitted_at,
     judgedAt: row.judged_at,
     createdAt: row.created_at,
@@ -81,16 +92,8 @@ class SubmissionService {
    * Create a submission in the initial 'queued' status, then enqueue it for
    * judging (persist-before-enqueue).
    *
-   * 1. Transaction: verify user + problem exist, insert the submission.
-   * 2. After COMMIT: enqueue via the queue service (never inside the TX).
-   *
-   * If enqueue fails, the row stays `queued` (recoverable by a reaper) and a
-   * QueueError is thrown — the submission is never deleted.
-   *
    * @param {{ userId: string, problemId: string, language: string, sourceCode: string }} input
    * @returns {Promise<Object>} the created submission domain object (status 'queued').
-   * @throws {NotFoundError} when the user or problem does not exist.
-   * @throws {QueueError} when enqueue fails after a successful persist.
    */
   async createSubmission({ userId, problemId, language, sourceCode }) {
     const submission = await withTransaction(async (client) => {
@@ -111,8 +114,6 @@ class SubmissionService {
       return toSubmissionDetail(row);
     });
 
-    // Enqueue ONLY after the transaction has committed. A job must never
-    // reference a submission that is not yet durable in Postgres.
     try {
       await this.enqueueSubmission(submission.id);
     } catch (err) {
@@ -130,12 +131,6 @@ class SubmissionService {
     return submission;
   }
 
-  /**
-   * Fetch a single submission by id.
-   * @param {string} id - UUID.
-   * @returns {Promise<Object>} the submission domain object.
-   * @throws {NotFoundError} when no submission has that id.
-   */
   async getSubmissionById(id) {
     const row = await this.submissionRepository.findById(id);
     if (!row) {
@@ -144,12 +139,6 @@ class SubmissionService {
     return toSubmissionDetail(row);
   }
 
-  /**
-   * Paginated, filtered, sorted history of one user's submissions.
-   * @param {string} userId - UUID.
-   * @param {Object} [filters] - { page, limit, sort, problemId, verdict, language, status }.
-   * @returns {Promise<{ submissions: Object[], pagination: { page, limit, total, totalPages } }>}
-   */
   async getUserSubmissions(userId, filters = {}) {
     const { rows, total, page, limit } = await this.submissionRepository.findByUser(userId, filters);
     return {
@@ -163,12 +152,6 @@ class SubmissionService {
     };
   }
 
-  /**
-   * Transition a submission to 'running' (the worker has picked it up).
-   * @param {string} id - UUID.
-   * @returns {Promise<Object>} the updated submission domain object.
-   * @throws {NotFoundError} when no submission has that id.
-   */
   async markSubmissionRunning(id) {
     const row = await this.submissionRepository.updateSubmissionStatus(id, 'running');
     if (!row) {
@@ -179,18 +162,25 @@ class SubmissionService {
 
   /**
    * Persist the terminal result the worker computed. This service does NOT
-   * decide the verdict — it only validates and stores what it is given, and
-   * derives the lifecycle status ('completed') from the presence of a verdict.
+   * decide the verdict — it only validates and stores what it is given.
    *
    * @param {string} id - UUID.
-   * @param {{ verdict: string, compileOutput?: string|null, runtimeMs?: number|null,
-   *           memoryKb?: number|null, failedTestIndex?: number|null }} result
-   * @returns {Promise<Object>} the updated submission domain object.
-   * @throws {ValidationError} when the verdict is not a known terminal verdict.
-   * @throws {NotFoundError} when no submission has that id.
+   * @param {object} result
+   * @returns {Promise<Object>}
    */
   async completeSubmission(id, result = {}) {
-    const { verdict, compileOutput, runtimeMs, memoryKb, failedTestIndex } = result;
+    const {
+      verdict,
+      compileOutput,
+      runtimeMs,
+      memoryKb,
+      failedTestIndex,
+      passedTests,
+      totalTests,
+      stdout,
+      stderr,
+      status = 'completed',
+    } = result;
 
     if (!TERMINAL_VERDICTS.has(verdict)) {
       throw new ValidationError('Unknown submission verdict.', [
@@ -199,12 +189,42 @@ class SubmissionService {
     }
 
     const row = await this.submissionRepository.updateSubmissionResult(id, {
-      status: 'completed',
+      status,
       verdict,
       compileOutput,
       runtimeMs,
       memoryKb,
       failedTestIndex,
+      passedTests,
+      totalTests,
+      stdout,
+      stderr,
+    });
+    if (!row) {
+      throw new NotFoundError('Submission not found.');
+    }
+    return toSubmissionDetail(row);
+  }
+
+  /**
+   * Mark a submission as an internal judging failure (Sprint 25).
+   * Idempotent-ish: overwrites running/queued rows with a terminal internal_error.
+   *
+   * @param {string} id
+   * @param {{ message?: string }} [opts]
+   */
+  async failSubmissionInternal(id, opts = {}) {
+    const row = await this.submissionRepository.updateSubmissionResult(id, {
+      status: 'error',
+      verdict: 'internal_error',
+      compileOutput: opts.message || null,
+      runtimeMs: null,
+      memoryKb: null,
+      failedTestIndex: null,
+      passedTests: null,
+      totalTests: null,
+      stdout: null,
+      stderr: opts.message || null,
     });
     if (!row) {
       throw new NotFoundError('Submission not found.');
@@ -213,4 +233,4 @@ class SubmissionService {
   }
 }
 
-module.exports = { SubmissionService, submissionService: new SubmissionService() };
+module.exports = { SubmissionService, submissionService: new SubmissionService(), TERMINAL_VERDICTS };

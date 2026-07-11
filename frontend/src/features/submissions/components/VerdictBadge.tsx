@@ -14,6 +14,8 @@ const VERDICT_CLASS: Record<SubmissionVerdict, string> = {
   tle: 'border-amber-400/40 bg-amber-400/15 text-amber-300',
   runtime_error: 'border-error/40 bg-error/15 text-error',
   compile_error: 'border-orange-400/40 bg-orange-400/15 text-orange-300',
+  memory_limit_exceeded: 'border-amber-400/40 bg-amber-400/15 text-amber-300',
+  internal_error: 'border-error/40 bg-error/15 text-error',
 };
 
 const STATUS_CLASS: Record<SubmissionStatus, string> = {

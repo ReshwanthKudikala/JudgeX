@@ -8,6 +8,8 @@ const { withTransaction } = require('../../infrastructure/database/transaction')
 const { AppError } = require('../../shared/errors/base.error');
 const { NotFoundError, ConflictError } = require('../../shared/errors/http-errors');
 const { problemRepository } = require('./problems.repository');
+const { testCaseService } = require('./testcase.service');
+const { resolveTestCase } = require('../../infrastructure/storage/storage.adapter');
 
 // pg returns BIGINT as a string; normalize counters to numbers for the domain.
 function toNumber(value) {
@@ -44,6 +46,16 @@ function toProblemDetail(row) {
   };
 }
 
+/** Map a public (non-hidden) test-case row into a frontend example DTO. */
+function toPublicExample(row) {
+  const resolved = resolveTestCase(row);
+  return {
+    input: resolved.input,
+    output: resolved.expectedOutput,
+    explanation: row.explanation ?? null,
+  };
+}
+
 // Map a lightweight list row into a camelCase catalog summary (no statement).
 function toProblemSummary(row) {
   const totalSubmissions = toNumber(row.total_submissions);
@@ -65,12 +77,14 @@ function toProblemSummary(row) {
 }
 
 class ProblemService {
-  constructor({ problemRepository: repo } = {}) {
+  constructor({ problemRepository: repo, testCaseService: tcSvc } = {}) {
     this.problemRepository = repo || problemRepository;
+    this.testCaseService = tcSvc || testCaseService;
   }
 
   /**
-   * Fetch a single active problem by slug.
+   * Fetch a single active problem by slug, including public sample examples.
+   * Hidden test cases are never attached.
    * @param {string} slug
    * @returns {Promise<Object>} the problem domain object.
    * @throws {NotFoundError} when no active problem has that slug.
@@ -80,7 +94,10 @@ class ProblemService {
     if (!row) {
       throw new NotFoundError('Problem not found.');
     }
-    return toProblemDetail(row);
+    const detail = toProblemDetail(row);
+    const publicRows = await this.testCaseService.getPublicExamples(row.id);
+    detail.examples = publicRows.map(toPublicExample);
+    return detail;
   }
 
   /**

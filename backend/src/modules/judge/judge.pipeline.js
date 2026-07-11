@@ -8,15 +8,14 @@
 // the sandbox down in a finally block.
 //
 // Dependencies are injected (with real defaults) so the flow is unit-testable
-// without Docker/Redis/DB. NOTE: a real test-case data source is not built yet;
-// callers must supply `loadTestCases`. The default refuses to judge rather than
-// emit a false verdict.
+// without Docker/Redis/DB.
 
+const { config } = require('../../config');
 const dockerAdapter = require('../../infrastructure/docker/docker.adapter');
 const compiler = require('./compiler');
 const runner = require('./runner');
 const { compareOutputs } = require('./comparator');
-const { generateVerdict } = require('./verdict-engine');
+const { generateVerdict, VERDICTS } = require('./verdict-engine');
 const { submissionService } = require('../submissions/submissions.service');
 const { problemService } = require('../problems/problems.service');
 const { testCaseService } = require('../problems/testcase.service');
@@ -27,11 +26,16 @@ const { JudgeError } = require('../../shared/errors/domain-errors');
 // Prebuilt sandbox image per language (built ahead of time; ARCHITECTURE.md §5.2).
 const LANGUAGE_IMAGES = Object.freeze({ cpp: 'judgex-cpp', python: 'judgex-python' });
 
+// Verdicts that invalidate the sandbox / make further runs unsafe.
+const HARD_STOP_VERDICTS = new Set([
+  VERDICTS.COMPILE_ERROR,
+  VERDICTS.TLE,
+  VERDICTS.MEMORY_LIMIT_EXCEEDED,
+]);
+
 // Load metadata rows (ordered by display_order) then hydrate each payload via the
 // storage adapter. Inline payloads resolve to text; external payloads currently
 // throw NotImplementedError, which is propagated unchanged (never swallowed).
-// The pipeline consumes the resulting { input, expectedOutput } items unchanged,
-// so it stays storage-agnostic.
 async function defaultLoadTestCases(problemId) {
   const rows = await testCaseService.getJudgeTestCases(problemId);
   return rows.map((row) => resolveTestCase(row));
@@ -56,6 +60,7 @@ async function runJudgePipeline(submissionId, deps = {}) {
     loadTestCases = defaultLoadTestCases,
     sourceFiles = compiler.SOURCE_FILES,
     images = LANGUAGE_IMAGES,
+    failFast = config.judge.failFast,
   } = deps;
 
   // 1. Load the authoritative submission + problem (limits) from Postgres.
@@ -88,24 +93,33 @@ async function runJudgePipeline(submissionId, deps = {}) {
       logger.info('Compilation failed; finalizing', { submissionId, verdict: outcome.verdict });
       await submissions.completeSubmission(submissionId, {
         verdict: outcome.verdict,
-        compileOutput: compileResult.stderr,
+        compileOutput: compileResult.stderr || compileResult.stdout || null,
         runtimeMs: outcome.metrics.runtimeMs,
         memoryKb: outcome.metrics.memoryKb,
         failedTestIndex: null,
+        passedTests: 0,
+        totalTests: 0,
+        stdout: compileResult.stdout || null,
+        stderr: compileResult.stderr || null,
       });
       return outcome;
     }
 
-    // 6. Otherwise run every test case sequentially; stop on first non-accepted.
+    // 6. Run every test case sequentially; stop early on CE (already handled),
+    //    hard-stop verdicts, or any failure when fail-fast is enabled.
     const testCases = await loadTestCases(submission.problemId);
     if (!Array.isArray(testCases) || testCases.length === 0) {
       throw new JudgeError('No test cases available for judging.');
     }
 
+    const totalTests = testCases.length;
     let outcome = null;
     let maxRuntimeMs = 0;
     let maxMemoryKb = 0;
     let failedTestIndex = null;
+    let passedTests = 0;
+    let lastStdout = null;
+    let lastStderr = null;
 
     for (let i = 0; i < testCases.length; i += 1) {
       const testCase = testCases[i];
@@ -117,14 +131,36 @@ async function runJudgePipeline(submissionId, deps = {}) {
       });
       maxRuntimeMs = Math.max(maxRuntimeMs, runResult.durationMs || 0);
       if (runResult.memoryKb) maxMemoryKb = Math.max(maxMemoryKb, runResult.memoryKb);
+      lastStdout = runResult.stdout ?? null;
+      lastStderr = runResult.stderr ?? null;
 
       const comparisonResult = compare(runResult.stdout, testCase.expectedOutput);
-      outcome = verdict({ compileResult, runResult, comparisonResult });
+      const caseOutcome = verdict({ compileResult, runResult, comparisonResult });
 
-      if (!outcome.passed) {
-        failedTestIndex = i;
-        break; // early termination — the failing verdict is final.
+      if (caseOutcome.passed) {
+        passedTests += 1;
+        // Keep the first failure as the final verdict when fail-fast is off.
+        if (failedTestIndex === null) {
+          outcome = caseOutcome;
+        }
+        continue;
       }
+
+      // First failure wins as the final verdict (even when fail-fast is off).
+      if (failedTestIndex === null) {
+        failedTestIndex = i;
+        outcome = caseOutcome;
+      }
+
+      const shouldStop =
+        failFast || HARD_STOP_VERDICTS.has(caseOutcome.verdict);
+      if (shouldStop) {
+        break;
+      }
+    }
+
+    if (!outcome) {
+      throw new JudgeError('Judge pipeline produced no verdict.');
     }
 
     // 7. Persist the final verdict + aggregate metrics.
@@ -132,6 +168,9 @@ async function runJudgePipeline(submissionId, deps = {}) {
       submissionId,
       verdict: outcome.verdict,
       failedTestIndex,
+      passedTests,
+      totalTests,
+      failFast,
     });
     await submissions.completeSubmission(submissionId, {
       verdict: outcome.verdict,
@@ -139,8 +178,22 @@ async function runJudgePipeline(submissionId, deps = {}) {
       runtimeMs: maxRuntimeMs,
       memoryKb: maxMemoryKb || null,
       failedTestIndex,
+      passedTests,
+      totalTests,
+      stdout: lastStdout,
+      stderr: lastStderr,
     });
-    return outcome;
+    return {
+      ...outcome,
+      metrics: {
+        ...outcome.metrics,
+        runtimeMs: maxRuntimeMs,
+        memoryKb: maxMemoryKb || null,
+        passedTests,
+        totalTests,
+        failedTestIndex,
+      },
+    };
   } finally {
     // 8. Always destroy the container + workspace, even on error.
     await docker.cleanup(sandbox);

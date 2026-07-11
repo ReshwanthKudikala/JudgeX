@@ -26,7 +26,7 @@ const log = createLogger({ component: 'judge-worker' });
 const CONCURRENCY = 1;
 
 // Statuses that are terminal — a job for one of these must not be reprocessed.
-const TERMINAL_STATUSES = new Set(['completed']);
+const TERMINAL_STATUSES = new Set(['completed', 'error']);
 
 /**
  * Validate the minimal job payload contract (JUDGE_PIPELINE.md §2).
@@ -77,30 +77,45 @@ async function processJob(job) {
   // Transition queued → running (worker has picked it up).
   await submissionService.markSubmissionRunning(submissionId);
 
-  // Delegate the compile → run → compare → verdict → persist flow to the pipeline.
-  const outcome = await runJudgePipeline(submissionId);
+  try {
+    // Delegate the compile → run → compare → verdict → persist flow to the pipeline.
+    const outcome = await runJudgePipeline(submissionId);
 
-  // Non-critical path: after a CE verdict, optionally generate + persist an
-  // explanation. Failures are swallowed so judging remains authoritative.
-  if (outcome.verdict === 'compile_error') {
+    // Non-critical path: after a CE verdict, optionally generate + persist an
+    // explanation. Failures are swallowed so judging remains authoritative.
+    if (outcome.verdict === 'compile_error') {
+      try {
+        const judged = await submissionService.getSubmissionById(submissionId);
+        await aiService.tryExplainAfterCompileError({
+          submissionId,
+          userId: judged.userId,
+          language: judged.language,
+          compileOutput: judged.compileOutput,
+        });
+      } catch (err) {
+        log.warn('Post-judge AI explanation hook failed; ignoring', {
+          submissionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    log.info('Submission judged', { submissionId, verdict: outcome.verdict });
+    return { submissionId, verdict: outcome.verdict };
+  } catch (err) {
+    // Persist Internal Error so the submission does not stay stuck in `running`.
     try {
-      const judged = await submissionService.getSubmissionById(submissionId);
-      await aiService.tryExplainAfterCompileError({
-        submissionId,
-        userId: judged.userId,
-        language: judged.language,
-        compileOutput: judged.compileOutput,
+      await submissionService.failSubmissionInternal(submissionId, {
+        message: err instanceof Error ? err.message : String(err),
       });
-    } catch (err) {
-      log.warn('Post-judge AI explanation hook failed; ignoring', {
+    } catch (persistErr) {
+      log.error('Failed to persist internal_error after judge failure', {
         submissionId,
-        error: err instanceof Error ? err.message : String(err),
+        error: persistErr instanceof Error ? persistErr.message : String(persistErr),
       });
     }
+    throw err;
   }
-
-  log.info('Submission judged', { submissionId, verdict: outcome.verdict });
-  return { submissionId, verdict: outcome.verdict };
 }
 
 let worker = null;

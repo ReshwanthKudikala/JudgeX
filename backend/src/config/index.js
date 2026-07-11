@@ -77,6 +77,7 @@ const config = Object.freeze({
     memoryLimitMb: env.JUDGE_MEMORY_LIMIT_MB,
     pidLimit: env.JUDGE_PID_LIMIT,
     workerConcurrency: env.JUDGE_WORKER_CONCURRENCY,
+    failFast: env.JUDGE_FAIL_FAST,
   }),
 
   reaper: Object.freeze({

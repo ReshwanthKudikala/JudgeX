@@ -9,26 +9,33 @@
 // resolver — it never dereferences external storage itself.
 //
 // Visibility contract: hidden expected outputs are returned ONLY by
-// getTestCasesForJudge(). getPublicExamples() is hard-filtered to non-hidden
-// rows (samples whose I/O is intentionally visible to users).
+// getTestCasesForJudge() / admin reads. getPublicExamples() is hard-filtered to
+// non-hidden rows (samples whose I/O is intentionally visible to users).
 
 const { BaseRepository } = require('../../infrastructure/database/base.repository');
 
 // Full row incl. both refs — judge-only (public + hidden grading data).
 const JUDGE_COLUMNS = `
-  id, problem_id, is_hidden, input_ref, expected_output_ref,
+  id, problem_id, is_hidden, input_ref, expected_output_ref, explanation,
   is_inline, size_bytes, checksum, display_order, created_at
 `;
 
 // Public sample projection: non-hidden rows only; their expected output is a
 // visible sample, so both refs are safe to expose here.
 const PUBLIC_COLUMNS = `
-  id, problem_id, input_ref, expected_output_ref, is_inline, display_order
+  id, problem_id, input_ref, expected_output_ref, explanation, is_inline, display_order
+`;
+
+// Admin / write-return projection: includes refs so admins can edit payloads.
+const ADMIN_COLUMNS = `
+  id, problem_id, is_hidden, input_ref, expected_output_ref, explanation,
+  is_inline, size_bytes, checksum, display_order, created_at
 `;
 
 // Write-return projection: metadata only — never echoes input/expected refs.
 const METADATA_COLUMNS = `
-  id, problem_id, is_hidden, is_inline, size_bytes, checksum, display_order, created_at
+  id, problem_id, is_hidden, is_inline, size_bytes, checksum, display_order,
+  explanation, created_at
 `;
 
 // Fixed column order for (bulk) inserts.
@@ -42,6 +49,7 @@ const INSERT_COLUMNS = [
   'size_bytes',
   'checksum',
   'display_order',
+  'explanation',
 ];
 
 // Normalize a caller-supplied case into the fixed INSERT_COLUMNS value order,
@@ -57,18 +65,19 @@ function toInsertValues(repo, problemId, testCase, index) {
     testCase.sizeBytes ?? 0,
     testCase.checksum ?? null,
     testCase.displayOrder ?? index,
+    testCase.explanation ?? null,
   ];
 }
 
 class TestCaseRepository extends BaseRepository {
   /**
-   * Insert a single test case. Returns metadata only (no refs echoed back).
+   * Insert a single test case. Returns the admin projection (incl. refs).
    *
    * @param {{ problemId:string, inputRef:string, expectedOutputRef:string,
    *   isHidden?:boolean, isInline?:boolean, sizeBytes?:number, checksum?:string,
-   *   displayOrder?:number }} data
+   *   displayOrder?:number, explanation?:string|null }} data
    * @param {import('pg').PoolClient} [client]
-   * @returns {Promise<Object>} the inserted row (metadata columns).
+   * @returns {Promise<Object>} the inserted row.
    */
   createTestCase(data, client) {
     const values = toInsertValues(this, data.problemId, data, 0);
@@ -76,7 +85,7 @@ class TestCaseRepository extends BaseRepository {
     return this.queryOne(
       `INSERT INTO test_cases (${INSERT_COLUMNS.join(', ')})
        VALUES (${placeholders})
-       RETURNING ${METADATA_COLUMNS}`,
+       RETURNING ${ADMIN_COLUMNS}`,
       values,
       client,
     );
@@ -110,6 +119,105 @@ class TestCaseRepository extends BaseRepository {
        VALUES ${rowsSql.join(', ')}
        RETURNING ${METADATA_COLUMNS}`,
       params,
+      client,
+    );
+  }
+
+  /**
+   * Fetch a single test case by id (admin projection).
+   *
+   * @param {string} id
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>}
+   */
+  findById(id, client) {
+    return this.queryOne(
+      `SELECT ${ADMIN_COLUMNS}
+         FROM test_cases
+        WHERE id = $1`,
+      [id],
+      client,
+    );
+  }
+
+  /**
+   * List ALL test cases for a problem (admin) — includes hidden expected outputs.
+   *
+   * @param {string} problemId
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object[]>}
+   */
+  listByProblemId(problemId, client) {
+    return this.queryMany(
+      `SELECT ${ADMIN_COLUMNS}
+         FROM test_cases
+        WHERE problem_id = $1
+        ORDER BY display_order ASC, id ASC`,
+      [problemId],
+      client,
+    );
+  }
+
+  /**
+   * Patch mutable fields on a test case. Undefined fields are left untouched.
+   *
+   * @param {string} id
+   * @param {Object} patch
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>}
+   */
+  updateTestCase(id, patch = {}, client) {
+    const assignments = [];
+    const params = [];
+    let index = 1;
+
+    const mapping = {
+      isHidden: 'is_hidden',
+      inputRef: 'input_ref',
+      expectedOutputRef: 'expected_output_ref',
+      isInline: 'is_inline',
+      sizeBytes: 'size_bytes',
+      checksum: 'checksum',
+      displayOrder: 'display_order',
+      explanation: 'explanation',
+    };
+
+    for (const [field, column] of Object.entries(mapping)) {
+      if (patch[field] !== undefined) {
+        assignments.push(`${column} = $${index}`);
+        params.push(patch[field]);
+        index += 1;
+      }
+    }
+
+    if (assignments.length === 0) {
+      return this.findById(id, client);
+    }
+
+    params.push(id);
+    return this.queryOne(
+      `UPDATE test_cases
+          SET ${assignments.join(', ')}
+        WHERE id = $${index}
+       RETURNING ${ADMIN_COLUMNS}`,
+      params,
+      client,
+    );
+  }
+
+  /**
+   * Delete a single test case by id.
+   *
+   * @param {string} id
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>} deleted row metadata, or null.
+   */
+  deleteById(id, client) {
+    return this.queryOne(
+      `DELETE FROM test_cases
+        WHERE id = $1
+       RETURNING ${METADATA_COLUMNS}`,
+      [id],
       client,
     );
   }

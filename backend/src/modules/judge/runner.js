@@ -25,7 +25,9 @@ function toResult(exec) {
     stderr: exec.stderr,
     exitCode: exec.exitCode,
     timedOut: exec.timedOut,
+    oomKilled: Boolean(exec.oomKilled),
     durationMs: exec.durationMs,
+    memoryKb: exec.memoryKb !== undefined ? exec.memoryKb : null,
   };
 }
 

@@ -14,6 +14,8 @@ const {
   createProblemSchema,
   updateProblemSchema,
   replaceTestCasesSchema,
+  createTestCaseSchema,
+  updateTestCaseSchema,
 } = require('./admin.validators');
 
 const router = Router();
@@ -34,11 +36,29 @@ router.patch(
   controller.updateProblem,
 );
 router.delete('/problems/:id', ...requireAdmin, controller.deleteProblem);
+
+// Existing replace-all contract (backwards compatible).
 router.put(
   '/problems/:id/testcases',
   ...requireAdmin,
   validate(replaceTestCasesSchema),
   controller.replaceTestCases,
 );
+
+// Sprint 25 — per-case admin CRUD.
+router.post(
+  '/problems/:id/testcases',
+  ...requireAdmin,
+  validate(createTestCaseSchema),
+  controller.createTestCase,
+);
+router.get('/problems/:id/testcases', ...requireAdmin, controller.listTestCases);
+router.patch(
+  '/testcases/:id',
+  ...requireAdmin,
+  validate(updateTestCaseSchema),
+  controller.updateTestCase,
+);
+router.delete('/testcases/:id', ...requireAdmin, controller.deleteTestCase);
 
 module.exports = { adminRoutes: router };

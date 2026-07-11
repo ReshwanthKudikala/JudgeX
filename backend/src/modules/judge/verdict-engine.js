@@ -5,18 +5,18 @@
 // repositories, and has no side effects — the same inputs always yield the same
 // output.
 //
-// Verdict values are the canonical enum from DATABASE_DESIGN.md §3.7 (and the
-// JUDGE_PIPELINE.md appendix): compile_error, runtime_error, tle, wrong_answer,
-// accepted. NOTE: the design uses `tle` for "Time Limit Exceeded" (the sprint
-// brief wrote it out as time_limit_exceeded); we emit `tle` so the verdict feeds
-// directly into SubmissionService.completeSubmission, whose accepted set uses `tle`.
+// Verdict values align with DATABASE_DESIGN.md §3.7 + Sprint 25 extensions:
+// compile_error, memory_limit_exceeded, runtime_error, tle, wrong_answer,
+// accepted, internal_error.
 
 const VERDICTS = Object.freeze({
   COMPILE_ERROR: 'compile_error',
+  MEMORY_LIMIT_EXCEEDED: 'memory_limit_exceeded',
   RUNTIME_ERROR: 'runtime_error',
   TLE: 'tle',
   WRONG_ANSWER: 'wrong_answer',
   ACCEPTED: 'accepted',
+  INTERNAL_ERROR: 'internal_error',
 });
 
 /**
@@ -24,13 +24,14 @@ const VERDICTS = Object.freeze({
  * precedence (first match wins):
  *   1. compile failed          → compile_error
  *   2. execution timed out      → tle
- *   3. non-zero exit code       → runtime_error
- *   4. output mismatch          → wrong_answer
- *   5. otherwise                → accepted
+ *   3. OOM killed               → memory_limit_exceeded
+ *   4. non-zero exit code       → runtime_error
+ *   5. output mismatch          → wrong_answer
+ *   6. otherwise                → accepted
  *
  * @param {object} input
  * @param {object} [input.compileResult] - { success, ... } from the compiler.
- * @param {object} [input.runResult] - { exitCode, timedOut, durationMs, memoryKb } from the runner.
+ * @param {object} [input.runResult] - { exitCode, timedOut, oomKilled, durationMs, memoryKb } from the runner.
  * @param {object} [input.comparisonResult] - { matches } from the comparator.
  * @returns {{ verdict: string, passed: boolean, metrics: { runtimeMs: number|null, memoryKb: number|null } }}
  */
@@ -45,6 +46,8 @@ function generateVerdict({ compileResult, runResult, comparisonResult } = {}) {
     verdict = VERDICTS.COMPILE_ERROR;
   } else if (runResult && runResult.timedOut === true) {
     verdict = VERDICTS.TLE;
+  } else if (runResult && runResult.oomKilled === true) {
+    verdict = VERDICTS.MEMORY_LIMIT_EXCEEDED;
   } else if (runResult && typeof runResult.exitCode === 'number' && runResult.exitCode !== 0) {
     // Only a concrete non-zero exit is RE. null/undefined must not count as RE
     // (that previously turned attach/inspect races into false runtime errors).

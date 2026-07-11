@@ -24,7 +24,7 @@ export interface ProblemSummary {
   solvedByMe?: boolean;
 }
 
-/** Example shape when/if the detail API includes samples. */
+/** Example shape from GET /problems/:slug (public samples only). */
 export interface ProblemExample {
   input: string;
   output: string;
@@ -38,7 +38,7 @@ export interface ProblemDetail extends ProblemSummary {
   statement: string;
   constraintsText?: string | null;
   createdBy?: string | null;
-  /** Forward-compatible — not returned by the current detail endpoint. */
+  /** Public sample cases (is_hidden = false). Absent/hidden cases never appear. */
   examples?: ProblemExample[];
   /** Forward-compatible — not returned by the current detail endpoint. */
   notes?: string | null;

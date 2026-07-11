@@ -47,4 +47,53 @@ async function replaceTestCases(req, res, next) {
   }
 }
 
-module.exports = { createProblem, updateProblem, deleteProblem, replaceTestCases };
+// POST /admin/problems/:id/testcases → 201 { ...testcase }
+async function createTestCase(req, res, next) {
+  try {
+    const testCase = await adminService.createTestCase(req.params.id, req.body);
+    sendSuccess(req, res, 201, testCase);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /admin/problems/:id/testcases → 200 [ ...testcases ]
+async function listTestCases(req, res, next) {
+  try {
+    const testCases = await adminService.listTestCases(req.params.id);
+    sendSuccess(req, res, 200, testCases);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /admin/testcases/:id → 200 { ...testcase }
+async function updateTestCase(req, res, next) {
+  try {
+    const testCase = await adminService.updateTestCase(req.params.id, req.body);
+    sendSuccess(req, res, 200, testCase);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /admin/testcases/:id → 200 { id, deleted: true }
+async function deleteTestCase(req, res, next) {
+  try {
+    const result = await adminService.deleteTestCase(req.params.id);
+    sendSuccess(req, res, 200, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  createProblem,
+  updateProblem,
+  deleteProblem,
+  replaceTestCases,
+  createTestCase,
+  listTestCases,
+  updateTestCase,
+  deleteTestCase,
+};

@@ -8,7 +8,7 @@ import { VerdictBadge } from '@/features/submissions/components/VerdictBadge';
 import type { AiCompileExplanation, Submission } from '@/types/submissions';
 import { cn } from '@/utils/cn';
 
-export type ConsoleTab = 'output' | 'error' | 'ai';
+export type ConsoleTab = 'output' | 'error' | 'result' | 'ai';
 
 interface ConsoleTabsProps {
   submission: Submission | null;
@@ -20,7 +20,7 @@ interface ConsoleTabsProps {
 
 /**
  * Console region under the editor.
- * Tabs: Output | Error | AI Explanation (AI hidden when unavailable).
+ * Tabs: Output | Error | Result | AI Explanation (AI hidden when unavailable).
  */
 export const ConsoleTabs = memo(function ConsoleTabs({
   submission,
@@ -33,15 +33,18 @@ export const ConsoleTabs = memo(function ConsoleTabs({
 
   const defaultTab: ConsoleTab = useMemo(() => {
     if (submission?.verdict === 'compile_error') return showAi ? 'ai' : 'error';
+    if (submission?.status === 'completed' || submission?.status === 'error') {
+      return 'result';
+    }
     if (submission?.verdict && submission.verdict !== 'accepted') return 'error';
     return 'output';
-  }, [submission?.verdict, showAi]);
+  }, [submission?.verdict, submission?.status, showAi]);
 
   const [tab, setTab] = useState<ConsoleTab>(defaultTab);
 
   useEffect(() => {
     setTab((prev) => {
-      if (!showAi && prev === 'ai') return 'error';
+      if (!showAi && prev === 'ai') return 'result';
       return defaultTab;
     });
   }, [defaultTab, showAi]);
@@ -64,8 +67,6 @@ export const ConsoleTabs = memo(function ConsoleTabs({
         ) : null}
       </div>
 
-      {submission ? <SubmissionDetails submission={submission} /> : null}
-
       <Tabs
         value={tab}
         onValueChange={(v) => setTab(v as ConsoleTab)}
@@ -78,6 +79,9 @@ export const ConsoleTabs = memo(function ConsoleTabs({
           </TabsTrigger>
           <TabsTrigger value="error" className="px-2.5 py-1 text-xs">
             Error
+          </TabsTrigger>
+          <TabsTrigger value="result" className="px-2.5 py-1 text-xs">
+            Result
           </TabsTrigger>
           {showAi ? (
             <TabsTrigger value="ai" className="px-2.5 py-1 text-xs">
@@ -92,13 +96,41 @@ export const ConsoleTabs = memo(function ConsoleTabs({
           </pre>
         </TabsContent>
 
-        <TabsContent value="error" className="mt-2 space-y-2">
-          {submission?.verdict === 'compile_error' ? (
-            <CompileOutput output={submission.compileOutput} />
+        <TabsContent value="error" className="mt-2 space-y-3">
+          {submission?.verdict === 'compile_error' || submission?.compileOutput ? (
+            <div>
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted/80">
+                Compile output
+              </p>
+              <CompileOutput output={submission?.compileOutput ?? null} />
+            </div>
+          ) : null}
+          {submission?.stderr ? (
+            <div>
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted/80">
+                Stderr
+              </p>
+              <pre className="min-h-[2.5rem] whitespace-pre-wrap break-words font-mono text-xs text-error">
+                {submission.stderr}
+              </pre>
+            </div>
           ) : (
             <pre className="min-h-[2.5rem] whitespace-pre-wrap break-words font-mono text-xs text-error">
               {errorText || '—'}
             </pre>
+          )}
+        </TabsContent>
+
+        <TabsContent value="result" className="mt-2 space-y-3">
+          {submission ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <VerdictBadge verdict={submission.verdict} status={submission.status} />
+              </div>
+              <SubmissionDetails submission={submission} />
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">Submit code to see results.</p>
           )}
         </TabsContent>
 
@@ -118,15 +150,16 @@ export const ConsoleTabs = memo(function ConsoleTabs({
 
 function buildOutputText(submission: Submission | null): string {
   if (!submission) return '';
+  if (submission.status === 'queued') return 'Waiting in queue…';
+  if (submission.status === 'running') return 'Running against test cases…';
+  if (submission.stdout) return submission.stdout;
   if (submission.verdict === 'accepted') {
     return 'All test cases passed.';
   }
-  if (submission.status === 'queued') return 'Waiting in queue…';
-  if (submission.status === 'running') return 'Running against test cases…';
   if (submission.verdict === 'wrong_answer') {
     const idx =
       submission.failedTestIndex != null
-        ? ` (failed test #${submission.failedTestIndex})`
+        ? ` (failed test #${submission.failedTestIndex + 1})`
         : '';
     return `Wrong Answer${idx}`;
   }
@@ -139,13 +172,16 @@ function buildErrorText(submission: Submission | null): string {
     return submission.compileOutput ?? 'Compilation failed.';
   }
   if (submission.verdict === 'runtime_error') {
-    return 'Runtime Error';
+    return submission.stderr || 'Runtime Error';
   }
   if (submission.verdict === 'tle') {
     return 'Time Limit Exceeded';
   }
-  if (submission.status === 'error') {
-    return 'Judging failed.';
+  if (submission.verdict === 'memory_limit_exceeded') {
+    return 'Memory Limit Exceeded';
   }
-  return submission.compileOutput ?? '';
+  if (submission.verdict === 'internal_error' || submission.status === 'error') {
+    return submission.stderr || submission.compileOutput || 'Judging failed.';
+  }
+  return submission.stderr || submission.compileOutput || '';
 }

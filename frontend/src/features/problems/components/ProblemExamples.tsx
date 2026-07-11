@@ -29,8 +29,8 @@ export const ProblemExamples = memo(function ProblemExamples({
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
               Example {index + 1}
             </p>
-            <MonoBlock label="Input" value={example.input} />
-            <MonoBlock label="Output" value={example.output} className="mt-3" />
+            <MonoBlock label="Sample Input" value={example.input} />
+            <MonoBlock label="Sample Output" value={example.output} className="mt-3" />
             {example.explanation ? (
               <div className="mt-3">
                 <p className="mb-1 text-xs font-medium text-muted">Explanation</p>

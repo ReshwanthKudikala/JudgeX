@@ -7,7 +7,9 @@ export type SubmissionVerdict =
   | 'wrong_answer'
   | 'tle'
   | 'runtime_error'
-  | 'compile_error';
+  | 'compile_error'
+  | 'memory_limit_exceeded'
+  | 'internal_error';
 
 /** POST /submissions body — matches live backend validators. */
 export interface CreateSubmissionInput {
@@ -27,8 +29,14 @@ export interface Submission {
   verdict: SubmissionVerdict | null;
   compileOutput: string | null;
   runtimeMs: number | null;
+  /** Alias of runtimeMs from the backend Sprint 25 response. */
+  executionTime?: number | null;
   memoryKb: number | null;
   failedTestIndex: number | null;
+  passedTests?: number | null;
+  totalTests?: number | null;
+  stdout?: string | null;
+  stderr?: string | null;
   submittedAt?: string;
   judgedAt?: string | null;
   createdAt?: string;
@@ -49,6 +57,8 @@ export const TERMINAL_VERDICTS = new Set<SubmissionVerdict>([
   'tle',
   'runtime_error',
   'compile_error',
+  'memory_limit_exceeded',
+  'internal_error',
 ]);
 
 export function isTerminalSubmission(submission: Submission): boolean {
@@ -67,6 +77,8 @@ export const VERDICT_LABELS: Record<SubmissionVerdict, string> = {
   tle: 'Time Limit Exceeded',
   runtime_error: 'Runtime Error',
   compile_error: 'Compile Error',
+  memory_limit_exceeded: 'Memory Limit Exceeded',
+  internal_error: 'Internal Error',
 };
 
 export const STATUS_LABELS: Record<SubmissionStatus, string> = {

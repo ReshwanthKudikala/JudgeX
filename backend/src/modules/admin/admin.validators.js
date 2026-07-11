@@ -12,6 +12,19 @@ const SLUG = z
   .max(120)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase alphanumeric words separated by hyphens.');
 
+// Shared inline test-case fields (create / replace / patch).
+const testCaseFields = {
+  input: z.string(),
+  expectedOutput: z.string(),
+  explanation: z.string().nullable().optional(),
+  isHidden: z.boolean().optional(),
+  isSample: z.boolean().optional(),
+  displayOrder: z.coerce.number().int().min(0).optional(),
+  order: z.coerce.number().int().min(0).optional(),
+};
+
+const testCaseBodySchema = z.object(testCaseFields);
+
 // POST /admin/problems — create.
 const createProblemSchema = z.object({
   slug: SLUG,
@@ -43,15 +56,32 @@ const updateProblemSchema = z
 // PUT /admin/problems/:id/testcases — replace the whole set (inline payloads).
 const replaceTestCasesSchema = z.object({
   testCases: z
-    .array(
-      z.object({
-        input: z.string(),
-        expectedOutput: z.string(),
-        isHidden: z.boolean().optional(),
-        displayOrder: z.coerce.number().int().min(0).optional(),
-      }),
-    )
+    .array(testCaseBodySchema)
     .min(1, 'At least one test case is required.'),
 });
 
-module.exports = { createProblemSchema, updateProblemSchema, replaceTestCasesSchema };
+// POST /admin/problems/:id/testcases — create one case.
+const createTestCaseSchema = testCaseBodySchema;
+
+// PATCH /admin/testcases/:id — partial update.
+const updateTestCaseSchema = z
+  .object({
+    input: z.string().optional(),
+    expectedOutput: z.string().optional(),
+    explanation: z.string().nullable().optional(),
+    isHidden: z.boolean().optional(),
+    isSample: z.boolean().optional(),
+    displayOrder: z.coerce.number().int().min(0).optional(),
+    order: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided.',
+  });
+
+module.exports = {
+  createProblemSchema,
+  updateProblemSchema,
+  replaceTestCasesSchema,
+  createTestCaseSchema,
+  updateTestCaseSchema,
+};

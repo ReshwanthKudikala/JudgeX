@@ -9,13 +9,28 @@ interface SubmissionDetailsProps {
 export const SubmissionDetails = memo(function SubmissionDetails({
   submission,
 }: SubmissionDetailsProps) {
+  const runtime =
+    submission.executionTime ?? submission.runtimeMs ?? null;
+  const passed =
+    submission.passedTests != null && submission.totalTests != null
+      ? `${submission.passedTests} / ${submission.totalTests}`
+      : submission.passedTests != null
+        ? String(submission.passedTests)
+        : '—';
+  const failedCase =
+    submission.failedTestIndex != null
+      ? `#${submission.failedTestIndex + 1}`
+      : '—';
+  const sampleNumber =
+    submission.failedTestIndex != null
+      ? String(submission.failedTestIndex + 1)
+      : '—';
+
   return (
-    <dl className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
       <Detail
         label="Runtime"
-        value={
-          submission.runtimeMs != null ? `${submission.runtimeMs} ms` : '—'
-        }
+        value={runtime != null ? `${runtime} ms` : '—'}
       />
       <Detail
         label="Memory"
@@ -23,19 +38,12 @@ export const SubmissionDetails = memo(function SubmissionDetails({
           submission.memoryKb != null ? `${submission.memoryKb} KB` : '—'
         }
       />
+      <Detail label="Passed tests" value={passed} />
+      <Detail label="Failed testcase" value={failedCase} />
+      <Detail label="Sample testcase number" value={sampleNumber} />
       <Detail
         label="Execution time"
-        value={
-          submission.runtimeMs != null ? `${submission.runtimeMs} ms` : '—'
-        }
-      />
-      <Detail
-        label="Failed test"
-        value={
-          submission.failedTestIndex != null
-            ? `#${submission.failedTestIndex}`
-            : '—'
-        }
+        value={runtime != null ? `${runtime} ms` : '—'}
       />
     </dl>
   );

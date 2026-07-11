@@ -146,7 +146,7 @@ async function copyFiles(sandbox, files = []) {
  * @param {number} [opts.timeoutMs] - wall-clock cap (default config.judge.timeLimitMs).
  * @param {string} [opts.workdir] - override working directory.
  * @param {string[]} [opts.env] - additional environment (["K=V", …]).
- * @returns {Promise<{stdout:string, stderr:string, exitCode:number|null, timedOut:boolean, durationMs:number}>}
+ * @returns {Promise<{stdout:string, stderr:string, exitCode:number|null, timedOut:boolean, oomKilled:boolean, durationMs:number}>}
  */
 // Single-quote escape for embedding argv into `sh -c` (Alpine ash / bash).
 function shellSingleQuote(value) {
@@ -264,11 +264,23 @@ async function executeCommand(sandbox, { cmd, input, timeoutMs, workdir, env } =
     }
   }
 
+  // OOM is reported on the container state (Memory hard-cap), not the exec inspect.
+  let oomKilled = false;
+  if (!timedOutFlag.value) {
+    try {
+      const inspected = await container.inspect();
+      oomKilled = Boolean(inspected.State && inspected.State.OOMKilled);
+    } catch {
+      /* inspect unavailable */
+    }
+  }
+
   return {
     stdout: Buffer.concat(stdoutChunks).toString('utf8'),
     stderr: Buffer.concat(stderrChunks).toString('utf8'),
     exitCode,
     timedOut: timedOutFlag.value,
+    oomKilled,
     durationMs: Date.now() - startedAt,
   };
 }

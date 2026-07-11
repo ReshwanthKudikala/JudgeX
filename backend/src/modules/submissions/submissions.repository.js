@@ -13,15 +13,16 @@ const { BaseRepository } = require('../../infrastructure/database/base.repositor
 const DETAIL_COLUMNS = `
   id, user_id, problem_id, language, source_code, status, verdict,
   compile_output, runtime_ms, memory_kb, failed_test_index,
+  passed_tests, total_tests, stdout, stderr,
   submitted_at, judged_at, created_at, updated_at
 `;
 
 // Lightweight projection for user history listings — omits the heavy TEXT
-// columns (source_code, compile_output) not needed in a feed.
+// columns (source_code, compile_output, stdout, stderr) not needed in a feed.
 const LIST_COLUMNS = `
   id, user_id, problem_id, language, status, verdict,
-  runtime_ms, memory_kb, failed_test_index, submitted_at, judged_at,
-  created_at, updated_at
+  runtime_ms, memory_kb, failed_test_index, passed_tests, total_tests,
+  submitted_at, judged_at, created_at, updated_at
 `;
 
 // Allow-list: public filter field -> real column (injection-proof; see sql-builders).
@@ -47,6 +48,10 @@ const RESULT_METRIC_COLUMNS = Object.freeze({
   runtime_ms: 'runtimeMs',
   memory_kb: 'memoryKb',
   failed_test_index: 'failedTestIndex',
+  passed_tests: 'passedTests',
+  total_tests: 'totalTests',
+  stdout: 'stdout',
+  stderr: 'stderr',
 });
 
 class SubmissionRepository extends BaseRepository {
@@ -165,7 +170,8 @@ class SubmissionRepository extends BaseRepository {
    * @param {string} id - UUID.
    * @param {{ status: string, verdict: string, compileOutput?: string|null,
    *           runtimeMs?: number|null, memoryKb?: number|null,
-   *           failedTestIndex?: number|null }} result
+   *           failedTestIndex?: number|null, passedTests?: number|null,
+   *           totalTests?: number|null, stdout?: string|null, stderr?: string|null }} result
    * @param {import('pg').PoolClient} [client]
    * @returns {Promise<Object|null>} the updated row, or null if id not found.
    */

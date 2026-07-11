@@ -111,3 +111,58 @@ describe('Test case replacement', () => {
     assert.equal(count.rows[0].n, 1);
   });
 });
+
+describe('Admin test case CRUD', () => {
+  it('creates, lists, patches, and deletes individual test cases', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const admin = await createAdmin();
+    const { res: created } = await createPublishedProblem(admin.accessToken, {
+      slug: unique('tc-crud'),
+    });
+    const problemId = created.body.data.id;
+
+    const createRes = await api()
+      .post(`/api/v1/admin/problems/${problemId}/testcases`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        input: 'a',
+        expectedOutput: 'A',
+        isSample: true,
+        explanation: 'upper',
+        order: 0,
+      });
+    assert.equal(createRes.status, 201);
+    assert.equal(createRes.body.data.isSample, true);
+    assert.equal(createRes.body.data.isHidden, false);
+    assert.equal(createRes.body.data.input, 'a');
+    const caseId = createRes.body.data.id;
+
+    const listRes = await api()
+      .get(`/api/v1/admin/problems/${problemId}/testcases`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+    assert.equal(listRes.status, 200);
+    assert.equal(listRes.body.data.length, 1);
+    assert.equal(listRes.body.data[0].expectedOutput, 'A');
+
+    const patchRes = await api()
+      .patch(`/api/v1/admin/testcases/${caseId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ expectedOutput: 'AA', isSample: false });
+    assert.equal(patchRes.status, 200);
+    assert.equal(patchRes.body.data.expectedOutput, 'AA');
+    assert.equal(patchRes.body.data.isHidden, true);
+    assert.equal(patchRes.body.data.isSample, false);
+
+    const delRes = await api()
+      .delete(`/api/v1/admin/testcases/${caseId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+    assert.equal(delRes.status, 200);
+    assert.equal(delRes.body.data.deleted, true);
+
+    const listAfter = await api()
+      .get(`/api/v1/admin/problems/${problemId}/testcases`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+    assert.equal(listAfter.body.data.length, 0);
+  });
+});

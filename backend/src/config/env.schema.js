@@ -58,6 +58,8 @@ const envSchema = z
     JUDGE_MEMORY_LIMIT_MB: z.coerce.number().int().positive().default(256),
     JUDGE_PID_LIMIT: z.coerce.number().int().positive().default(64),
     JUDGE_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+    // When true, stop after the first non-accepted test case (default).
+    JUDGE_FAIL_FAST: booleanish.default('true'),
 
     // --- Object storage (optional in dev) ---
     STORAGE_BUCKET: z.string().optional(),
