@@ -6,8 +6,23 @@ only the **stateful backing services** JudgeX depends on. The backend API,
 judge workers, and frontend run on your **host machine** during development and
 connect to these containers over `localhost`.
 
+> **Production:** for a full stack (API + workers + Postgres + Redis) see
+> [`docker-compose.prod.yml`](../docker-compose.prod.yml) and the Production
+> Deployment section in the root [`README.md`](../README.md).
+
 > Design sources of truth: `docs/ARCHITECTURE.md`, `docs/DATABASE_DESIGN.md`,
 > `docs/BACKEND_STRUCTURE.md`.
+
+---
+
+## Language sandbox images
+
+Prebuilt judge sandboxes (required for real judging on host Docker or prod):
+
+```bash
+docker build -t judgex-python ./images/python
+docker build -t judgex-cpp ./images/cpp
+```
 
 ---
 

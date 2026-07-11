@@ -1,0 +1,15 @@
+# Ignore everything not needed in the production image build context.
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+coverage
+tests
+**/*.test.js
+.git
+.gitignore
+Dockerfile*
+.dockerignore
+README.md
+src/**/*.md

@@ -1,0 +1,33 @@
+# =========================================================================
+# JudgeX Backend — Production image (Judge Worker)
+# Same codebase as the API; entrypoint consumes the BullMQ "judge" queue.
+# Requires the Docker socket mounted at runtime for sandbox containers.
+# =========================================================================
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+RUN apk add --no-cache python3 make g++
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache tini \
+  && addgroup -S judgex && adduser -S -G judgex judgex
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY src ./src
+COPY scripts ./scripts
+
+RUN chown -R judgex:judgex /app
+
+# The judge worker talks to the host Docker daemon via a mounted socket to
+# create sandboxes (ARCHITECTURE.md §5). Socket access typically requires root
+# or membership in the docker group; we run as root in this image only.
+# Sandbox containers themselves remain locked-down (non-root, no network, …).
+USER root
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "src/workers/judge.worker.js"]

@@ -1,0 +1,34 @@
+# =========================================================================
+# JudgeX Backend — Production image (API)
+# Multi-stage: install production deps, copy app source, migrate-then-serve.
+# =========================================================================
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+RUN apk add --no-cache python3 make g++
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache tini \
+  && addgroup -S judgex && adduser -S -G judgex judgex
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY src ./src
+COPY scripts ./scripts
+
+RUN chmod +x scripts/docker-entrypoint-api.sh \
+  && chown -R judgex:judgex /app
+
+USER judgex
+EXPOSE 4000
+
+# Liveness/readiness use Node fetch (no curl/wget required).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["./scripts/docker-entrypoint-api.sh"]

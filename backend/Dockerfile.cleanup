@@ -1,0 +1,27 @@
+# =========================================================================
+# JudgeX Backend — Production image (Cleanup Worker)
+# Runs the stuck-queued submission reaper on a configurable interval.
+# =========================================================================
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+RUN apk add --no-cache python3 make g++
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache tini \
+  && addgroup -S judgex && adduser -S -G judgex judgex
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY src ./src
+COPY scripts ./scripts
+
+RUN chown -R judgex:judgex /app
+USER judgex
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "src/workers/cleanup.worker.js"]
