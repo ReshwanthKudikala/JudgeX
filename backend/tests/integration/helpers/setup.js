@@ -1,20 +1,20 @@
-// Integration harness: connect infrastructure, apply schema, reset tables between tests.
-
-const fs = require('fs');
-const path = require('path');
+// Integration harness: connect infrastructure, apply migrations, reset tables between tests.
 
 require('./bootstrap');
 
 const { initInfrastructure, shutdownInfrastructure, getPool } = require('../../../src/infrastructure');
+const { migrate } = require('../../../src/infrastructure/database/migrator');
 const { createApp } = require('../../../src/app');
-
-const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 const TRUNCATE_SQL = `
   TRUNCATE TABLE
     ai_feedback,
+    submission_test_results,
     submissions,
     test_cases,
+    problem_examples,
+    problem_tags,
+    tags,
     user_statistics,
     problems,
     users
@@ -26,7 +26,7 @@ let ready = false;
 let unavailableReason = null;
 
 /**
- * Initialize Postgres (+ optional Redis), apply the test schema, and build the app.
+ * Initialize Postgres (+ Redis), run SQL migrations, and build the app.
  * Safe to call once per process. If Postgres is unreachable, records the reason
  * so suites can skip instead of failing noisily.
  */
@@ -37,8 +37,7 @@ async function setupIntegration() {
   try {
     await initInfrastructure();
     const pool = getPool();
-    const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
-    await pool.query(schema);
+    await migrate(pool);
     app = createApp();
     ready = true;
     return { app, available: true };

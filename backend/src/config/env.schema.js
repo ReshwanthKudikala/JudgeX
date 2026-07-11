@@ -101,6 +101,20 @@ const envSchema = z
           'JWT_SECRET must be set to a strong value (>=32 chars) in production',
       });
     }
+    if (env.NODE_ENV === 'production' && env.DB_REQUIRED === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DB_REQUIRED'],
+        message: 'DB_REQUIRED must be true in production',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.REDIS_REQUIRED === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['REDIS_REQUIRED'],
+        message: 'REDIS_REQUIRED must be true in production',
+      });
+    }
   });
 
 module.exports = { envSchema };

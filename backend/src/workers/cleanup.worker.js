@@ -6,6 +6,7 @@
 // dead-job handling remains for later cleanup passes.
 
 const { config } = require('../config');
+const { assertProductionReady, getStartupDiagnostics } = require('../config/production');
 const { configure: configureLogger, createLogger } = require('../shared/logger/logger');
 const { initInfrastructure, shutdownInfrastructure } = require('../infrastructure');
 const { startReaperScheduler } = require('../modules/reaper/reaper.scheduler');
@@ -48,6 +49,17 @@ async function start() {
   configureLogger({ level: config.logging.level });
 
   try {
+    assertProductionReady();
+  } catch (err) {
+    log.error('Production configuration validation failed; cleanup worker aborting', {
+      error: err.message,
+    });
+    process.exit(1);
+  }
+
+  log.info('Cleanup worker boot starting', getStartupDiagnostics());
+
+  try {
     await initInfrastructure();
   } catch (err) {
     log.error('Infrastructure initialization failed; cleanup worker aborting', {
@@ -59,8 +71,11 @@ async function start() {
 
   scheduler = startReaperScheduler();
   log.info('Cleanup worker started', {
+    ...getStartupDiagnostics(),
+    role: 'cleanup',
     reaperIntervalMs: config.reaper.intervalMs,
     stuckThresholdMs: config.reaper.stuckThresholdMs,
+    batchSize: config.reaper.batchSize,
   });
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -11,8 +11,7 @@ const { correlationId } = require('./middlewares/correlation-id');
 const { notFound } = require('./middlewares/not-found');
 const { errorHandler } = require('./middlewares/error-handler');
 const { registerModules } = require('./bootstrap/module-registry');
-
-const pkg = require('../package.json');
+const { getLiveness, getReadiness } = require('./modules/health/health.service');
 
 function createApp() {
   const app = express();
@@ -38,17 +37,31 @@ function createApp() {
     }),
   );
 
-  // --- Routes ---
-  // Health check: intentionally NOT wrapped in the standard envelope so
-  // external probes (Docker/orchestrators) can read a flat status object.
+  // --- Probes (flat JSON for orchestrators; not the standard API envelope) ---
+  // Liveness: process is up. Does not check dependencies.
   app.get('/health', (_req, res) => {
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      version: pkg.version,
-    });
+    res.status(200).json(getLiveness());
   });
+
+  // Readiness: Postgres + Redis + BullMQ must be reachable before taking traffic.
+  async function sendReadiness(_req, res) {
+    try {
+      const body = await getReadiness();
+      res.status(body.ready ? 200 : 503).json(body);
+    } catch (err) {
+      logger.warn('Readiness check failed', { error: err.message });
+      res.status(503).json({
+        ready: false,
+        status: 'not_ready',
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  app.get('/ready', sendReadiness);
+  // API_SPECIFICATION.md § summary: GET /api/v1/health → dependency readiness.
+  app.get('/api/v1/health', sendReadiness);
 
   // --- Feature module routers (mounted under /api/v1) ---
   registerModules(app);

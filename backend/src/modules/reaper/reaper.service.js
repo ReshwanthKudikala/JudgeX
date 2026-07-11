@@ -24,6 +24,15 @@ const ACTIVE_JOB_STATES = new Set([
   'prioritized',
 ]);
 
+/** Most recent sweep summary for readiness / ops diagnostics. */
+let lastReaperSweep = null;
+
+/**
+ * @returns {object|null}
+ */
+function getLastReaperSweep() {
+  return lastReaperSweep;
+}
 /**
  * True when BullMQ rejected an add because jobId already exists.
  * @param {unknown} err
@@ -101,6 +110,10 @@ class ReaperService {
     }
 
     logger.info('Queued-submission reaper sweep finished', summary);
+    lastReaperSweep = {
+      ...summary,
+      finishedAt: new Date().toISOString(),
+    };
     return summary;
   }
 
@@ -147,4 +160,5 @@ module.exports = {
   reaperService: new ReaperService(),
   isDuplicateJobError,
   ACTIVE_JOB_STATES,
+  getLastReaperSweep,
 };

@@ -2,6 +2,7 @@
 // graceful shutdown.
 
 const { config } = require('./config');
+const { assertProductionReady, getStartupDiagnostics } = require('./config/production');
 const { logger, configure: configureLogger } = require('./shared/logger/logger');
 const { createApp } = require('./app');
 const { registerGracefulShutdown } = require('./bootstrap/graceful-shutdown');
@@ -10,6 +11,17 @@ const { initInfrastructure, shutdownInfrastructure } = require('./infrastructure
 async function start() {
   // Apply the configured log level before anything logs.
   configureLogger({ level: config.logging.level });
+
+  try {
+    assertProductionReady();
+  } catch (err) {
+    logger.error('Production configuration validation failed; shutting down', {
+      error: err.message,
+    });
+    process.exit(1);
+  }
+
+  logger.info('JudgeX API boot starting', getStartupDiagnostics());
 
   // Connect backing services first. Required services that stay unreachable
   // (after capped retries) abort startup — fail fast before accepting traffic.
@@ -27,9 +39,9 @@ async function start() {
 
   const server = app.listen(config.server.port, () => {
     logger.info('JudgeX API started', {
-      port: config.server.port,
-      env: config.env,
-      aiProvider: config.ai.provider,
+      ...getStartupDiagnostics(),
+      listen: `:${config.server.port}`,
+      probes: { liveness: '/health', readiness: '/ready', apiHealth: '/api/v1/health' },
     });
   });
 
