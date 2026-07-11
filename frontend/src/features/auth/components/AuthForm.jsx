@@ -1,1 +1,0 @@
-// Shared authentication form fields.

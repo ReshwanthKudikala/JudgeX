@@ -1,1 +1,11 @@
-/* Theme tokens and Tailwind layer extensions (placeholder). */
+/* Theme tokens mirrored for non-Tailwind consumers (future editor chrome). */
+:root {
+  --jx-bg: #0f1117;
+  --jx-card: #1a1d24;
+  --jx-border: #2b2f36;
+  --jx-primary: #ffa116;
+  --jx-success: #2ecc71;
+  --jx-error: #ef4444;
+  --jx-font-sans: 'Inter', system-ui, sans-serif;
+  --jx-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}

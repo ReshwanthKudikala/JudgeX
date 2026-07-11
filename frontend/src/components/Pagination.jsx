@@ -1,1 +1,0 @@
-// Reusable pagination control component.
