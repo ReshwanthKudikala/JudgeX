@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthGateway } from '@/routes/AuthGateway';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 import { PublicRoute } from '@/routes/PublicRoute';
+import { AdminRoute } from '@/routes/AdminRoute';
 import { paths } from '@/routes/paths';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { MainLayout } from '@/layouts/MainLayout';
@@ -19,6 +20,13 @@ import { ContestDetailPage } from '@/pages/ContestDetailPage';
 import { ContestScoreboardPage } from '@/pages/ContestScoreboardPage';
 import { LeaderboardPage } from '@/pages/LeaderboardPage';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
+import { AdminUsersPage } from '@/pages/AdminUsersPage';
+import { AdminModerationPage } from '@/pages/AdminModerationPage';
+import { AdminAnalyticsPage } from '@/pages/AdminAnalyticsPage';
+import { AdminQueuePage } from '@/pages/AdminQueuePage';
+import { AdminAuditLogsPage } from '@/pages/AdminAuditLogsPage';
+import { AdminLayout } from '@/features/admin';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
@@ -63,6 +71,31 @@ export const router = createBrowserRouter([
                 element: <SubmissionDetailPage />,
               },
               { path: paths.profile, element: <ProfilePage /> },
+              {
+                element: <AdminRoute />,
+                children: [
+                  {
+                    element: <AdminLayout />,
+                    children: [
+                      { path: paths.admin, element: <AdminDashboardPage /> },
+                      { path: paths.adminUsers, element: <AdminUsersPage /> },
+                      {
+                        path: paths.adminModeration,
+                        element: <AdminModerationPage />,
+                      },
+                      {
+                        path: paths.adminAnalytics,
+                        element: <AdminAnalyticsPage />,
+                      },
+                      { path: paths.adminQueue, element: <AdminQueuePage /> },
+                      {
+                        path: paths.adminAuditLogs,
+                        element: <AdminAuditLogsPage />,
+                      },
+                    ],
+                  },
+                ],
+              },
             ],
           },
         ],

@@ -9,6 +9,7 @@ function resolveFeatureFlags(env) {
     contests: true,
     editorials: true,
     discussions: true,
+    adminDashboard: true,
   });
 }
 

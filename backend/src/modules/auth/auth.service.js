@@ -87,9 +87,21 @@ class AuthService {
       throw AuthService.#invalidCredentials();
     }
 
+    if (user.is_suspended === true) {
+      throw new AppError('This account has been suspended.', {
+        statusCode: 403,
+        code: 'ACCOUNT_SUSPENDED',
+      });
+    }
+
+    await this.userRepository.touchLastLogin(user.id);
+
     // Never return the hash to callers.
     const { password_hash: _passwordHash, ...safeUser } = user;
-    return safeUser;
+    return {
+      ...safeUser,
+      last_login_at: new Date().toISOString(),
+    };
   }
 
   static #invalidCredentials() {

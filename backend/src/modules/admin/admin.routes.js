@@ -12,6 +12,7 @@ const { authorize } = require('../../middlewares/authorize');
 const controller = require('./admin.controller');
 const contestController = require('./admin.contests.controller');
 const editorialController = require('./admin.editorials.controller');
+const platformController = require('./admin.platform.controller');
 const {
   createProblemSchema,
   updateProblemSchema,
@@ -30,6 +31,15 @@ const {
   problemIdParamsSchema,
   editorialIdParamsSchema,
 } = require('../editorials/editorials.validators');
+const {
+  listUsersQuerySchema,
+  userIdParamsSchema,
+  moderationListQuerySchema,
+  bulkModerationSchema,
+  auditLogsQuerySchema,
+  queueFailedQuerySchema,
+  analyticsQuerySchema,
+} = require('./admin.platform.validators');
 
 const router = Router();
 
@@ -127,6 +137,76 @@ router.delete(
   ...requireAdmin,
   validate(editorialIdParamsSchema, 'params'),
   editorialController.deleteEditorial,
+);
+
+// Sprint 31 — Admin dashboard & platform management.
+router.get('/dashboard', ...requireAdmin, platformController.getOverview);
+router.get(
+  '/users',
+  ...requireAdmin,
+  validate(listUsersQuerySchema, 'query'),
+  platformController.listUsers,
+);
+router.post(
+  '/users/:id/suspend',
+  ...requireAdmin,
+  validate(userIdParamsSchema, 'params'),
+  platformController.suspendUser,
+);
+router.post(
+  '/users/:id/unsuspend',
+  ...requireAdmin,
+  validate(userIdParamsSchema, 'params'),
+  platformController.unsuspendUser,
+);
+router.post(
+  '/users/:id/promote',
+  ...requireAdmin,
+  validate(userIdParamsSchema, 'params'),
+  platformController.promoteAdmin,
+);
+router.post(
+  '/users/:id/demote',
+  ...requireAdmin,
+  validate(userIdParamsSchema, 'params'),
+  platformController.demoteAdmin,
+);
+router.get(
+  '/moderation',
+  ...requireAdmin,
+  validate(moderationListQuerySchema, 'query'),
+  platformController.listModeration,
+);
+router.post(
+  '/moderation/bulk',
+  ...requireAdmin,
+  validate(bulkModerationSchema),
+  platformController.bulkModeration,
+);
+router.get('/queue', ...requireAdmin, platformController.getQueueStatus);
+router.get(
+  '/queue/failed',
+  ...requireAdmin,
+  validate(queueFailedQuerySchema, 'query'),
+  platformController.listFailedJobs,
+);
+router.post('/queue/retry-failed', ...requireAdmin, platformController.retryFailedJobs);
+router.post(
+  '/queue/clear-completed',
+  ...requireAdmin,
+  platformController.clearCompletedJobs,
+);
+router.get(
+  '/analytics',
+  ...requireAdmin,
+  validate(analyticsQuerySchema, 'query'),
+  platformController.getAnalytics,
+);
+router.get(
+  '/audit-logs',
+  ...requireAdmin,
+  validate(auditLogsQuerySchema, 'query'),
+  platformController.listAuditLogs,
 );
 
 module.exports = { adminRoutes: router };

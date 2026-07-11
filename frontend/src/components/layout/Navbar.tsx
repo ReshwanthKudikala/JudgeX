@@ -67,6 +67,11 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           <NavLink to={paths.leaderboard} className={navLinkClass}>
             Leaderboard
           </NavLink>
+          {token && user?.role === 'admin' ? (
+            <NavLink to={paths.admin} className={navLinkClass}>
+              Admin
+            </NavLink>
+          ) : null}
           {token ? (
             <NavLink to={paths.profile} className={navLinkClass}>
               Profile

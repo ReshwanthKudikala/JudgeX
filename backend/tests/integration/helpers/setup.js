@@ -18,6 +18,7 @@ const TRUNCATE_SQL = `
     discussion_comments,
     discussions,
     editorials,
+    audit_logs,
     test_cases,
     problem_examples,
     problem_tags,

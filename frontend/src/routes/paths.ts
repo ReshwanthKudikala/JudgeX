@@ -16,4 +16,10 @@ export const paths = {
     `/contests/${contestId}/scoreboard`,
   leaderboard: '/leaderboard',
   profile: '/profile',
+  admin: '/admin',
+  adminUsers: '/admin/users',
+  adminModeration: '/admin/moderation',
+  adminAnalytics: '/admin/analytics',
+  adminQueue: '/admin/queue',
+  adminAuditLogs: '/admin/audit-logs',
 } as const;

@@ -6,6 +6,7 @@ import {
   History,
   Trophy,
   User,
+  Shield,
   X,
 } from 'lucide-react';
 
@@ -24,11 +25,13 @@ const links = [
   { to: paths.contests, label: 'Contests', icon: Flag },
   { to: paths.submissions, label: 'Submissions', icon: History, auth: true },
   { to: paths.leaderboard, label: 'Leaderboard', icon: Trophy },
+  { to: paths.admin, label: 'Admin', icon: Shield, admin: true },
   { to: paths.profile, label: 'Profile', icon: User, auth: true },
 ] as const;
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
 
   return (
     <>
@@ -62,6 +65,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {links.map((link) => {
             if ('auth' in link && link.auth && !token) return null;
+            if ('admin' in link && link.admin && user?.role !== 'admin') return null;
             const Icon = link.icon;
             return (
               <NavLink

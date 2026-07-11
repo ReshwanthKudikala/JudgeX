@@ -38,6 +38,10 @@ async function authenticate(req, _res, next) {
       throw new UnauthorizedError('User account no longer exists.');
     }
 
+    if (user.is_suspended === true) {
+      throw new UnauthorizedError('This account has been suspended.');
+    }
+
     req.user = user;
     req.auth = claims;
     next();

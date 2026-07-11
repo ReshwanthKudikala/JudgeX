@@ -8,7 +8,8 @@
 const { BaseRepository } = require('../../infrastructure/database/base.repository');
 
 // Non-sensitive user fields safe to return to callers (never password_hash).
-const PUBLIC_COLUMNS = 'id, username, email, role, created_at, updated_at';
+const PUBLIC_COLUMNS =
+  'id, username, email, role, is_suspended, last_login_at, created_at, updated_at';
 
 class UserRepository extends BaseRepository {
   /**
@@ -54,7 +55,8 @@ class UserRepository extends BaseRepository {
   findByEmail(email, client) {
     // Includes password_hash because this read backs credential verification.
     return this.queryOne(
-      `SELECT id, username, email, password_hash, role, created_at, updated_at
+      `SELECT id, username, email, password_hash, role, is_suspended, last_login_at,
+              created_at, updated_at
          FROM users
         WHERE email = $1
           AND is_deleted = false`,
@@ -96,6 +98,15 @@ class UserRepository extends BaseRepository {
         WHERE username = $1
           AND is_deleted = false`,
       [username],
+      client,
+    );
+  }
+
+  touchLastLogin(id, client) {
+    return this.query(
+      `UPDATE users SET last_login_at = now(), updated_at = now()
+        WHERE id = $1 AND is_deleted = false`,
+      [id],
       client,
     );
   }

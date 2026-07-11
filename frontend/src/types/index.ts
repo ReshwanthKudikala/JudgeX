@@ -55,3 +55,10 @@ export type {
   DiscussionListParams,
   DiscussionListResult,
 } from './discussions';
+export type {
+  AdminDashboardOverview,
+  AdminUser,
+  AdminAnalytics,
+  AuditLogEntry,
+  ModerationEntityType,
+} from './admin';

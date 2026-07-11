@@ -10,7 +10,8 @@ const COLUMNS = `
 class EditorialRepository extends BaseRepository {
   findById(id, client) {
     return this.queryOne(
-      `SELECT ${COLUMNS} FROM editorials WHERE id = $1`,
+      `SELECT ${COLUMNS} FROM editorials
+        WHERE id = $1 AND COALESCE(is_deleted, false) = false`,
       [id],
       client,
     );
@@ -18,7 +19,8 @@ class EditorialRepository extends BaseRepository {
 
   findByProblemId(problemId, client) {
     return this.queryOne(
-      `SELECT ${COLUMNS} FROM editorials WHERE problem_id = $1`,
+      `SELECT ${COLUMNS} FROM editorials
+        WHERE problem_id = $1 AND COALESCE(is_deleted, false) = false`,
       [problemId],
       client,
     );
@@ -33,7 +35,8 @@ class EditorialRepository extends BaseRepository {
          INNER JOIN problems p ON p.id = e.problem_id
         WHERE p.slug = $1
           AND p.is_deleted = false
-          AND e.published = true`,
+          AND e.published = true
+          AND COALESCE(e.is_deleted, false) = false`,
       [slug],
       client,
     );
@@ -98,7 +101,10 @@ class EditorialRepository extends BaseRepository {
 
   async softDelete(id, client) {
     const result = await this.query(
-      `DELETE FROM editorials WHERE id = $1 RETURNING id`,
+      `UPDATE editorials
+          SET is_deleted = true, deleted_at = now(), published = false, updated_at = now()
+        WHERE id = $1 AND COALESCE(is_deleted, false) = false
+        RETURNING id`,
       [id],
       client,
     );
