@@ -8,6 +8,7 @@ function resolveFeatureFlags(env) {
     aiAdvanced: env.FEATURE_AI_ADVANCED,
     contests: true,
     editorials: true,
+    discussions: true,
   });
 }
 

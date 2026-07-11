@@ -7,10 +7,17 @@
 const { Router } = require('express');
 
 const { validate } = require('../../middlewares/validate');
+const { authenticate } = require('../../middlewares/authenticate');
 const controller = require('./problems.controller');
 const editorialController = require('../editorials/editorials.controller');
+const discussionController = require('../discussions/discussions.controller');
 const { listProblemsQuerySchema, createProblemSchema } = require('./problems.validators');
 const { problemSlugParamsSchema } = require('../editorials/editorials.validators');
+const {
+  listDiscussionsQuerySchema,
+  createDiscussionSchema,
+  problemSlugParamsSchema: discussionSlugParamsSchema,
+} = require('../discussions/discussions.validators');
 
 const router = Router();
 
@@ -21,6 +28,19 @@ router.get(
   '/:slug/editorial',
   validate(problemSlugParamsSchema, 'params'),
   editorialController.getPublishedBySlug,
+);
+router.get(
+  '/:slug/discussions',
+  validate(discussionSlugParamsSchema, 'params'),
+  validate(listDiscussionsQuerySchema, 'query'),
+  discussionController.listDiscussions,
+);
+router.post(
+  '/:slug/discussions',
+  authenticate,
+  validate(discussionSlugParamsSchema, 'params'),
+  validate(createDiscussionSchema),
+  discussionController.createDiscussion,
 );
 router.get('/:slug', controller.getProblemBySlug);
 

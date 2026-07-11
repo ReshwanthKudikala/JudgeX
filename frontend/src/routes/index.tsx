@@ -11,6 +11,7 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProblemsPage } from '@/pages/ProblemsPage';
 import { ProblemDetailPage } from '@/pages/ProblemDetailPage';
+import { DiscussionDetailPage } from '@/pages/DiscussionDetailPage';
 import { SubmissionsPage } from '@/pages/SubmissionsPage';
 import { SubmissionDetailPage } from '@/pages/SubmissionDetailPage';
 import { ContestsPage } from '@/pages/ContestsPage';
@@ -41,6 +42,10 @@ export const router = createBrowserRouter([
         children: [
           { path: paths.home, element: <DashboardPage /> },
           { path: paths.problems, element: <ProblemsPage /> },
+          {
+            path: paths.discussionDetail(),
+            element: <DiscussionDetailPage />,
+          },
           { path: paths.problemDetail(), element: <ProblemDetailPage /> },
           { path: paths.contests, element: <ContestsPage /> },
           {

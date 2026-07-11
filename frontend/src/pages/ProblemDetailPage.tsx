@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { ApiError } from '@/types';
+import { DiscussionsPanel } from '@/features/discussions';
 import { EditorialPanel, useEditorial } from '@/features/editorials';
 import { ProblemCodeEditor } from '@/features/editor';
 import { ProblemBreadcrumb } from '@/features/problems/components/ProblemBreadcrumb';
@@ -19,10 +20,7 @@ export function ProblemDetailPage() {
   const token = useAuthStore((s) => s.token);
 
   const { data: problem, isLoading, isError, error, refetch } = useProblem(problemSlug);
-  const {
-    data: editorial,
-  } = useEditorial(problem?.slug);
-
+  const { data: editorial } = useEditorial(problem?.slug);
 
   if (!problemSlug) {
     return <ProblemErrorState notFound />;
@@ -59,6 +57,9 @@ export function ProblemDetailPage() {
             <TabsTrigger value="submissions" className="px-3 text-xs">
               Submissions
             </TabsTrigger>
+            <TabsTrigger value="discussions" className="px-3 text-xs">
+              Discussions
+            </TabsTrigger>
             {showEditorialTab ? (
               <TabsTrigger value="editorial" className="px-3 text-xs">
                 Editorial
@@ -80,6 +81,9 @@ export function ProblemDetailPage() {
                 Sign in to view your submissions for this problem.
               </p>
             )}
+          </TabsContent>
+          <TabsContent value="discussions">
+            <DiscussionsPanel problemSlug={problem.slug} />
           </TabsContent>
           {editorial ? (
             <TabsContent value="editorial">

@@ -46,3 +46,12 @@ export type {
   AiLearningAssistInput,
   AiConversationMessage,
 } from './ai-assistant';
+export type {
+  DiscussionSort,
+  DiscussionAuthor,
+  DiscussionSummary,
+  DiscussionComment,
+  DiscussionDetail,
+  DiscussionListParams,
+  DiscussionListResult,
+} from './discussions';

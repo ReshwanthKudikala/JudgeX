@@ -5,6 +5,8 @@ export const paths = {
   problems: '/problems',
   /** Detail route uses the problem slug (backend resource key). */
   problemDetail: (slug = ':slug') => `/problems/${slug}`,
+  discussionDetail: (slug = ':slug', discussionId = ':discussionId') =>
+    `/problems/${slug}/discussions/${discussionId}`,
   submissions: '/submissions',
   submissionDetail: (submissionId = ':submissionId') =>
     `/submissions/${submissionId}`,
