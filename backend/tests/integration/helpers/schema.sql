@@ -105,3 +105,28 @@ CREATE TABLE IF NOT EXISTS user_statistics (
   CONSTRAINT ck_user_stats_accepted CHECK (total_accepted <= total_submissions),
   CONSTRAINT ck_user_stats_rate CHECK (acceptance_rate >= 0 AND acceptance_rate <= 100)
 );
+
+-- Additive AI audit table (DATABASE_DESIGN.md §9.4). Optional for MVP reads;
+-- used when explanations are persisted after CE or via the AI API.
+DO $$ BEGIN
+  CREATE TYPE ai_feedback_type AS ENUM (
+    'compile_explanation',
+    'bug_hint',
+    'complexity',
+    'edge_cases',
+    'optimization'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS ai_feedback (
+  id UUID PRIMARY KEY,
+  submission_id UUID NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  feedback_type ai_feedback_type NOT NULL DEFAULT 'compile_explanation',
+  prompt_snapshot TEXT,
+  response_text TEXT NOT NULL,
+  was_blocked BOOLEAN NOT NULL DEFAULT false,
+  provider VARCHAR(32) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

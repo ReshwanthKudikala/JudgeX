@@ -12,6 +12,7 @@ const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 const TRUNCATE_SQL = `
   TRUNCATE TABLE
+    ai_feedback,
     submissions,
     test_cases,
     user_statistics,

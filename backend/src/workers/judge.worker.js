@@ -16,6 +16,7 @@ const { SUBMISSIONS_QUEUE_NAME } = require('../infrastructure/queue/queues');
 const { SCHEMA_VERSION } = require('../infrastructure/queue/queue.service');
 const { submissionService } = require('../modules/submissions/submissions.service');
 const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
+const { aiService } = require('../modules/ai/ai.service');
 const { NotFoundError } = require('../shared/errors/http-errors');
 
 const log = createLogger({ component: 'judge-worker' });
@@ -78,6 +79,25 @@ async function processJob(job) {
 
   // Delegate the compile → run → compare → verdict → persist flow to the pipeline.
   const outcome = await runJudgePipeline(submissionId);
+
+  // Non-critical path: after a CE verdict, optionally generate + persist an
+  // explanation. Failures are swallowed so judging remains authoritative.
+  if (outcome.verdict === 'compile_error') {
+    try {
+      const judged = await submissionService.getSubmissionById(submissionId);
+      await aiService.tryExplainAfterCompileError({
+        submissionId,
+        userId: judged.userId,
+        language: judged.language,
+        compileOutput: judged.compileOutput,
+      });
+    } catch (err) {
+      log.warn('Post-judge AI explanation hook failed; ignoring', {
+        submissionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   log.info('Submission judged', { submissionId, verdict: outcome.verdict });
   return { submissionId, verdict: outcome.verdict };
