@@ -1,13 +1,16 @@
-// Submission intake: validate, persist as queued, then (later) enqueue the judge
-// job (persist-before-enqueue). This file owns intake + lifecycle business rules.
+// Submission intake: validate, persist as queued, then enqueue the judge job
+// (persist-before-enqueue). This file owns intake + lifecycle business rules.
 //
-// Business logic only: no SQL, no Express/HTTP, no queue (BullMQ), no Docker, and
-// no verdict calculation. Persistence is delegated to SubmissionRepository;
-// existence checks reuse the user/problem repositories. Verdicts are computed
-// elsewhere (the judge worker) and merely persisted here.
+// Business logic only: no SQL, no Express/HTTP, no Docker, and no verdict
+// calculation. Persistence is delegated to SubmissionRepository; queueing goes
+// through the queue service AFTER the DB transaction commits. Verdicts are
+// computed elsewhere (the judge worker) and merely persisted here.
 
 const { withTransaction } = require('../../infrastructure/database/transaction');
+const { enqueueSubmission } = require('../../infrastructure/queue/queue.service');
+const { logger } = require('../../shared/logger/logger');
 const { NotFoundError, ValidationError } = require('../../shared/errors/http-errors');
+const { QueueError } = require('../../shared/errors/domain-errors');
 const { submissionRepository } = require('./submissions.repository');
 const { userRepository } = require('../auth/auth.repository');
 const { problemRepository } = require('../problems/problems.repository');
@@ -66,25 +69,31 @@ class SubmissionService {
     submissionRepository: subRepo,
     userRepository: usrRepo,
     problemRepository: probRepo,
+    enqueueSubmission: enqueueFn,
   } = {}) {
     this.submissionRepository = subRepo || submissionRepository;
     this.userRepository = usrRepo || userRepository;
     this.problemRepository = probRepo || problemRepository;
+    this.enqueueSubmission = enqueueFn || enqueueSubmission;
   }
 
   /**
-   * Create a submission in the initial 'queued' status (persist-before-enqueue).
+   * Create a submission in the initial 'queued' status, then enqueue it for
+   * judging (persist-before-enqueue).
    *
-   * Runs in a transaction: verify the user and (active) problem both exist, then
-   * insert. The FKs are the ultimate guarantee; these checks give clear domain
-   * errors and prevent enqueuing work for a missing/deleted target.
+   * 1. Transaction: verify user + problem exist, insert the submission.
+   * 2. After COMMIT: enqueue via the queue service (never inside the TX).
+   *
+   * If enqueue fails, the row stays `queued` (recoverable by a reaper) and a
+   * QueueError is thrown — the submission is never deleted.
    *
    * @param {{ userId: string, problemId: string, language: string, sourceCode: string }} input
    * @returns {Promise<Object>} the created submission domain object (status 'queued').
    * @throws {NotFoundError} when the user or problem does not exist.
+   * @throws {QueueError} when enqueue fails after a successful persist.
    */
   async createSubmission({ userId, problemId, language, sourceCode }) {
-    return withTransaction(async (client) => {
+    const submission = await withTransaction(async (client) => {
       const user = await this.userRepository.findById(userId, client);
       if (!user) {
         throw new NotFoundError('User not found.');
@@ -101,6 +110,24 @@ class SubmissionService {
       );
       return toSubmissionDetail(row);
     });
+
+    // Enqueue ONLY after the transaction has committed. A job must never
+    // reference a submission that is not yet durable in Postgres.
+    try {
+      await this.enqueueSubmission(submission.id);
+    } catch (err) {
+      logger.error('Failed to enqueue submission; leaving row in queued state for recovery', {
+        submissionId: submission.id,
+        error: err.message,
+      });
+      if (err instanceof QueueError) throw err;
+      throw new QueueError('Failed to enqueue submission for judging.', {
+        submissionId: submission.id,
+        cause: err.message,
+      });
+    }
+
+    return submission;
   }
 
   /**
