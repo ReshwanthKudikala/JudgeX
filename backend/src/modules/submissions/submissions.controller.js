@@ -24,10 +24,10 @@ async function createSubmission(req, res, next) {
   }
 }
 
-// GET /submissions/:id → 200 { ...submission }
+// GET /submissions/:id → 200 { ...submission } (owner or admin)
 async function getSubmissionById(req, res, next) {
   try {
-    const submission = await submissionService.getSubmissionById(req.params.id);
+    const submission = await submissionService.getSubmissionForViewer(req.params.id, req.user);
     sendSuccess(req, res, 200, submission);
   } catch (err) {
     next(err);
@@ -47,4 +47,19 @@ async function getUserSubmissions(req, res, next) {
   }
 }
 
-module.exports = { createSubmission, getSubmissionById, getUserSubmissions };
+// GET /submissions/stats → 200 progress aggregates for the current user
+async function getUserProgress(req, res, next) {
+  try {
+    const progress = await submissionService.getUserProgress(req.user.id);
+    sendSuccess(req, res, 200, progress);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  createSubmission,
+  getSubmissionById,
+  getUserSubmissions,
+  getUserProgress,
+};

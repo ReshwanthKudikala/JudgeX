@@ -7,7 +7,15 @@ const { z } = require('zod');
 const LANGUAGE = z.enum(['cpp', 'python']);
 // Lifecycle + verdict enums (submissions.status / submissions.verdict).
 const STATUS = z.enum(['queued', 'running', 'completed', 'error']);
-const VERDICT = z.enum(['accepted', 'wrong_answer', 'tle', 'runtime_error', 'compile_error']);
+const VERDICT = z.enum([
+  'accepted',
+  'wrong_answer',
+  'tle',
+  'runtime_error',
+  'compile_error',
+  'memory_limit_exceeded',
+  'internal_error',
+]);
 
 // Cap source size to a reasonable bound to protect memory/DB (64 KiB).
 const MAX_SOURCE_BYTES = 64 * 1024;
@@ -30,6 +38,9 @@ const listSubmissionsQuerySchema = z.object({
   status: STATUS.optional(),
   verdict: VERDICT.optional(),
   language: LANGUAGE.optional(),
+  problemId: z.string().uuid().optional(),
+  /** Case-insensitive problem title search (joined problems.title). */
+  q: z.string().trim().min(1).max(200).optional(),
   sort: z.string().trim().min(1).optional(),
 });
 

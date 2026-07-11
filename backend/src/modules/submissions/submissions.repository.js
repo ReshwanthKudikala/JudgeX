@@ -19,10 +19,20 @@ const DETAIL_COLUMNS = `
 
 // Lightweight projection for user history listings — omits the heavy TEXT
 // columns (source_code, compile_output, stdout, stderr) not needed in a feed.
+// Prefixed with s. for joins against problems.
 const LIST_COLUMNS = `
-  id, user_id, problem_id, language, status, verdict,
-  runtime_ms, memory_kb, failed_test_index, passed_tests, total_tests,
-  submitted_at, judged_at, created_at, updated_at
+  s.id, s.user_id, s.problem_id, s.language, s.status, s.verdict,
+  s.runtime_ms, s.memory_kb, s.failed_test_index, s.passed_tests, s.total_tests,
+  s.submitted_at, s.judged_at, s.created_at, s.updated_at,
+  p.slug AS problem_slug, p.title AS problem_title, p.difficulty AS problem_difficulty
+`;
+
+const DETAIL_WITH_PROBLEM_COLUMNS = `
+  s.id, s.user_id, s.problem_id, s.language, s.source_code, s.status, s.verdict,
+  s.compile_output, s.runtime_ms, s.memory_kb, s.failed_test_index,
+  s.passed_tests, s.total_tests, s.stdout, s.stderr,
+  s.submitted_at, s.judged_at, s.created_at, s.updated_at,
+  p.slug AS problem_slug, p.title AS problem_title, p.difficulty AS problem_difficulty
 `;
 
 // Allow-list: public filter field -> real column (injection-proof; see sql-builders).
@@ -92,12 +102,31 @@ class SubmissionRepository extends BaseRepository {
   }
 
   /**
+   * Fetch a single submission by primary key joined with problem summary fields.
+   *
+   * @param {string} id - UUID.
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>}
+   */
+  findByIdWithProblem(id, client) {
+    return this.queryOne(
+      `SELECT ${DETAIL_WITH_PROBLEM_COLUMNS}
+         FROM submissions s
+         INNER JOIN problems p ON p.id = s.problem_id
+        WHERE s.id = $1`,
+      [id],
+      client,
+    );
+  }
+
+  /**
    * Paginated, filtered, sorted history of one user's submissions.
    * user_id is always constrained; other filters/sort use the allow-list
    * builders, so untrusted input can only appear as a bound parameter.
+   * Joins problems so list items can show title/slug (and optional title search).
    *
    * @param {string} userId - UUID.
-   * @param {Object} [filters] - { page, limit, sort, problemId, verdict, language, status }.
+   * @param {Object} [filters] - { page, limit, sort, problemId, verdict, language, status, q }.
    * @param {import('pg').PoolClient} [client]
    * @returns {Promise<{ rows: Object[], total: number, page: number, limit: number }>}
    */
@@ -106,18 +135,35 @@ class SubmissionRepository extends BaseRepository {
 
     // user_id is $1; allow-listed filters begin at $2.
     const filterFragment = this.buildWhere(filters, FILTER_COLUMNS, { startIndex: 2 });
-    const conditions = ['user_id = $1'];
+    const conditions = ['s.user_id = $1'];
     if (filterFragment.clause) {
-      conditions.push(filterFragment.clause.slice('WHERE '.length));
+      // buildWhere emits unqualified column names; qualify them for the join.
+      const qualified = filterFragment.clause
+        .slice('WHERE '.length)
+        .replace(/\bproblem_id\b/g, 's.problem_id')
+        .replace(/\bverdict\b/g, 's.verdict')
+        .replace(/\blanguage\b/g, 's.language')
+        .replace(/\bstatus\b/g, 's.status');
+      conditions.push(qualified);
     }
-    const whereSql = `WHERE ${conditions.join(' AND ')}`;
     const whereParams = [userId, ...filterFragment.params];
 
-    const orderBySql = this.buildOrderBy(filters.sort, SORT_COLUMNS, { default: DEFAULT_SORT });
+    if (filters.q && String(filters.q).trim()) {
+      whereParams.push(`%${String(filters.q).trim()}%`);
+      conditions.push(`p.title ILIKE $${whereParams.length}`);
+    }
+
+    const whereSql = `WHERE ${conditions.join(' AND ')}`;
+
+    const orderBySql = this.buildOrderBy(filters.sort, SORT_COLUMNS, { default: DEFAULT_SORT })
+      .replace(/\bsubmitted_at\b/g, 's.submitted_at')
+      .replace(/\bruntime_ms\b/g, 's.runtime_ms')
+      .replace(/\bmemory_kb\b/g, 's.memory_kb');
 
     const countRow = await this.queryOne(
       `SELECT COUNT(*)::int AS total
-         FROM submissions
+         FROM submissions s
+         INNER JOIN problems p ON p.id = s.problem_id
         ${whereSql}`,
       whereParams,
       client,
@@ -128,7 +174,8 @@ class SubmissionRepository extends BaseRepository {
     const offsetIdx = whereParams.length + 2;
     const rows = await this.queryMany(
       `SELECT ${LIST_COLUMNS}
-         FROM submissions
+         FROM submissions s
+         INNER JOIN problems p ON p.id = s.problem_id
         ${whereSql}
         ${orderBySql}
         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
@@ -137,6 +184,68 @@ class SubmissionRepository extends BaseRepository {
     );
 
     return { rows, total, page, limit };
+  }
+
+  /**
+   * Aggregate progress stats for a user (derived from submissions; no mutation).
+   *
+   * @param {string} userId
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object>}
+   */
+  getUserProgressStats(userId, client) {
+    return this.queryOne(
+      `SELECT
+         COUNT(*)::int AS total_submissions,
+         COUNT(*) FILTER (WHERE verdict = 'accepted')::int AS total_accepted,
+         COUNT(DISTINCT problem_id) FILTER (WHERE verdict = 'accepted')::int AS problems_solved,
+         (
+           SELECT language
+             FROM submissions
+            WHERE user_id = $1
+            GROUP BY language
+            ORDER BY COUNT(*) DESC, language ASC
+            LIMIT 1
+         ) AS favourite_language
+       FROM submissions
+      WHERE user_id = $1`,
+      [userId],
+      client,
+    );
+  }
+
+  /**
+   * Distinct recently accepted problems for a user (newest accept first).
+   *
+   * @param {string} userId
+   * @param {{ limit?: number }} [opts]
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object[]>}
+   */
+  findRecentAcceptedProblems(userId, { limit = 5 } = {}, client) {
+    const batchLimit = Math.max(1, Math.min(Number(limit) || 5, 50));
+    return this.queryMany(
+      `SELECT problem_id, problem_slug, problem_title, problem_difficulty,
+              submitted_at, submission_id
+         FROM (
+           SELECT DISTINCT ON (s.problem_id)
+                  s.problem_id,
+                  p.slug AS problem_slug,
+                  p.title AS problem_title,
+                  p.difficulty AS problem_difficulty,
+                  s.submitted_at,
+                  s.id AS submission_id
+             FROM submissions s
+             INNER JOIN problems p ON p.id = s.problem_id
+            WHERE s.user_id = $1
+              AND s.verdict = 'accepted'
+            ORDER BY s.problem_id, s.submitted_at DESC
+         ) latest
+        ORDER BY submitted_at DESC
+        LIMIT $2`,
+      [userId, batchLimit],
+      client,
+    );
   }
 
   /**

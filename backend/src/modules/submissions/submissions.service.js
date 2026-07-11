@@ -9,7 +9,11 @@
 const { withTransaction } = require('../../infrastructure/database/transaction');
 const { enqueueSubmission } = require('../../infrastructure/queue/queue.service');
 const { logger } = require('../../shared/logger/logger');
-const { NotFoundError, ValidationError } = require('../../shared/errors/http-errors');
+const {
+  NotFoundError,
+  ValidationError,
+  ForbiddenError,
+} = require('../../shared/errors/http-errors');
 const { QueueError } = require('../../shared/errors/domain-errors');
 const { submissionRepository } = require('./submissions.repository');
 const { userRepository } = require('../auth/auth.repository');
@@ -26,8 +30,19 @@ const TERMINAL_VERDICTS = new Set([
   'internal_error',
 ]);
 
+function toProblemSummary(row) {
+  if (!row || !row.problem_id) return null;
+  return {
+    id: row.problem_id,
+    slug: row.problem_slug,
+    title: row.problem_title,
+    difficulty: row.problem_difficulty,
+  };
+}
+
 // Map a full submissions row into a camelCase domain object.
 function toSubmissionDetail(row) {
+  const problem = toProblemSummary(row);
   return {
     id: row.id,
     userId: row.user_id,
@@ -38,9 +53,11 @@ function toSubmissionDetail(row) {
     verdict: row.verdict,
     compileOutput: row.compile_output,
     runtimeMs: row.runtime_ms,
-    // Alias for Sprint 25 "executionTime" clients; same persisted value.
+    // Sprint 25/26 aliases (same persisted values).
     executionTime: row.runtime_ms,
+    runtime: row.runtime_ms,
     memoryKb: row.memory_kb,
+    memory: row.memory_kb,
     failedTestIndex: row.failed_test_index,
     passedTests: row.passed_tests ?? null,
     totalTests: row.total_tests ?? null,
@@ -50,11 +67,13 @@ function toSubmissionDetail(row) {
     judgedAt: row.judged_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...(problem ? { problem } : {}),
   };
 }
 
 // Map a lightweight history row (no source_code/compile_output) into a summary.
 function toSubmissionSummary(row) {
+  const problem = toProblemSummary(row);
   return {
     id: row.id,
     userId: row.user_id,
@@ -64,7 +83,9 @@ function toSubmissionSummary(row) {
     verdict: row.verdict,
     runtimeMs: row.runtime_ms,
     executionTime: row.runtime_ms,
+    runtime: row.runtime_ms,
     memoryKb: row.memory_kb,
+    memory: row.memory_kb,
     failedTestIndex: row.failed_test_index,
     passedTests: row.passed_tests ?? null,
     totalTests: row.total_tests ?? null,
@@ -72,6 +93,7 @@ function toSubmissionSummary(row) {
     judgedAt: row.judged_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...(problem ? { problem } : {}),
   };
 }
 
@@ -131,11 +153,36 @@ class SubmissionService {
     return submission;
   }
 
+  /**
+   * Internal fetch by id (judge worker). No ownership check.
+   * @param {string} id
+   */
   async getSubmissionById(id) {
     const row = await this.submissionRepository.findById(id);
     if (!row) {
       throw new NotFoundError('Submission not found.');
     }
+    return toSubmissionDetail(row);
+  }
+
+  /**
+   * Owner-or-admin detail fetch with problem summary (HTTP GET /submissions/:id).
+   *
+   * @param {string} id
+   * @param {{ id: string, role?: string }} viewer - authenticated DB user
+   */
+  async getSubmissionForViewer(id, viewer) {
+    const row = await this.submissionRepository.findByIdWithProblem(id);
+    if (!row) {
+      throw new NotFoundError('Submission not found.');
+    }
+
+    const isOwner = viewer && viewer.id === row.user_id;
+    const isAdmin = viewer && viewer.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenError('You do not have access to this submission.');
+    }
+
     return toSubmissionDetail(row);
   }
 
@@ -149,6 +196,47 @@ class SubmissionService {
         total,
         totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
       },
+    };
+  }
+
+  /**
+   * Profile progress aggregates + recent feeds for the authenticated user.
+   * @param {string} userId
+   */
+  async getUserProgress(userId) {
+    const statsRow = await this.submissionRepository.getUserProgressStats(userId);
+    const totalSubmissions = statsRow ? Number(statsRow.total_submissions) || 0 : 0;
+    const totalAccepted = statsRow ? Number(statsRow.total_accepted) || 0 : 0;
+    const problemsSolved = statsRow ? Number(statsRow.problems_solved) || 0 : 0;
+    const acceptanceRate =
+      totalSubmissions > 0
+        ? Math.round((totalAccepted / totalSubmissions) * 10000) / 100
+        : 0;
+
+    const { rows: recentRows } = await this.submissionRepository.findByUser(userId, {
+      page: 1,
+      limit: 5,
+    });
+    const recentAcceptedProblems = await this.submissionRepository.findRecentAcceptedProblems(
+      userId,
+      { limit: 5 },
+    );
+
+    return {
+      problemsSolved,
+      totalSubmissions,
+      totalAccepted,
+      acceptanceRate,
+      favouriteLanguage: statsRow?.favourite_language ?? null,
+      recentSubmissions: recentRows.map(toSubmissionSummary),
+      recentAcceptedProblems: recentAcceptedProblems.map((row) => ({
+        problemId: row.problem_id,
+        slug: row.problem_slug,
+        title: row.problem_title,
+        difficulty: row.problem_difficulty,
+        submittedAt: row.submitted_at,
+        submissionId: row.submission_id,
+      })),
     };
   }
 
@@ -208,7 +296,6 @@ class SubmissionService {
 
   /**
    * Mark a submission as an internal judging failure (Sprint 25).
-   * Idempotent-ish: overwrites running/queued rows with a terminal internal_error.
    *
    * @param {string} id
    * @param {{ message?: string }} [opts]
@@ -233,4 +320,8 @@ class SubmissionService {
   }
 }
 
-module.exports = { SubmissionService, submissionService: new SubmissionService(), TERMINAL_VERDICTS };
+module.exports = {
+  SubmissionService,
+  submissionService: new SubmissionService(),
+  TERMINAL_VERDICTS,
+};

@@ -13,8 +13,13 @@ export type {
 } from './problems';
 export type {
   Submission,
+  SubmissionSummary,
   SubmissionStatus,
   SubmissionVerdict,
+  SubmissionListParams,
+  SubmissionListResult,
+  UserProgress,
   CreateSubmissionInput,
   AiCompileExplanation,
+  SubmissionProblemSummary,
 } from './submissions';

@@ -15,6 +15,8 @@ const router = Router();
 
 router.post('/', authenticate, validate(createSubmissionSchema), controller.createSubmission);
 router.get('/', authenticate, validate(listSubmissionsQuerySchema, 'query'), controller.getUserSubmissions);
+// Static path before /:id so "stats" is not treated as a UUID.
+router.get('/stats', authenticate, controller.getUserProgress);
 router.get('/:id', authenticate, controller.getSubmissionById);
 
 module.exports = { submissionRoutes: router };

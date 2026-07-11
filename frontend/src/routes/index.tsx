@@ -11,6 +11,8 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProblemsPage } from '@/pages/ProblemsPage';
 import { ProblemDetailPage } from '@/pages/ProblemDetailPage';
+import { SubmissionsPage } from '@/pages/SubmissionsPage';
+import { SubmissionDetailPage } from '@/pages/SubmissionDetailPage';
 import { LeaderboardPage } from '@/pages/LeaderboardPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -40,7 +42,14 @@ export const router = createBrowserRouter([
           { path: paths.leaderboard, element: <LeaderboardPage /> },
           {
             element: <ProtectedRoute />,
-            children: [{ path: paths.profile, element: <ProfilePage /> }],
+            children: [
+              { path: paths.submissions, element: <SubmissionsPage /> },
+              {
+                path: paths.submissionDetail(),
+                element: <SubmissionDetailPage />,
+              },
+              { path: paths.profile, element: <ProfilePage /> },
+            ],
           },
         ],
       },

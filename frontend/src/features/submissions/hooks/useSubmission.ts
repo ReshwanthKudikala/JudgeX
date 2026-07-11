@@ -48,6 +48,7 @@ export function useSubmission() {
       setPollTimedOut(false);
       setSubmissionId(submission.id);
       queryClient.setQueryData(['submission', submission.id], submission);
+      void queryClient.invalidateQueries({ queryKey: ['submissions'] });
     },
   });
 

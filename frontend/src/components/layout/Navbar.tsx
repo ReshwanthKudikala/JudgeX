@@ -56,6 +56,11 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           <NavLink to={paths.problems} className={navLinkClass}>
             Problems
           </NavLink>
+          {token ? (
+            <NavLink to={paths.submissions} className={navLinkClass}>
+              Submissions
+            </NavLink>
+          ) : null}
           <NavLink to={paths.leaderboard} className={navLinkClass}>
             Leaderboard
           </NavLink>

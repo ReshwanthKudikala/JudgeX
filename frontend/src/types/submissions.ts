@@ -11,6 +11,14 @@ export type SubmissionVerdict =
   | 'memory_limit_exceeded'
   | 'internal_error';
 
+/** Nested problem summary on list/detail responses (Sprint 26). */
+export interface SubmissionProblemSummary {
+  id: string;
+  slug: string;
+  title: string;
+  difficulty?: string;
+}
+
 /** POST /submissions body — matches live backend validators. */
 export interface CreateSubmissionInput {
   problemId: string;
@@ -29,9 +37,11 @@ export interface Submission {
   verdict: SubmissionVerdict | null;
   compileOutput: string | null;
   runtimeMs: number | null;
-  /** Alias of runtimeMs from the backend Sprint 25 response. */
+  /** Alias of runtimeMs from the backend. */
   executionTime?: number | null;
+  runtime?: number | null;
   memoryKb: number | null;
+  memory?: number | null;
   failedTestIndex: number | null;
   passedTests?: number | null;
   totalTests?: number | null;
@@ -41,6 +51,54 @@ export interface Submission {
   judgedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  problem?: SubmissionProblemSummary;
+}
+
+/** List item from GET /submissions (no source / stdout / stderr). */
+export type SubmissionSummary = Omit<
+  Submission,
+  'sourceCode' | 'compileOutput' | 'stdout' | 'stderr'
+> & {
+  problem?: SubmissionProblemSummary;
+};
+
+export interface SubmissionListParams {
+  page?: number;
+  limit?: number;
+  verdict?: SubmissionVerdict;
+  language?: SubmissionLanguage;
+  problemId?: string;
+  /** Problem title search. */
+  q?: string;
+  sort?: string;
+  status?: SubmissionStatus;
+}
+
+export interface SubmissionListResult {
+  submissions: SubmissionSummary[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface UserProgress {
+  problemsSolved: number;
+  totalSubmissions: number;
+  totalAccepted: number;
+  acceptanceRate: number;
+  favouriteLanguage: SubmissionLanguage | string | null;
+  recentSubmissions: SubmissionSummary[];
+  recentAcceptedProblems: Array<{
+    problemId: string;
+    slug: string;
+    title: string;
+    difficulty?: string;
+    submittedAt: string;
+    submissionId: string;
+  }>;
 }
 
 export interface AiCompileExplanation {
@@ -86,4 +144,9 @@ export const STATUS_LABELS: Record<SubmissionStatus, string> = {
   running: 'Running',
   completed: 'Completed',
   error: 'Failed',
+};
+
+export const LANGUAGE_LABELS: Record<SubmissionLanguage, string> = {
+  cpp: 'C++',
+  python: 'Python',
 };

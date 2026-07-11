@@ -7,7 +7,8 @@ import { cn } from '@/utils/cn';
 interface MonacoEditorProps {
   language: EditorLanguage;
   value: string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -41,12 +42,20 @@ export const MonacoEditor = memo(function MonacoEditor({
   language,
   value,
   onChange,
+  readOnly = false,
   className,
 }: MonacoEditorProps) {
-  const options = useMemo(() => EDITOR_OPTIONS, []);
+  const options = useMemo(
+    () => ({
+      ...EDITOR_OPTIONS,
+      readOnly,
+      domReadOnly: readOnly,
+    }),
+    [readOnly],
+  );
 
   const handleMount: OnMount = (editor) => {
-    editor.focus();
+    if (!readOnly) editor.focus();
   };
 
   return (
@@ -54,8 +63,9 @@ export const MonacoEditor = memo(function MonacoEditor({
       data-editor-slot="monaco"
       className={cn('min-h-[240px] flex-1 bg-[#0c0e12]', className)}
       role="textbox"
-      aria-label="Code editor"
+      aria-label={readOnly ? 'Source code (read-only)' : 'Code editor'}
       aria-multiline="true"
+      aria-readonly={readOnly || undefined}
     >
       <Editor
         key={language}
@@ -66,6 +76,7 @@ export const MonacoEditor = memo(function MonacoEditor({
         options={options}
         onMount={handleMount}
         onChange={(next) => {
+          if (readOnly || !onChange) return;
           if (typeof next === 'string') onChange(next);
         }}
         loading={
