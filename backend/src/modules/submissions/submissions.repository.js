@@ -193,6 +193,28 @@ class SubmissionRepository extends BaseRepository {
       client,
     );
   }
+
+  /**
+   * Find submissions stuck in `queued` longer than a cutoff (reaper / sweeper).
+   * Ordered oldest-first so the longest-waiting work is recovered first.
+   *
+   * @param {{ olderThan: Date|string, limit?: number }} opts
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object[]>} lightweight rows (id + timestamps).
+   */
+  findStuckQueued({ olderThan, limit = 100 }, client) {
+    const batchLimit = Math.max(1, Math.min(Number(limit) || 100, 1000));
+    return this.queryMany(
+      `SELECT id, status, submitted_at, created_at, updated_at
+         FROM submissions
+        WHERE status = 'queued'
+          AND submitted_at < $1
+        ORDER BY submitted_at ASC
+        LIMIT $2`,
+      [olderThan, batchLimit],
+      client,
+    );
+  }
 }
 
 module.exports = { SubmissionRepository, submissionRepository: new SubmissionRepository() };

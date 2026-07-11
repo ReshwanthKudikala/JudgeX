@@ -79,6 +79,12 @@ const config = Object.freeze({
     workerConcurrency: env.JUDGE_WORKER_CONCURRENCY,
   }),
 
+  reaper: Object.freeze({
+    intervalMs: env.REAPER_INTERVAL_MS,
+    stuckThresholdMs: env.REAPER_STUCK_THRESHOLD_MS,
+    batchSize: env.REAPER_BATCH_SIZE,
+  }),
+
   storage: Object.freeze({
     bucket: env.STORAGE_BUCKET,
     endpoint: env.STORAGE_ENDPOINT,

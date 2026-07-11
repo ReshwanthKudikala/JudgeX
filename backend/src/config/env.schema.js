@@ -70,6 +70,14 @@ const envSchema = z
 
     // --- Feature flags ---
     FEATURE_AI_COMPILE_EXPLANATION: booleanish.default('true'),
+
+    // --- Stuck-submission reaper (persist-before-enqueue safety net) ---
+    // How often the cleanup worker scans for orphaned queued rows.
+    REAPER_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
+    // A queued submission older than this is eligible for re-enqueue.
+    REAPER_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(60000),
+    // Max rows processed per sweep (bounded work per tick).
+    REAPER_BATCH_SIZE: z.coerce.number().int().positive().default(100),
   })
   .superRefine((env, ctx) => {
     // OpenAI key is required ONLY when OpenAI is the selected provider.
