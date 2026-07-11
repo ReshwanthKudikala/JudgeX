@@ -1,17 +1,18 @@
 import { Navigate, Outlet } from 'react-router-dom';
 
+import { Spinner } from '@/components/common/Spinner';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
-import { Spinner } from '@/components/common/Spinner';
 
-/** Auth pages only — signed-in users are sent to the home dashboard. */
+/** Auth pages only — signed-in users are sent to the dashboard. */
 export function PublicRoute() {
   const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
-  if (!isHydrated) {
+  if (!isHydrated || isValidatingSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-background" role="status">
         <Spinner size="lg" label="Loading…" />
       </div>
     );

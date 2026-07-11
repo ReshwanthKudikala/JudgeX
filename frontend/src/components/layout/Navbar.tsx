@@ -1,9 +1,9 @@
 import { NavLink, Link } from 'react-router-dom';
-import { Menu, LogOut, User as UserIcon } from 'lucide-react';
+import { Menu, LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { paths } from '@/routes/paths';
-import { useAuthStore } from '@/store';
 import { cn } from '@/utils/cn';
 
 interface NavbarProps {
@@ -16,17 +16,27 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'text-white bg-white/5' : 'text-muted hover:text-white hover:bg-white/5',
   );
 
+function UserAvatar({ username }: { username: string }) {
+  const initial = username.trim().charAt(0).toUpperCase() || '?';
+  return (
+    <span
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-[#1a1a1a]"
+      aria-hidden
+    >
+      {initial}
+    </span>
+  );
+}
+
 export function Navbar({ onMenuClick }: NavbarProps) {
-  const user = useAuthStore((s) => s.user);
-  const token = useAuthStore((s) => s.token);
-  const logout = useAuthStore((s) => s.logout);
+  const { user, token, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
         <button
           type="button"
-          className="rounded-md p-2 text-muted transition-colors hover:bg-white/5 hover:text-white lg:hidden"
+          className="rounded-md p-2 text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
           onClick={onMenuClick}
           aria-label="Open navigation"
         >
@@ -42,7 +52,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           </span>
         </Link>
 
-        <nav className="ml-4 hidden items-center gap-1 md:flex">
+        <nav className="ml-4 hidden items-center gap-1 md:flex" aria-label="Primary">
           <NavLink to={paths.problems} className={navLinkClass}>
             Problems
           </NavLink>
@@ -61,10 +71,11 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             <>
               <Link
                 to={paths.profile}
-                className="hidden items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted transition-colors hover:bg-white/5 hover:text-white sm:flex"
+                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                aria-label={`Profile for ${user.username}`}
               >
-                <UserIcon className="h-4 w-4 text-primary" />
-                <span className="max-w-[120px] truncate">{user.username}</span>
+                <UserAvatar username={user.username} />
+                <span className="hidden max-w-[120px] truncate sm:inline">{user.username}</span>
               </Link>
               <Button
                 type="button"
@@ -81,7 +92,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             <>
               <Link
                 to={paths.login}
-                className="inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-white"
+                className="inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
               >
                 Login
               </Link>

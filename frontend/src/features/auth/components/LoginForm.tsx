@@ -12,9 +12,11 @@ import {
   type LoginFormValues,
 } from '@/features/auth/schemas/auth.schemas';
 import { paths } from '@/routes/paths';
+import { applyApiFormErrors } from '@/utils/apply-api-form-errors';
+import { cn } from '@/utils/cn';
 
 export function LoginForm() {
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, rememberMe } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from =
@@ -24,18 +26,27 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: {
+      emailOrUsername: '',
+      password: '',
+      rememberMe: rememberMe ?? true,
+    },
   });
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await login(values);
+      await login({
+        email: values.emailOrUsername.trim(),
+        password: values.password,
+        rememberMe: values.rememberMe,
+      });
       navigate(from, { replace: true });
-    } catch {
-      /* toast handled in useAuth */
+    } catch (err) {
+      applyApiFormErrors(err, setError, 'Invalid email or password.');
     }
   });
 
@@ -47,13 +58,30 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <FormField label="Email" htmlFor="email" error={errors.email?.message} required>
+          {errors.root?.message ? (
+            <div
+              role="alert"
+              className="rounded-md border border-error/40 bg-error/10 px-3 py-2 text-sm text-error"
+            >
+              {errors.root.message}
+            </div>
+          ) : null}
+
+          <FormField
+            label="Email or username"
+            htmlFor="emailOrUsername"
+            error={errors.emailOrUsername?.message}
+            hint="Use the email address you registered with."
+            required
+          >
             <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              error={Boolean(errors.email)}
-              {...register('email')}
+              id="emailOrUsername"
+              type="text"
+              autoComplete="username"
+              autoFocus
+              aria-invalid={Boolean(errors.emailOrUsername)}
+              error={Boolean(errors.emailOrUsername)}
+              {...register('emailOrUsername')}
             />
           </FormField>
 
@@ -67,12 +95,25 @@ export function LoginForm() {
               id="password"
               type="password"
               autoComplete="current-password"
+              aria-invalid={Boolean(errors.password)}
               error={Boolean(errors.password)}
               {...register('password')}
             />
           </FormField>
 
-          <Button type="submit" className="w-full" loading={isLoading}>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className={cn(
+                'h-4 w-4 rounded border-border bg-background text-primary',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+              )}
+              {...register('rememberMe')}
+            />
+            Remember me
+          </label>
+
+          <Button type="submit" className="w-full" loading={isLoading} disabled={isLoading}>
             Sign in
           </Button>
         </form>

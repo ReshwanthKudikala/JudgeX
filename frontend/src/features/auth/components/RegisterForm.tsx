@@ -12,6 +12,7 @@ import {
   type RegisterFormValues,
 } from '@/features/auth/schemas/auth.schemas';
 import { paths } from '@/routes/paths';
+import { applyApiFormErrors } from '@/utils/apply-api-form-errors';
 
 export function RegisterForm() {
   const { register: registerUser, isLoading } = useAuth();
@@ -20,10 +21,12 @@ export function RegisterForm() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      name: '',
       username: '',
       email: '',
       password: '',
@@ -33,14 +36,15 @@ export function RegisterForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
+      // `name` is collected for UX; the backend register contract has no name field.
       await registerUser({
         username: values.username,
         email: values.email,
         password: values.password,
       });
-      navigate(paths.home, { replace: true });
-    } catch {
-      /* toast handled in useAuth */
+      navigate(paths.login, { replace: true });
+    } catch (err) {
+      applyApiFormErrors(err, setError, 'Registration failed.');
     }
   });
 
@@ -52,6 +56,26 @@ export function RegisterForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
+          {errors.root?.message ? (
+            <div
+              role="alert"
+              className="rounded-md border border-error/40 bg-error/10 px-3 py-2 text-sm text-error"
+            >
+              {errors.root.message}
+            </div>
+          ) : null}
+
+          <FormField label="Name" htmlFor="name" error={errors.name?.message} required>
+            <Input
+              id="name"
+              autoComplete="name"
+              autoFocus
+              aria-invalid={Boolean(errors.name)}
+              error={Boolean(errors.name)}
+              {...register('name')}
+            />
+          </FormField>
+
           <FormField
             label="Username"
             htmlFor="username"
@@ -61,6 +85,7 @@ export function RegisterForm() {
             <Input
               id="username"
               autoComplete="username"
+              aria-invalid={Boolean(errors.username)}
               error={Boolean(errors.username)}
               {...register('username')}
             />
@@ -71,6 +96,7 @@ export function RegisterForm() {
               id="email"
               type="email"
               autoComplete="email"
+              aria-invalid={Boolean(errors.email)}
               error={Boolean(errors.email)}
               {...register('email')}
             />
@@ -87,6 +113,7 @@ export function RegisterForm() {
               id="password"
               type="password"
               autoComplete="new-password"
+              aria-invalid={Boolean(errors.password)}
               error={Boolean(errors.password)}
               {...register('password')}
             />
@@ -102,12 +129,13 @@ export function RegisterForm() {
               id="confirmPassword"
               type="password"
               autoComplete="new-password"
+              aria-invalid={Boolean(errors.confirmPassword)}
               error={Boolean(errors.confirmPassword)}
               {...register('confirmPassword')}
             />
           </FormField>
 
-          <Button type="submit" className="w-full" loading={isLoading}>
+          <Button type="submit" className="w-full" loading={isLoading} disabled={isLoading}>
             Create account
           </Button>
         </form>

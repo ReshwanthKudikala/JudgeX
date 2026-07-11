@@ -6,6 +6,8 @@ import axios, {
 
 import { useAuthStore } from '@/store/auth.store';
 import { ApiError, type ApiEnvelope } from '@/types';
+import { notifyUnauthorized } from '@/utils/auth-events';
+import { getFriendlyErrorMessage } from '@/utils/errors';
 
 const baseURL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ||
@@ -31,16 +33,49 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiEnvelope<unknown>>) => {
-    const status = error.response?.status ?? 0;
-    const body = error.response?.data;
-    const code = body?.error?.code ?? (status === 401 ? 'UNAUTHENTICATED' : 'REQUEST_FAILED');
+    // Network / CORS / offline — no HTTP response.
+    if (!error.response) {
+      return Promise.reject(
+        new ApiError(
+          0,
+          'NETWORK_ERROR',
+          'Unable to reach the server. Check your connection and try again.',
+        ),
+      );
+    }
+
+    const status = error.response.status;
+    const body = error.response.data;
+    const code =
+      body?.error?.code ??
+      (status === 401
+        ? 'UNAUTHENTICATED'
+        : status === 403
+          ? 'FORBIDDEN'
+          : status === 404
+            ? 'NOT_FOUND'
+            : 'REQUEST_FAILED');
+
     const message =
       body?.error?.message ||
-      error.message ||
-      'Something went wrong. Please try again.';
+      getFriendlyErrorMessage(
+        new ApiError(status, code, ''),
+        error.message || 'Something went wrong. Please try again.',
+      );
 
-    if (status === 401) {
+    // Skip auto-logout for credential failures on login/register themselves.
+    const requestUrl = error.config?.url ?? '';
+    const isAuthCredentialRequest =
+      requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register');
+    const isSessionProbe = requestUrl.includes('/auth/me');
+
+    if (status === 401 && !isAuthCredentialRequest) {
+      const hadSession = Boolean(useAuthStore.getState().token);
       useAuthStore.getState().logout();
+      // Session probe handles its own toast; avoid double notifications.
+      if (hadSession && !isSessionProbe) {
+        notifyUnauthorized(message || 'Your session has expired. Please sign in again.');
+      }
     }
 
     return Promise.reject(
@@ -50,7 +85,9 @@ apiClient.interceptors.response.use(
 );
 
 /** Unwrap the standard `{ success, data }` envelope. */
-export async function unwrapData<T>(promise: Promise<{ data: ApiEnvelope<T> }>): Promise<T> {
+export async function unwrapData<T>(
+  promise: Promise<{ data: ApiEnvelope<T> }>,
+): Promise<T> {
   const { data: envelope } = await promise;
   if (!envelope.success) {
     throw new ApiError(

@@ -5,11 +5,13 @@ export interface AuthTokensPayload {
   accessToken: string;
 }
 
+/** Payload sent to POST /auth/login (backend requires email). */
 export interface LoginInput {
   email: string;
   password: string;
 }
 
+/** Payload sent to POST /auth/register. */
 export interface RegisterInput {
   username: string;
   email: string;

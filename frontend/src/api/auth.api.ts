@@ -18,7 +18,10 @@ export interface AuthSession {
 
 export async function login(input: LoginInput): Promise<AuthSession> {
   const data = await unwrapData(
-    apiClient.post<ApiEnvelope<AuthSessionDto>>('/auth/login', input),
+    apiClient.post<ApiEnvelope<AuthSessionDto>>('/auth/login', {
+      email: input.email,
+      password: input.password,
+    }),
   );
   return {
     user: mapUser(data.user),
@@ -26,9 +29,17 @@ export async function login(input: LoginInput): Promise<AuthSession> {
   };
 }
 
+/**
+ * Creates an account. Backend returns a JWT; callers may discard it when the
+ * product flow redirects to Login instead of auto-signing-in.
+ */
 export async function register(input: RegisterInput): Promise<AuthSession> {
   const data = await unwrapData(
-    apiClient.post<ApiEnvelope<AuthSessionDto>>('/auth/register', input),
+    apiClient.post<ApiEnvelope<AuthSessionDto>>('/auth/register', {
+      username: input.username,
+      email: input.email,
+      password: input.password,
+    }),
   );
   return {
     user: mapUser(data.user),

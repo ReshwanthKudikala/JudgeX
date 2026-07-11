@@ -1,19 +1,20 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
+import { Spinner } from '@/components/common/Spinner';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
-import { Spinner } from '@/components/common/Spinner';
 
-/** Requires a persisted JWT. Guests are redirected to login. */
+/** Requires a validated JWT. Guests are redirected to login (with return path). */
 export function ProtectedRoute() {
   const location = useLocation();
   const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
-  if (!isHydrated) {
+  if (!isHydrated || isValidatingSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Spinner size="lg" label="Loading session…" />
+      <div className="flex min-h-[50vh] items-center justify-center" role="status">
+        <Spinner size="lg" label="Checking session…" />
       </div>
     );
   }
