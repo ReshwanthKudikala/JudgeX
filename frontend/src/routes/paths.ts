@@ -4,7 +4,7 @@ export const paths = {
   register: '/register',
   problems: '/problems',
   /** Detail route uses the problem slug (backend resource key). */
-  problemDetail: (slug = ':problemId') => `/problems/${slug}`,
+  problemDetail: (slug = ':slug') => `/problems/${slug}`,
   leaderboard: '/leaderboard',
   profile: '/profile',
 } as const;

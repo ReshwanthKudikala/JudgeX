@@ -24,6 +24,28 @@ export interface ProblemSummary {
   solvedByMe?: boolean;
 }
 
+/** Example shape when/if the detail API includes samples. */
+export interface ProblemExample {
+  input: string;
+  output: string;
+  explanation?: string | null;
+}
+
+/**
+ * Full problem from GET /problems/:slug (live backend fields + optional future keys).
+ */
+export interface ProblemDetail extends ProblemSummary {
+  statement: string;
+  constraintsText?: string | null;
+  createdBy?: string | null;
+  /** Forward-compatible — not returned by the current detail endpoint. */
+  examples?: ProblemExample[];
+  /** Forward-compatible — not returned by the current detail endpoint. */
+  notes?: string | null;
+  /** Forward-compatible alias some APIs use instead of constraintsText. */
+  constraints?: string | null;
+}
+
 export interface PaginationMeta {
   page: number;
   limit: number;

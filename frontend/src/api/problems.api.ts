@@ -1,4 +1,4 @@
-import { apiClient, unwrapData, unwrapEnvelope } from '@/api/client';
+import { apiClient, unwrapEnvelope } from '@/api/client';
 import type { ApiEnvelope } from '@/types';
 import type {
   ProblemListParams,
@@ -50,9 +50,5 @@ export async function listProblems(
   };
 }
 
-/** GET /problems/:slug — detail (typed for later sprints). */
-export async function getProblemBySlug(slug: string): Promise<ProblemSummary> {
-  return unwrapData(
-    apiClient.get<ApiEnvelope<ProblemSummary>>(`/problems/${encodeURIComponent(slug)}`),
-  );
-}
+/** @deprecated Prefer `@/api/problem.api` — kept as a thin re-export. */
+export { getProblemBySlug } from '@/api/problem.api';

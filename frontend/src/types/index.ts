@@ -5,6 +5,8 @@ export { mapUser } from './user';
 export type {
   ProblemDifficulty,
   ProblemSummary,
+  ProblemDetail,
+  ProblemExample,
   ProblemListParams,
   ProblemListResult,
   PaginationMeta,
