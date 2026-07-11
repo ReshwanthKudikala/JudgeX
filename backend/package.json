@@ -14,7 +14,8 @@
     "worker:judge:dev": "nodemon src/workers/judge.worker.js",
     "worker:cleanup": "node src/workers/cleanup.worker.js",
     "test": "node tests/integration/run.js",
-    "test:integration": "node tests/integration/run.js"
+    "test:integration": "node tests/integration/run.js",
+    "test:e2e": "node tests/e2e/run.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

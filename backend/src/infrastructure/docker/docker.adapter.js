@@ -148,6 +148,31 @@ async function copyFiles(sandbox, files = []) {
  * @param {string[]} [opts.env] - additional environment (["K=V", …]).
  * @returns {Promise<{stdout:string, stderr:string, exitCode:number|null, timedOut:boolean, durationMs:number}>}
  */
+// Single-quote escape for embedding argv into `sh -c` (Alpine ash / bash).
+function shellSingleQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Wait until a Docker exec has finished, then return its inspect payload.
+ * Polling avoids races where the attach stream ends before ExitCode is set
+ * (common with dockerode on Windows / short-lived processes).
+ */
+async function waitForExecInspect(exec, { timedOutFlag, pollMs = 25 } = {}) {
+  for (;;) {
+    const info = await exec.inspect();
+    if (!info.Running) return info;
+    if (timedOutFlag && timedOutFlag.value) {
+      // Container kill is in flight; keep polling briefly for a terminal inspect.
+      return info;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => {
+      setTimeout(resolve, pollMs);
+    });
+  }
+}
+
 async function executeCommand(sandbox, { cmd, input, timeoutMs, workdir, env } = {}) {
   if (!sandbox || !sandbox.container) {
     throw new DockerError('executeCommand requires a running sandbox.');
@@ -160,19 +185,33 @@ async function executeCommand(sandbox, { cmd, input, timeoutMs, workdir, env } =
   const hasInput = input !== undefined && input !== null;
   const limitMs = timeoutMs ?? config.judge.timeLimitMs;
 
+  // Feed stdin via a workspace file + shell redirect. Ending a dockerode hijack
+  // duplex after write() closes the *entire* attach stream on some platforms
+  // (notably Docker Desktop / Windows), which drops stdout and leaves ExitCode
+  // null — every interactive submission then looks like a runtime error.
+  let runCmd = cmd;
+  if (hasInput) {
+    const stdinName = '.judgex_stdin';
+    await fs.writeFile(path.join(sandbox.hostDir, stdinName), input);
+    const redirected = `${cmd.map(shellSingleQuote).join(' ')} < ${shellSingleQuote(
+      path.posix.join(sandbox.workdir, stdinName),
+    )}`;
+    runCmd = ['sh', '-c', redirected];
+  }
+
   let exec;
   let stream;
   try {
     exec = await container.exec({
-      Cmd: cmd,
+      Cmd: runCmd,
       AttachStdout: true,
       AttachStderr: true,
-      AttachStdin: hasInput,
+      AttachStdin: false,
       WorkingDir: workdir || sandbox.workdir,
       Env: env,
       User: sandbox.user,
     });
-    stream = await exec.start({ hijack: hasInput, stdin: hasInput });
+    stream = await exec.start({ hijack: true, stdin: false });
   } catch (err) {
     throw new DockerError(`Failed to exec in sandbox: ${err.message}`);
   }
@@ -193,23 +232,13 @@ async function executeCommand(sandbox, { cmd, input, timeoutMs, workdir, env } =
   });
   container.modem.demuxStream(stream, stdoutSink, stderrSink);
 
-  if (hasInput) {
-    stream.write(input);
-    stream.end();
-  }
-
   const startedAt = Date.now();
-  let timedOut = false;
+  const timedOutFlag = { value: false };
   let timer = null;
-
-  const finished = new Promise((resolve, reject) => {
-    stream.on('end', resolve);
-    stream.on('error', reject);
-  });
 
   if (limitMs && limitMs > 0) {
     timer = setTimeout(async () => {
-      timedOut = true;
+      timedOutFlag.value = true;
       // Untrusted code cannot be trusted to stop itself — kill the container.
       try {
         await container.kill({ signal: 'SIGKILL' });
@@ -220,25 +249,26 @@ async function executeCommand(sandbox, { cmd, input, timeoutMs, workdir, env } =
     if (typeof timer.unref === 'function') timer.unref();
   }
 
-  try {
-    await finished;
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-
   let exitCode = null;
   try {
-    const info = await exec.inspect();
-    exitCode = info.ExitCode;
+    const info = await waitForExecInspect(exec, { timedOutFlag });
+    exitCode = typeof info.ExitCode === 'number' ? info.ExitCode : null;
   } catch {
     /* exec metadata unavailable (e.g. container killed) */
+  } finally {
+    if (timer) clearTimeout(timer);
+    try {
+      stream.destroy();
+    } catch {
+      /* ignore */
+    }
   }
 
   return {
     stdout: Buffer.concat(stdoutChunks).toString('utf8'),
     stderr: Buffer.concat(stderrChunks).toString('utf8'),
     exitCode,
-    timedOut,
+    timedOut: timedOutFlag.value,
     durationMs: Date.now() - startedAt,
   };
 }

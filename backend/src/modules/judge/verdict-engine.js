@@ -45,7 +45,9 @@ function generateVerdict({ compileResult, runResult, comparisonResult } = {}) {
     verdict = VERDICTS.COMPILE_ERROR;
   } else if (runResult && runResult.timedOut === true) {
     verdict = VERDICTS.TLE;
-  } else if (runResult && runResult.exitCode !== 0) {
+  } else if (runResult && typeof runResult.exitCode === 'number' && runResult.exitCode !== 0) {
+    // Only a concrete non-zero exit is RE. null/undefined must not count as RE
+    // (that previously turned attach/inspect races into false runtime errors).
     verdict = VERDICTS.RUNTIME_ERROR;
   } else if (comparisonResult && comparisonResult.matches === false) {
     verdict = VERDICTS.WRONG_ANSWER;
