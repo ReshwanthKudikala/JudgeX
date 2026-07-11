@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Skeleton } from '@/components/common/Skeleton';
+import { useUserRank } from '@/features/leaderboard/hooks/useUserRank';
 import { SubmissionsErrorState } from '@/features/submissions/components/SubmissionsErrorState';
 import { SubmissionsTable } from '@/features/submissions/components/SubmissionsTable';
 import { VerdictBadge } from '@/features/submissions/components/VerdictBadge';
@@ -22,13 +23,29 @@ function formatJoinedDate(value?: string): string | null {
   });
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-lg border border-border bg-[#12151b] px-4 py-3">
+function StatCard({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: string | number;
+  href?: string;
+}) {
+  const body = (
+    <div className="rounded-lg border border-border bg-[#12151b] px-4 py-3 transition-colors hover:border-primary/40">
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted">{label}</p>
       <p className="mt-1 text-xl font-semibold text-white">{value}</p>
     </div>
   );
+  if (href) {
+    return (
+      <Link to={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+        {body}
+      </Link>
+    );
+  }
+  return body;
 }
 
 export function ProfilePage() {
@@ -37,6 +54,7 @@ export function ProfilePage() {
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
   const statsQuery = useSubmissionStats(Boolean(token));
+  const rankQuery = useUserRank(user?.id, Boolean(token));
 
   if (isValidatingSession || !user) {
     return (
@@ -55,19 +73,30 @@ export function ProfilePage() {
     (LANGUAGE_LABELS[progress.favouriteLanguage as SubmissionLanguage] ??
       progress.favouriteLanguage);
 
+  const rankDisplay =
+    rankQuery.data?.rank != null ? `#${rankQuery.data.rank}` : 'Unranked';
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-4">
-        <span
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-[#1a1a1a]"
-          aria-hidden
-        >
-          {user.username.charAt(0).toUpperCase()}
-        </span>
-        <div>
-          <h1 className="text-2xl font-semibold text-white">{user.username}</h1>
-          <p className="mt-0.5 text-sm text-muted">{user.email}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <span
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-[#1a1a1a]"
+            aria-hidden
+          >
+            {user.username.charAt(0).toUpperCase()}
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold text-white">{user.username}</h1>
+            <p className="mt-0.5 text-sm text-muted">{user.email}</p>
+          </div>
         </div>
+        <Link
+          to={paths.leaderboard}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          View leaderboard →
+        </Link>
       </div>
 
       {statsQuery.isError ? (
@@ -75,18 +104,34 @@ export function ProfilePage() {
           error={statsQuery.error}
           onRetry={() => void statsQuery.refetch()}
         />
-      ) : statsQuery.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+      ) : statsQuery.isLoading || rankQuery.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-20 w-full rounded-lg" />
           ))}
         </div>
-      ) : progress ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <StatCard label="Problems solved" value={progress.problemsSolved} />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard
+            label="Current rank"
+            value={rankDisplay}
+            href={paths.leaderboard}
+          />
+          <StatCard
+            label="Problems solved"
+            value={progress?.problemsSolved ?? rankQuery.data?.solved ?? 0}
+          />
+          <StatCard
+            label="Acceptance rate"
+            value={`${progress?.acceptanceRate ?? rankQuery.data?.acceptanceRate ?? 0}%`}
+          />
+        </div>
+      )}
+
+      {progress && !statsQuery.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard label="Total submissions" value={progress.totalSubmissions} />
           <StatCard label="Accepted" value={progress.totalAccepted} />
-          <StatCard label="Acceptance rate" value={`${progress.acceptanceRate}%`} />
           <StatCard label="Favourite language" value={favourite || '—'} />
         </div>
       ) : null}

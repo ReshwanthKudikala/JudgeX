@@ -1,1 +1,5 @@
-// Public interface and types exposed by the leaderboard module.
+// Types / constants surface for the leaderboard module.
+
+const { TIMEFRAMES, computeScore } = require('../statistics/statistics.constants');
+
+module.exports = { TIMEFRAMES, computeScore };

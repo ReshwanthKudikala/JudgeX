@@ -23,3 +23,9 @@ export type {
   AiCompileExplanation,
   SubmissionProblemSummary,
 } from './submissions';
+export type {
+  LeaderboardEntry,
+  LeaderboardTimeframe,
+  LeaderboardListParams,
+  LeaderboardListResult,
+} from './leaderboard';

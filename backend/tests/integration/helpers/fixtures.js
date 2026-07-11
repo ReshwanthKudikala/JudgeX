@@ -99,6 +99,28 @@ async function seedUserStatistics(userId, stats = {}) {
   );
 }
 
+/**
+ * Seed a judged submission row directly (for leaderboard ranking tests).
+ * Does not enqueue the worker.
+ */
+async function seedJudgedSubmission(userId, problemId, opts = {}) {
+  const { randomUUID } = require('crypto');
+  const id = opts.id || randomUUID();
+  const language = opts.language || 'python';
+  const verdict = opts.verdict || 'accepted';
+  const status = opts.status || 'completed';
+  const sourceCode = opts.sourceCode || 'print(1)';
+  const submittedAt = opts.submittedAt || new Date().toISOString();
+
+  await query(
+    `INSERT INTO submissions
+       (id, user_id, problem_id, language, source_code, status, verdict, submitted_at, judged_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $8::timestamptz)`,
+    [id, userId, problemId, language, sourceCode, status, verdict, submittedAt],
+  );
+  return id;
+}
+
 module.exports = {
   api,
   unique,
@@ -108,4 +130,5 @@ module.exports = {
   createUser,
   createPublishedProblem,
   seedUserStatistics,
+  seedJudgedSubmission,
 };

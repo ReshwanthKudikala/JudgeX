@@ -6,11 +6,13 @@
 const { leaderboardService } = require('./leaderboard.service');
 const { sendSuccess } = require('../../shared/http/response');
 
-// GET /leaderboard → 200 [ ...entries ] with meta.pagination
+// GET /leaderboard → 200 [ ...entries ] with meta.pagination (+ timeframe)
 async function getGlobalLeaderboard(req, res, next) {
   try {
-    const { entries, pagination } = await leaderboardService.getGlobalLeaderboard(req.query);
-    sendSuccess(req, res, 200, entries, { pagination });
+    const { entries, pagination, timeframe } = await leaderboardService.getGlobalLeaderboard(
+      req.query,
+    );
+    sendSuccess(req, res, 200, entries, { pagination, timeframe });
   } catch (err) {
     next(err);
   }
@@ -19,7 +21,9 @@ async function getGlobalLeaderboard(req, res, next) {
 // GET /leaderboard/users/:userId/rank → 200 { rank, userId, ... }
 async function getUserRank(req, res, next) {
   try {
-    const entry = await leaderboardService.getUserRank(req.params.userId);
+    const entry = await leaderboardService.getUserRank(req.params.userId, {
+      timeframe: req.query.timeframe,
+    });
     sendSuccess(req, res, 200, entry);
   } catch (err) {
     next(err);
