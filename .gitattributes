@@ -1,0 +1,20 @@
+# ---------- Shell scripts ----------
+*.sh text eol=lf
+
+# ---------- Docker ----------
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+
+# ---------- SQL ----------
+*.sql text eol=lf
+
+# ---------- Source ----------
+*.js text=auto
+*.json text=auto
+*.md text=auto
+*.yml text=auto
+*.yaml text=auto
+
+# ---------- Windows ----------
+*.bat text eol=crlf
+*.cmd text eol=crlf
