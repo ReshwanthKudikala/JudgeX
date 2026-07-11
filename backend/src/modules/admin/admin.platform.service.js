@@ -307,6 +307,7 @@ class AdminPlatformService {
       status: readiness.status || 'unknown',
       uptime: readiness.uptime ?? process.uptime(),
       version: readiness.version || null,
+      build: readiness.build || null,
       checks: {
         postgres: readiness.checks?.postgres || { ok: false },
         redis: readiness.checks?.redis || { ok: false },

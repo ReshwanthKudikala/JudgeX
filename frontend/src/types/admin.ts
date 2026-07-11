@@ -29,6 +29,11 @@ export interface AdminMonitoringSnapshot {
   status: string;
   uptime: number;
   version: string | null;
+  build?: {
+    gitSha: string;
+    buildTime: string | null;
+    node: string;
+  } | null;
   checks: {
     postgres: { ok: boolean; latencyMs?: number; error?: string };
     redis: { ok: boolean; latencyMs?: number; error?: string };

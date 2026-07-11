@@ -1,1 +1,150 @@
-# Placeholder: CI pipeline (install, lint, test for backend and frontend).
+# JudgeX CI — fail-fast lint/build/test on PR and main.
+# Caches npm dependencies per package lockfile.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          VITE_API_BASE_URL: /api/v1
+          VITE_APP_NAME: JudgeX
+          VITE_APP_VERSION: ${{ github.ref_name }}
+          VITE_GIT_SHA: ${{ github.sha }}
+          VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
+        run: npm run build
+
+  backend-lint:
+    name: Backend (lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint (syntax)
+        run: npm run lint
+
+  backend-unit:
+    name: Backend (unit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm run test:unit
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-unit-secret-change-me-32chars!!!!
+          LOG_LEVEL: error
+
+  backend-integration:
+    name: Backend (integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: judgex
+          POSTGRES_PASSWORD: judgex
+          POSTGRES_DB: judgex
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U judgex -d judgex"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Integration tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-integration-secret-change-me-32chars
+          LOG_LEVEL: error
+          DATABASE_URL: postgres://judgex:judgex@localhost:5432/judgex
+          REDIS_URL: redis://localhost:6379
+          DB_REQUIRED: "true"
+          REDIS_REQUIRED: "false"
+          BCRYPT_SALT_ROUNDS: "4"
+          INFRA_STARTUP_RETRIES: "10"
+          INFRA_STARTUP_RETRY_DELAY_MS: "500"
+          RATE_LIMIT_ENABLED: "false"

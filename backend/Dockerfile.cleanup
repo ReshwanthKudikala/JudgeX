@@ -12,6 +12,13 @@ RUN npm ci --omit=dev && npm cache clean --force
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ARG APP_VERSION=0.1.0
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=
+ENV APP_VERSION=$APP_VERSION \
+    GIT_SHA=$GIT_SHA \
+    BUILD_TIME=$BUILD_TIME
+
 RUN apk add --no-cache tini \
   && addgroup -S judgex && adduser -S -G judgex judgex
 
@@ -22,6 +29,8 @@ COPY scripts ./scripts
 
 RUN chown -R judgex:judgex /app
 USER judgex
+
+STOPSIGNAL SIGTERM
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "src/workers/cleanup.worker.js"]

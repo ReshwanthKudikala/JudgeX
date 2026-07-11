@@ -16,6 +16,8 @@ describe('Health / readiness', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.status, 'ok');
     assert.ok(res.body.version);
+    assert.ok(res.body.build);
+    assert.ok(res.body.build.gitSha);
     assert.equal(typeof res.body.uptime, 'number');
     assert.equal(res.body.checks, undefined);
   });

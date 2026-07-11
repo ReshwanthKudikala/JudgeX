@@ -134,6 +134,15 @@ export function AdminDashboardPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
                 <div>
+                  <p className="text-muted">Release</p>
+                  <p className="text-foreground">
+                    v{mon.version ?? '—'}
+                    {mon.build?.gitSha && mon.build.gitSha !== 'unknown'
+                      ? ` · ${mon.build.gitSha.slice(0, 7)}`
+                      : ''}
+                  </p>
+                </div>
+                <div>
                   <p className="text-muted">Queue depth</p>
                   <p className="text-foreground">
                     waiting {depth?.waiting ?? 0} · active {depth?.active ?? 0} · failed{' '}

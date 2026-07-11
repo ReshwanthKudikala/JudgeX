@@ -1,16 +1,20 @@
 # =========================================================================
 # JudgeX — Production Compose Stack
-# Starts the full backend runtime (API + workers) with Postgres and Redis.
+# Services: nginx, frontend, api (backend), worker, cleanup, postgres, redis
 #
 # Usage:
 #   cp .env.production.example .env.production   # edit secrets
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
-# Dev-only infra (Postgres/Redis/Ollama for host-run apps) remains in
-# docker-compose.yml — do not confuse the two files.
+# Dev-only infra remains in docker-compose.yml.
 # =========================================================================
 
 name: judgex-prod
+
+x-build-args: &build_args
+  APP_VERSION: ${APP_VERSION:-0.1.0}
+  GIT_SHA: ${GIT_SHA:-unknown}
+  BUILD_TIME: ${BUILD_TIME:-}
 
 services:
   postgres:
@@ -40,7 +44,15 @@ services:
     image: redis:7-alpine
     container_name: judgex-prod-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    # AOF persistence — see docs/DEPLOYMENT.md § Backups
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec",
+      ]
     volumes:
       - judgex_redisdata:/data
     networks:
@@ -56,9 +68,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.api
-    image: judgex-api:latest
+      args:
+        <<: *build_args
+    image: judgex-api:${APP_VERSION:-latest}
     container_name: judgex-prod-api
     restart: unless-stopped
+    stop_grace_period: 20s
     env_file:
       - .env.production
     environment:
@@ -68,8 +83,11 @@ services:
       REDIS_URL: redis://redis:6379
       DB_REQUIRED: "true"
       REDIS_REQUIRED: "true"
-    ports:
-      - "${API_HOST_PORT:-4000}:4000"
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-}
+      # Browser hits nginx origin; CORS must allow that public origin.
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN to your public site origin}
     networks:
       - judgex
     depends_on:
@@ -90,13 +108,17 @@ services:
       retries: 10
       start_period: 45s
 
-  judge-worker:
+  # Alias name requested by Sprint 34: "worker"
+  worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.judge
-    image: judgex-judge-worker:latest
-    container_name: judgex-prod-judge-worker
+      args:
+        <<: *build_args
+    image: judgex-judge-worker:${APP_VERSION:-latest}
+    container_name: judgex-prod-worker
     restart: unless-stopped
+    stop_grace_period: 30s
     env_file:
       - .env.production
     environment:
@@ -105,8 +127,10 @@ services:
       REDIS_URL: redis://redis:6379
       DB_REQUIRED: "true"
       REDIS_REQUIRED: "true"
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-}
     volumes:
-      # Host Docker daemon — required to create language sandbox containers.
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - judgex
@@ -122,9 +146,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.cleanup
-    image: judgex-cleanup-worker:latest
+      args:
+        <<: *build_args
+    image: judgex-cleanup-worker:${APP_VERSION:-latest}
     container_name: judgex-prod-cleanup-worker
     restart: unless-stopped
+    stop_grace_period: 20s
     env_file:
       - .env.production
     environment:
@@ -133,6 +160,9 @@ services:
       REDIS_URL: redis://redis:6379
       DB_REQUIRED: "true"
       REDIS_REQUIRED: "true"
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-}
     networks:
       - judgex
     depends_on:
@@ -142,6 +172,59 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_APP_NAME: ${VITE_APP_NAME:-JudgeX}
+        VITE_APP_VERSION: ${APP_VERSION:-0.1.0}
+        VITE_GIT_SHA: ${GIT_SHA:-unknown}
+        VITE_BUILD_TIME: ${BUILD_TIME:-}
+    image: judgex-frontend:${APP_VERSION:-latest}
+    container_name: judgex-prod-frontend
+    restart: unless-stopped
+    networks:
+      - judgex
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  nginx:
+    build:
+      context: ./docker/nginx
+      dockerfile: Dockerfile
+    image: judgex-nginx:${APP_VERSION:-latest}
+    container_name: judgex-prod-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_HOST_PORT:-80}:80"
+      # Map 443 when TLS certs are mounted (see docs/DEPLOYMENT.md).
+      - "${HTTPS_HOST_PORT:-443}:443"
+    volumes:
+      # Optional TLS material (leave empty dir if unused).
+      - ${NGINX_CERTS_DIR:-./docker/nginx/certs}:/etc/nginx/certs:ro
+    networks:
+      - judgex
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 networks:
   judgex:

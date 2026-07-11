@@ -3,7 +3,7 @@
 // Extended checks (worker heartbeat, Docker) are reported without failing API readiness
 // when the API host does not run the judge worker / Docker daemon.
 
-const pkg = require('../../../package.json');
+const { getBuildInfo } = require('../../shared/build-info');
 const {
   checkPostgresHealth,
   checkRedisHealth,
@@ -51,11 +51,17 @@ async function checkBullmqHealth() {
  * Liveness payload — no dependency checks (process is alive).
  */
 function getLiveness() {
+  const build = getBuildInfo();
   return {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    version: pkg.version,
+    version: build.version,
+    build: {
+      gitSha: build.gitSha,
+      buildTime: build.buildTime,
+      node: build.node,
+    },
   };
 }
 
@@ -78,6 +84,7 @@ async function getReadiness() {
   const ready = Boolean(postgres.ok && redis.ok && bullmq.ok);
   const degraded = ready && (!worker.ok || !docker.ok);
 
+  const build = getBuildInfo();
   return {
     ready,
     degraded,
@@ -85,7 +92,12 @@ async function getReadiness() {
     status: ready ? 'ready' : 'not_ready',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    version: pkg.version,
+    version: build.version,
+    build: {
+      gitSha: build.gitSha,
+      buildTime: build.buildTime,
+      node: build.node,
+    },
     checks,
     diagnostics: {
       queue: bullmq.ok
