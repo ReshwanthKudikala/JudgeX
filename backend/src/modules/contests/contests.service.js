@@ -15,6 +15,11 @@ const {
   toContestSummary,
   toContestProblem,
 } = require('./contests.helpers');
+const {
+  getCachedContestList,
+  setCachedContestList,
+  invalidateContestListCache,
+} = require('./contests.cache');
 
 function minutesBetween(start, end) {
   const ms = new Date(end).getTime() - new Date(start).getTime();
@@ -31,10 +36,10 @@ class ContestService {
   }
 
   async #assertProblemsExist(problemIds, client) {
-    for (const problemId of problemIds) {
-      // eslint-disable-next-line no-await-in-loop
-      const problem = await this.problemRepository.findById(problemId, client);
-      if (!problem) {
+    const unique = [...new Set(problemIds)];
+    const existing = await this.problemRepository.findExistingIds(unique, client);
+    for (const problemId of unique) {
+      if (!existing.has(problemId)) {
         throw new NotFoundError(`Problem not found: ${problemId}`);
       }
     }
@@ -58,7 +63,7 @@ class ContestService {
       end_time: endTime,
     });
 
-    return withTransaction(async (client) => {
+    const detail = await withTransaction(async (client) => {
       if (Array.isArray(data.problems) && data.problems.length > 0) {
         await this.#assertProblemsExist(
           data.problems.map((p) => p.problemId),
@@ -90,6 +95,8 @@ class ContestService {
         includeProblems: true,
       });
     });
+    await invalidateContestListCache();
+    return detail;
   }
 
   async updateContest(id, data) {
@@ -115,7 +122,7 @@ class ContestService {
       end_time: endTime,
     });
 
-    return withTransaction(async (client) => {
+    const detail = await withTransaction(async (client) => {
       if (Array.isArray(data.problems)) {
         await this.#assertProblemsExist(
           data.problems.map((p) => p.problemId),
@@ -133,11 +140,14 @@ class ContestService {
         includeProblems: true,
       });
     });
+    await invalidateContestListCache();
+    return detail;
   }
 
   async deleteContest(id) {
     const row = await this.contestRepository.softDelete(id);
     if (!row) throw new NotFoundError('Contest not found.');
+    await invalidateContestListCache();
     return { id: row.id, deleted: true };
   }
 
@@ -151,24 +161,34 @@ class ContestService {
   }
 
   async listContests(filters = {}, viewer = null) {
-    const { rows, total, page, limit } = await this.contestRepository.listContests({
-      ...filters,
-      visibility: 'public',
-    });
+    const cacheFilters = {
+      page: filters.page,
+      limit: filters.limit,
+      status: filters.status || '',
+      sort: filters.sort || '',
+    };
 
-    const entries = [];
-    for (const row of rows) {
-      let joined = false;
-      if (viewer?.id) {
-        // eslint-disable-next-line no-await-in-loop
-        const p = await this.contestRepository.findParticipant(row.id, viewer.id);
-        joined = Boolean(p);
-      }
-      entries.push(toContestSummary(row, { joined }));
+    let listResult = await getCachedContestList(cacheFilters);
+    if (!listResult) {
+      listResult = await this.contestRepository.listContests({
+        ...filters,
+        visibility: 'public',
+      });
+      await setCachedContestList(cacheFilters, listResult);
     }
 
+    const { rows, total, page, limit } = listResult;
+    const joinedIds = viewer?.id
+      ? await this.contestRepository.findParticipatingContestIds(
+          viewer.id,
+          rows.map((r) => r.id),
+        )
+      : new Set();
+
     return {
-      contests: entries,
+      contests: rows.map((row) =>
+        toContestSummary(row, { joined: joinedIds.has(row.id) }),
+      ),
       pagination: {
         page,
         limit,

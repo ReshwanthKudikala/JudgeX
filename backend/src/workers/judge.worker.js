@@ -21,10 +21,13 @@ const {
   trackError,
   registerProcessErrorHandlers,
 } = require('../shared/observability/error-tracking');
+const {
+  invalidateLeaderboardCache,
+} = require('../modules/leaderboard/leaderboard.cache');
 
 const log = createLogger({ component: 'judge-worker' });
 
-const CONCURRENCY = 1;
+const CONCURRENCY = Math.max(1, Number(config.judge.workerConcurrency) || 2);
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
 const TERMINAL_STATUSES = new Set(['completed', 'error']);
@@ -58,6 +61,11 @@ async function processJob(job) {
     submissionId,
     jobId: job.id,
   });
+
+  if (job.data.enqueuedAt) {
+    const waitMs = Date.now() - new Date(job.data.enqueuedAt).getTime();
+    metrics.recordQueueWait(waitMs / 1000);
+  }
 
   const started = Date.now();
   jobLog.info('Processing judge job', { attempt: job.attemptsMade + 1 });
@@ -104,6 +112,10 @@ async function processJob(job) {
     const durationSeconds = (Date.now() - started) / 1000;
     metrics.recordJudgeDuration(outcome.verdict, durationSeconds);
     metrics.recordJudgeJob('completed');
+    // Acceptance (and rate) changes rankings; short TTL also covers other verdicts.
+    if (outcome.verdict === 'accepted') {
+      await invalidateLeaderboardCache();
+    }
     jobLog.info('Submission judged', {
       verdict: outcome.verdict,
       durationMs: Math.round(durationSeconds * 1000),

@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 import { cn } from '@/utils/cn';
 import type { LeaderboardEntry } from '@/types/leaderboard';
 
@@ -12,7 +14,7 @@ function formatRate(rate: number): string {
   return `${rate % 1 === 0 ? rate.toFixed(0) : rate.toFixed(2)}%`;
 }
 
-export function LeaderboardTable({
+export const LeaderboardTable = memo(function LeaderboardTable({
   entries,
   currentUserId,
   isFetching = false,
@@ -101,4 +103,4 @@ export function LeaderboardTable({
       </table>
     </div>
   );
-}
+});

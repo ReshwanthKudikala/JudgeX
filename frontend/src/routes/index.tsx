@@ -1,33 +1,84 @@
+import { lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AuthGateway } from '@/routes/AuthGateway';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 import { PublicRoute } from '@/routes/PublicRoute';
 import { AdminRoute } from '@/routes/AdminRoute';
+import { LazyRoute } from '@/routes/LazyRoute';
 import { paths } from '@/routes/paths';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { MainLayout } from '@/layouts/MainLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { ProblemsPage } from '@/pages/ProblemsPage';
-import { ProblemDetailPage } from '@/pages/ProblemDetailPage';
-import { DiscussionDetailPage } from '@/pages/DiscussionDetailPage';
-import { SubmissionsPage } from '@/pages/SubmissionsPage';
-import { SubmissionDetailPage } from '@/pages/SubmissionDetailPage';
-import { ContestsPage } from '@/pages/ContestsPage';
-import { ContestDetailPage } from '@/pages/ContestDetailPage';
-import { ContestScoreboardPage } from '@/pages/ContestScoreboardPage';
-import { LeaderboardPage } from '@/pages/LeaderboardPage';
-import { ProfilePage } from '@/pages/ProfilePage';
-import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
-import { AdminUsersPage } from '@/pages/AdminUsersPage';
-import { AdminModerationPage } from '@/pages/AdminModerationPage';
-import { AdminAnalyticsPage } from '@/pages/AdminAnalyticsPage';
-import { AdminQueuePage } from '@/pages/AdminQueuePage';
-import { AdminAuditLogsPage } from '@/pages/AdminAuditLogsPage';
-import { AdminLayout } from '@/features/admin';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+
+const DashboardPage = lazy(() =>
+  import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const ProblemsPage = lazy(() =>
+  import('@/pages/ProblemsPage').then((m) => ({ default: m.ProblemsPage })),
+);
+const ProblemDetailPage = lazy(() =>
+  import('@/pages/ProblemDetailPage').then((m) => ({ default: m.ProblemDetailPage })),
+);
+const DiscussionDetailPage = lazy(() =>
+  import('@/pages/DiscussionDetailPage').then((m) => ({
+    default: m.DiscussionDetailPage,
+  })),
+);
+const SubmissionsPage = lazy(() =>
+  import('@/pages/SubmissionsPage').then((m) => ({ default: m.SubmissionsPage })),
+);
+const SubmissionDetailPage = lazy(() =>
+  import('@/pages/SubmissionDetailPage').then((m) => ({
+    default: m.SubmissionDetailPage,
+  })),
+);
+const ContestsPage = lazy(() =>
+  import('@/pages/ContestsPage').then((m) => ({ default: m.ContestsPage })),
+);
+const ContestDetailPage = lazy(() =>
+  import('@/pages/ContestDetailPage').then((m) => ({ default: m.ContestDetailPage })),
+);
+const ContestScoreboardPage = lazy(() =>
+  import('@/pages/ContestScoreboardPage').then((m) => ({
+    default: m.ContestScoreboardPage,
+  })),
+);
+const LeaderboardPage = lazy(() =>
+  import('@/pages/LeaderboardPage').then((m) => ({ default: m.LeaderboardPage })),
+);
+const ProfilePage = lazy(() =>
+  import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
+);
+const AdminDashboardPage = lazy(() =>
+  import('@/pages/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })),
+);
+const AdminUsersPage = lazy(() =>
+  import('@/pages/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
+);
+const AdminModerationPage = lazy(() =>
+  import('@/pages/AdminModerationPage').then((m) => ({
+    default: m.AdminModerationPage,
+  })),
+);
+const AdminAnalyticsPage = lazy(() =>
+  import('@/pages/AdminAnalyticsPage').then((m) => ({
+    default: m.AdminAnalyticsPage,
+  })),
+);
+const AdminQueuePage = lazy(() =>
+  import('@/pages/AdminQueuePage').then((m) => ({ default: m.AdminQueuePage })),
+);
+const AdminAuditLogsPage = lazy(() =>
+  import('@/pages/AdminAuditLogsPage').then((m) => ({
+    default: m.AdminAuditLogsPage,
+  })),
+);
+const AdminLayout = lazy(() =>
+  import('@/features/admin').then((m) => ({ default: m.AdminLayout })),
+);
 
 export const router = createBrowserRouter([
   {
@@ -48,49 +99,154 @@ export const router = createBrowserRouter([
       {
         element: <MainLayout />,
         children: [
-          { path: paths.home, element: <DashboardPage /> },
-          { path: paths.problems, element: <ProblemsPage /> },
+          {
+            path: paths.home,
+            element: (
+              <LazyRoute>
+                <DashboardPage />
+              </LazyRoute>
+            ),
+          },
+          {
+            path: paths.problems,
+            element: (
+              <LazyRoute>
+                <ProblemsPage />
+              </LazyRoute>
+            ),
+          },
           {
             path: paths.discussionDetail(),
-            element: <DiscussionDetailPage />,
+            element: (
+              <LazyRoute>
+                <DiscussionDetailPage />
+              </LazyRoute>
+            ),
           },
-          { path: paths.problemDetail(), element: <ProblemDetailPage /> },
-          { path: paths.contests, element: <ContestsPage /> },
+          {
+            path: paths.problemDetail(),
+            element: (
+              <LazyRoute>
+                <ProblemDetailPage />
+              </LazyRoute>
+            ),
+          },
+          {
+            path: paths.contests,
+            element: (
+              <LazyRoute>
+                <ContestsPage />
+              </LazyRoute>
+            ),
+          },
           {
             path: paths.contestScoreboard(),
-            element: <ContestScoreboardPage />,
+            element: (
+              <LazyRoute>
+                <ContestScoreboardPage />
+              </LazyRoute>
+            ),
           },
-          { path: paths.contestDetail(), element: <ContestDetailPage /> },
-          { path: paths.leaderboard, element: <LeaderboardPage /> },
+          {
+            path: paths.contestDetail(),
+            element: (
+              <LazyRoute>
+                <ContestDetailPage />
+              </LazyRoute>
+            ),
+          },
+          {
+            path: paths.leaderboard,
+            element: (
+              <LazyRoute>
+                <LeaderboardPage />
+              </LazyRoute>
+            ),
+          },
           {
             element: <ProtectedRoute />,
             children: [
-              { path: paths.submissions, element: <SubmissionsPage /> },
+              {
+                path: paths.submissions,
+                element: (
+                  <LazyRoute>
+                    <SubmissionsPage />
+                  </LazyRoute>
+                ),
+              },
               {
                 path: paths.submissionDetail(),
-                element: <SubmissionDetailPage />,
+                element: (
+                  <LazyRoute>
+                    <SubmissionDetailPage />
+                  </LazyRoute>
+                ),
               },
-              { path: paths.profile, element: <ProfilePage /> },
+              {
+                path: paths.profile,
+                element: (
+                  <LazyRoute>
+                    <ProfilePage />
+                  </LazyRoute>
+                ),
+              },
               {
                 element: <AdminRoute />,
                 children: [
                   {
-                    element: <AdminLayout />,
+                    element: (
+                      <LazyRoute>
+                        <AdminLayout />
+                      </LazyRoute>
+                    ),
                     children: [
-                      { path: paths.admin, element: <AdminDashboardPage /> },
-                      { path: paths.adminUsers, element: <AdminUsersPage /> },
+                      {
+                        path: paths.admin,
+                        element: (
+                          <LazyRoute>
+                            <AdminDashboardPage />
+                          </LazyRoute>
+                        ),
+                      },
+                      {
+                        path: paths.adminUsers,
+                        element: (
+                          <LazyRoute>
+                            <AdminUsersPage />
+                          </LazyRoute>
+                        ),
+                      },
                       {
                         path: paths.adminModeration,
-                        element: <AdminModerationPage />,
+                        element: (
+                          <LazyRoute>
+                            <AdminModerationPage />
+                          </LazyRoute>
+                        ),
                       },
                       {
                         path: paths.adminAnalytics,
-                        element: <AdminAnalyticsPage />,
+                        element: (
+                          <LazyRoute>
+                            <AdminAnalyticsPage />
+                          </LazyRoute>
+                        ),
                       },
-                      { path: paths.adminQueue, element: <AdminQueuePage /> },
+                      {
+                        path: paths.adminQueue,
+                        element: (
+                          <LazyRoute>
+                            <AdminQueuePage />
+                          </LazyRoute>
+                        ),
+                      },
                       {
                         path: paths.adminAuditLogs,
-                        element: <AdminAuditLogsPage />,
+                        element: (
+                          <LazyRoute>
+                            <AdminAuditLogsPage />
+                          </LazyRoute>
+                        ),
                       },
                     ],
                   },

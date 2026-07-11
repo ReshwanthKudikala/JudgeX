@@ -1,7 +1,6 @@
 // Redis cache for published editorials. Failures never break reads/writes.
 
-const { getRedis } = require('../../infrastructure/cache/redis.cache');
-const { logger } = require('../../shared/logger/logger');
+const { cacheGet, cacheSet, cacheDel } = require('../../infrastructure/cache/json-cache');
 
 const TTL_SECONDS = 300;
 const PREFIX = 'editorial:published:slug:';
@@ -11,43 +10,16 @@ function cacheKey(slug) {
 }
 
 async function getCachedEditorial(slug) {
-  try {
-    const redis = getRedis();
-    const raw = await redis.get(cacheKey(slug));
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (err) {
-    logger.warn('Editorial cache get failed', {
-      slug,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return null;
-  }
+  return cacheGet('editorial', cacheKey(slug));
 }
 
 async function setCachedEditorial(slug, payload) {
-  try {
-    const redis = getRedis();
-    await redis.set(cacheKey(slug), JSON.stringify(payload), 'EX', TTL_SECONDS);
-  } catch (err) {
-    logger.warn('Editorial cache set failed', {
-      slug,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  return cacheSet('editorial', cacheKey(slug), payload, TTL_SECONDS);
 }
 
 async function invalidateEditorialCache(slug) {
   if (!slug) return;
-  try {
-    const redis = getRedis();
-    await redis.del(cacheKey(slug));
-  } catch (err) {
-    logger.warn('Editorial cache invalidate failed', {
-      slug,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  await cacheDel(cacheKey(slug));
 }
 
 module.exports = {

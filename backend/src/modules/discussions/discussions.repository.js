@@ -157,12 +157,14 @@ class DiscussionRepository extends BaseRepository {
   }
 
   listCommentsByDiscussion(discussionId, client) {
+    // Soft cap keeps detail responses bounded; tree build still covers typical threads.
     return this.queryMany(
       `SELECT ${COMMENT_COLUMNS}
          FROM discussion_comments c
          INNER JOIN users u ON u.id = c.author_id
         WHERE c.discussion_id = $1
-        ORDER BY c.created_at ASC`,
+        ORDER BY c.created_at ASC
+        LIMIT 2000`,
       [discussionId],
       client,
     );

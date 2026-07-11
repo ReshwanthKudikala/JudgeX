@@ -10,6 +10,14 @@ const { NotFoundError, ConflictError } = require('../../shared/errors/http-error
 const { problemRepository } = require('./problems.repository');
 const { testCaseService } = require('./testcase.service');
 const { resolveTestCase } = require('../../infrastructure/storage/storage.adapter');
+const {
+  getCachedProblemDetail,
+  setCachedProblemDetail,
+  getCachedProblemList,
+  setCachedProblemList,
+  invalidateProblemDetail,
+  invalidateAllProblemLists,
+} = require('./problems.cache');
 
 // pg returns BIGINT as a string; normalize counters to numbers for the domain.
 function toNumber(value) {
@@ -76,6 +84,13 @@ function toProblemSummary(row) {
   };
 }
 
+function shouldCacheProblemList(filters = {}) {
+  // Skip admin / authored filters; cache public catalog pages (incl. unpublished mix).
+  if (filters.createdBy) return false;
+  if (filters.isPublished === false || filters.isPublished === 'false') return false;
+  return true;
+}
+
 class ProblemService {
   constructor({ problemRepository: repo, testCaseService: tcSvc } = {}) {
     this.problemRepository = repo || problemRepository;
@@ -90,6 +105,9 @@ class ProblemService {
    * @throws {NotFoundError} when no active problem has that slug.
    */
   async getProblemBySlug(slug) {
+    const cached = await getCachedProblemDetail(slug);
+    if (cached) return cached;
+
     const row = await this.problemRepository.findBySlug(slug);
     if (!row) {
       throw new NotFoundError('Problem not found.');
@@ -97,6 +115,10 @@ class ProblemService {
     const detail = toProblemDetail(row);
     const publicRows = await this.testCaseService.getPublicExamples(row.id);
     detail.examples = publicRows.map(toPublicExample);
+
+    if (detail.isPublished) {
+      await setCachedProblemDetail(slug, detail);
+    }
     return detail;
   }
 
@@ -120,8 +142,13 @@ class ProblemService {
    * @returns {Promise<{ problems: Object[], pagination: { page, limit, total, totalPages } }>}
    */
   async listProblems(filters = {}) {
+    if (shouldCacheProblemList(filters)) {
+      const cached = await getCachedProblemList(filters);
+      if (cached) return cached;
+    }
+
     const { rows, total, page, limit } = await this.problemRepository.listProblems(filters);
-    return {
+    const payload = {
       problems: rows.map(toProblemSummary),
       pagination: {
         page,
@@ -130,6 +157,11 @@ class ProblemService {
         totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
       },
     };
+
+    if (shouldCacheProblemList(filters)) {
+      await setCachedProblemList(filters, payload);
+    }
+    return payload;
   }
 
   /**
@@ -145,7 +177,7 @@ class ProblemService {
    * @throws {ConflictError} when the slug is already in use.
    */
   async createProblem(data) {
-    return withTransaction(async (client) => {
+    const created = await withTransaction(async (client) => {
       const existing = await this.problemRepository.findBySlug(data.slug, client);
       if (existing) {
         throw ProblemService.#slugConflict();
@@ -162,6 +194,8 @@ class ProblemService {
         throw err;
       }
     });
+    await invalidateAllProblemLists();
+    return created;
   }
 
   /**
@@ -179,7 +213,7 @@ class ProblemService {
    * @throws {ConflictError} when the new slug is already in use.
    */
   async updateProblem(id, data) {
-    return withTransaction(async (client) => {
+    const updated = await withTransaction(async (client) => {
       const existing = await this.problemRepository.findById(id, client);
       if (!existing) {
         throw new NotFoundError('Problem not found.');
@@ -198,7 +232,7 @@ class ProblemService {
           // Lost a race with a concurrent soft-delete between load and update.
           throw new NotFoundError('Problem not found.');
         }
-        return toProblemDetail(row);
+        return { detail: toProblemDetail(row), previousSlug: existing.slug };
       } catch (err) {
         if (err instanceof ConflictError) {
           throw ProblemService.#slugConflict();
@@ -206,6 +240,11 @@ class ProblemService {
         throw err;
       }
     });
+    await invalidateProblemDetail(updated.previousSlug);
+    if (updated.detail.slug !== updated.previousSlug) {
+      await invalidateProblemDetail(updated.detail.slug);
+    }
+    return updated.detail;
   }
 
   /**
@@ -217,13 +256,19 @@ class ProblemService {
    * @throws {NotFoundError} when no active problem has that id.
    */
   async deleteProblem(id) {
-    return withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
+      const existing = await this.problemRepository.findById(id, client);
+      if (!existing) {
+        throw new NotFoundError('Problem not found.');
+      }
       const deleted = await this.problemRepository.softDeleteProblem(id, client);
       if (!deleted) {
         throw new NotFoundError('Problem not found.');
       }
-      return { id: deleted.id, deleted: true };
+      return { id: deleted.id, deleted: true, slug: existing.slug };
     });
+    await invalidateProblemDetail(result.slug);
+    return { id: result.id, deleted: true };
   }
 
   static #slugConflict() {

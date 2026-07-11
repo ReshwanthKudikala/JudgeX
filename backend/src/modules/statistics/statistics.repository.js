@@ -90,20 +90,14 @@ class StatisticsRepository extends BaseRepository {
     const timeframe = filters.timeframe || 'all';
     const { sql: cte, params: cteParams } = this.#rankedCte(timeframe);
 
-    const countRow = await this.queryOne(
-      `${cte}
-       SELECT COUNT(*)::int AS total FROM ranked`,
-      cteParams,
-      client,
-    );
-    const total = countRow ? countRow.total : 0;
-
+    // Single CTE evaluation: window count avoids a second full aggregate pass.
     const limitIdx = cteParams.length + 1;
     const offsetIdx = cteParams.length + 2;
     const rows = await this.queryMany(
       `${cte}
        SELECT rank, user_id, username, problems_solved, total_accepted,
-              total_submissions, acceptance_rate, last_solved_at
+              total_submissions, acceptance_rate, last_solved_at,
+              COUNT(*) OVER()::int AS total
          FROM ranked
         ORDER BY rank ASC
         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
@@ -111,7 +105,14 @@ class StatisticsRepository extends BaseRepository {
       client,
     );
 
-    return { rows, total, page, limit, timeframe };
+    const total = rows.length > 0 ? rows[0].total : 0;
+    return {
+      rows: rows.map(({ total: _total, ...row }) => row),
+      total,
+      page,
+      limit,
+      timeframe,
+    };
   }
 
   /**

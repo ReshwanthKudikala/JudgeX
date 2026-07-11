@@ -219,6 +219,28 @@ class ContestRepository extends BaseRepository {
     );
   }
 
+  /**
+   * Batch membership: which of the given contest IDs the user has joined.
+   * @param {string} userId
+   * @param {string[]} contestIds
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Set<string>>}
+   */
+  async findParticipatingContestIds(userId, contestIds, client) {
+    if (!userId || !Array.isArray(contestIds) || contestIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.queryMany(
+      `SELECT contest_id
+         FROM contest_participants
+        WHERE user_id = $1
+          AND contest_id = ANY($2::uuid[])`,
+      [userId, contestIds],
+      client,
+    );
+    return new Set(rows.map((r) => r.contest_id));
+  }
+
   countParticipants(contestId, client) {
     return this.queryOne(
       `SELECT COUNT(*)::int AS total

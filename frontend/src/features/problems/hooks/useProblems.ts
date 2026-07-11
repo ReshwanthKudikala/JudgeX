@@ -68,7 +68,7 @@ export function useProblems() {
     queryKey: ['problems', queryParams],
     queryFn: () => listProblems(queryParams),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const problems = useMemo(() => {

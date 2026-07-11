@@ -70,6 +70,27 @@ const errorsTotal = new client.Counter({
   registers: [register],
 });
 
+const cacheAccessTotal = new client.Counter({
+  name: 'judgex_cache_access_total',
+  help: 'Redis JSON cache accesses (hit / miss / error)',
+  labelNames: ['namespace', 'result'],
+  registers: [register],
+});
+
+const queueWaitSeconds = new client.Histogram({
+  name: 'judgex_queue_wait_seconds',
+  help: 'Time from enqueue to worker start for judge jobs',
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+  registers: [register],
+});
+
+const dbQueryDurationSeconds = new client.Histogram({
+  name: 'judgex_db_query_duration_seconds',
+  help: 'PostgreSQL query latency at the shared query helper',
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+  registers: [register],
+});
+
 const metrics = {
   observeHttpRequest({ method, route, statusCode, durationSeconds }) {
     const labels = {
@@ -109,6 +130,25 @@ const metrics = {
 
   recordError(source) {
     errorsTotal.inc({ source: source || 'unknown' });
+  },
+
+  recordCacheAccess(namespace, result) {
+    cacheAccessTotal.inc({
+      namespace: namespace || 'unknown',
+      result: result || 'miss',
+    });
+  },
+
+  recordQueueWait(durationSeconds) {
+    if (Number.isFinite(durationSeconds) && durationSeconds >= 0) {
+      queueWaitSeconds.observe(durationSeconds);
+    }
+  },
+
+  observeDbQuery(durationSeconds) {
+    if (Number.isFinite(durationSeconds) && durationSeconds >= 0) {
+      dbQueryDurationSeconds.observe(durationSeconds);
+    }
   },
 
   async render() {

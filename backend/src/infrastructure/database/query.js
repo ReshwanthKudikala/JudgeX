@@ -5,6 +5,7 @@
 const { getPool } = require('./pool');
 const { logger } = require('../../shared/logger/logger');
 const { mapDatabaseError } = require('./errors');
+const { metrics } = require('../../shared/observability/metrics');
 
 /**
  * Execute a parameterized statement.
@@ -20,13 +21,16 @@ async function query(text, params = [], client) {
   const start = Date.now();
   try {
     const result = await executor.query(text, params);
+    const durationMs = Date.now() - start;
+    metrics.observeDbQuery(durationMs / 1000);
     // Never log parameter values — they may contain secrets/PII.
     logger.debug('SQL executed', {
-      durationMs: Date.now() - start,
+      durationMs,
       rowCount: result.rowCount,
     });
     return result;
   } catch (err) {
+    metrics.observeDbQuery((Date.now() - start) / 1000);
     throw mapDatabaseError(err);
   }
 }

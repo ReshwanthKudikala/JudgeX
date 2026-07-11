@@ -104,6 +104,25 @@ class ProblemRepository extends BaseRepository {
   }
 
   /**
+   * Batch existence check for problem UUIDs (avoids N+1 findById loops).
+   * @param {string[]} ids
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Set<string>>} ids that exist and are not soft-deleted
+   */
+  async findExistingIds(ids, client) {
+    if (!Array.isArray(ids) || ids.length === 0) return new Set();
+    const rows = await this.queryMany(
+      `SELECT id
+         FROM problems
+        WHERE id = ANY($1::uuid[])
+          AND is_deleted = false`,
+      [ids],
+      client,
+    );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
    * Paginated, filtered, sorted catalog listing of active problems.
    *
    * Soft-deleted rows are always excluded (a hard rule, not a caller filter).

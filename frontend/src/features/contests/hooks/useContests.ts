@@ -28,7 +28,7 @@ export function useContests(status?: ContestStatus | 'all') {
     queryKey: contestsQueryKey(queryParams),
     queryFn: () => listContests(queryParams),
     placeholderData: keepPreviousData,
-    staleTime: 15_000,
+    staleTime: 20_000,
   });
 
   const onPageChange = useCallback((next: number) => {

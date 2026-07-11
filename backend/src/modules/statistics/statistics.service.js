@@ -7,6 +7,12 @@
 const { NotFoundError } = require('../../shared/errors/http-errors');
 const { statisticsRepository } = require('./statistics.repository');
 const { TIMEFRAMES, computeScore } = require('./statistics.constants');
+const {
+  getCachedLeaderboard,
+  setCachedLeaderboard,
+  getCachedUserRank,
+  setCachedUserRank,
+} = require('../leaderboard/leaderboard.cache');
 
 function toNumber(value) {
   const n = Number(value);
@@ -51,12 +57,21 @@ class StatisticsService {
    */
   async getLeaderboard(filters = {}) {
     const timeframe = TIMEFRAMES.includes(filters.timeframe) ? filters.timeframe : 'all';
+    const cacheFilters = {
+      timeframe,
+      page: filters.page,
+      limit: filters.limit,
+    };
+
+    const cached = await getCachedLeaderboard(cacheFilters);
+    if (cached) return cached;
+
     const { rows, total, page, limit } = await this.statisticsRepository.getLeaderboard({
       ...filters,
       timeframe,
     });
 
-    return {
+    const payload = {
       entries: rows.map(toLeaderboardEntry),
       pagination: {
         page,
@@ -66,6 +81,8 @@ class StatisticsService {
       },
       timeframe,
     };
+    await setCachedLeaderboard(cacheFilters, payload);
+    return payload;
   }
 
   /**
@@ -76,11 +93,16 @@ class StatisticsService {
    */
   async getUserRank(userId, opts = {}) {
     const timeframe = TIMEFRAMES.includes(opts.timeframe) ? opts.timeframe : 'all';
+    const cached = await getCachedUserRank(userId, timeframe);
+    if (cached) return cached;
+
     const row = await this.statisticsRepository.getUserRank(userId, { timeframe });
     if (!row) {
       throw new NotFoundError('User rank not found.');
     }
-    return toLeaderboardEntry(row);
+    const entry = toLeaderboardEntry(row);
+    await setCachedUserRank(userId, timeframe, entry);
+    return entry;
   }
 }
 

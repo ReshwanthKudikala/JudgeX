@@ -29,7 +29,7 @@ export function useLeaderboard() {
     queryKey: leaderboardQueryKey(queryParams),
     queryFn: () => listLeaderboard(queryParams),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const onTimeframeChange = useCallback((next: LeaderboardTimeframe) => {
