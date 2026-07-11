@@ -13,6 +13,9 @@ import { ProblemsPage } from '@/pages/ProblemsPage';
 import { ProblemDetailPage } from '@/pages/ProblemDetailPage';
 import { SubmissionsPage } from '@/pages/SubmissionsPage';
 import { SubmissionDetailPage } from '@/pages/SubmissionDetailPage';
+import { ContestsPage } from '@/pages/ContestsPage';
+import { ContestDetailPage } from '@/pages/ContestDetailPage';
+import { ContestScoreboardPage } from '@/pages/ContestScoreboardPage';
 import { LeaderboardPage } from '@/pages/LeaderboardPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -39,6 +42,12 @@ export const router = createBrowserRouter([
           { path: paths.home, element: <DashboardPage /> },
           { path: paths.problems, element: <ProblemsPage /> },
           { path: paths.problemDetail(), element: <ProblemDetailPage /> },
+          { path: paths.contests, element: <ContestsPage /> },
+          {
+            path: paths.contestScoreboard(),
+            element: <ContestScoreboardPage />,
+          },
+          { path: paths.contestDetail(), element: <ContestDetailPage /> },
           { path: paths.leaderboard, element: <LeaderboardPage /> },
           {
             element: <ProtectedRoute />,

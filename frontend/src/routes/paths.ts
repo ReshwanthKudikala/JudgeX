@@ -8,6 +8,10 @@ export const paths = {
   submissions: '/submissions',
   submissionDetail: (submissionId = ':submissionId') =>
     `/submissions/${submissionId}`,
+  contests: '/contests',
+  contestDetail: (contestId = ':contestId') => `/contests/${contestId}`,
+  contestScoreboard: (contestId = ':contestId') =>
+    `/contests/${contestId}/scoreboard`,
   leaderboard: '/leaderboard',
   profile: '/profile',
 } as const;

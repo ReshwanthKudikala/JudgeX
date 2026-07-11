@@ -56,6 +56,9 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           <NavLink to={paths.problems} className={navLinkClass}>
             Problems
           </NavLink>
+          <NavLink to={paths.contests} className={navLinkClass}>
+            Contests
+          </NavLink>
           {token ? (
             <NavLink to={paths.submissions} className={navLinkClass}>
               Submissions

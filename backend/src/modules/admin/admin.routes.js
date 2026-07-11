@@ -10,6 +10,7 @@ const { validate } = require('../../middlewares/validate');
 const { authenticate } = require('../../middlewares/authenticate');
 const { authorize } = require('../../middlewares/authorize');
 const controller = require('./admin.controller');
+const contestController = require('./admin.contests.controller');
 const {
   createProblemSchema,
   updateProblemSchema,
@@ -17,6 +18,11 @@ const {
   createTestCaseSchema,
   updateTestCaseSchema,
 } = require('./admin.validators');
+const {
+  createContestSchema,
+  updateContestSchema,
+  contestIdParamsSchema,
+} = require('../contests/contests.validators');
 
 const router = Router();
 
@@ -60,5 +66,32 @@ router.patch(
   controller.updateTestCase,
 );
 router.delete('/testcases/:id', ...requireAdmin, controller.deleteTestCase);
+
+// Sprint 28 — contest admin CRUD.
+router.post(
+  '/contests',
+  ...requireAdmin,
+  validate(createContestSchema),
+  contestController.createContest,
+);
+router.get(
+  '/contests/:id',
+  ...requireAdmin,
+  validate(contestIdParamsSchema, 'params'),
+  contestController.getContest,
+);
+router.patch(
+  '/contests/:id',
+  ...requireAdmin,
+  validate(contestIdParamsSchema, 'params'),
+  validate(updateContestSchema),
+  contestController.updateContest,
+);
+router.delete(
+  '/contests/:id',
+  ...requireAdmin,
+  validate(contestIdParamsSchema, 'params'),
+  contestController.deleteContest,
+);
 
 module.exports = { adminRoutes: router };

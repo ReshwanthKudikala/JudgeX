@@ -6,7 +6,7 @@ function resolveFeatureFlags(env) {
     aiCompileExplanation: env.FEATURE_AI_COMPILE_EXPLANATION,
     // Placeholders for post-MVP features (default off until shipped).
     aiAdvanced: false,
-    contests: false,
+    contests: true,
   });
 }
 

@@ -6,6 +6,7 @@ const { problemRoutes } = require('../modules/problems/problems.routes');
 const { submissionRoutes } = require('../modules/submissions/submissions.routes');
 const { adminRoutes } = require('../modules/admin/admin.routes');
 const { leaderboardRoutes } = require('../modules/leaderboard/leaderboard.routes');
+const { contestRoutes } = require('../modules/contests/contests.routes');
 const { aiRoutes } = require('../modules/ai/ai.routes');
 
 const API_BASE = '/api/v1';
@@ -16,6 +17,7 @@ function registerModules(app) {
   app.use(`${API_BASE}/submissions`, submissionRoutes);
   app.use(`${API_BASE}/admin`, adminRoutes);
   app.use(`${API_BASE}/leaderboard`, leaderboardRoutes);
+  app.use(`${API_BASE}/contests`, contestRoutes);
   app.use(`${API_BASE}/ai`, aiRoutes);
 }
 

@@ -29,3 +29,13 @@ export type {
   LeaderboardListParams,
   LeaderboardListResult,
 } from './leaderboard';
+export type {
+  ContestStatus,
+  ContestVisibility,
+  ContestSummary,
+  ContestProblem,
+  ContestListParams,
+  ContestListResult,
+  ScoreboardEntry,
+  ScoreboardResult,
+} from './contests';
