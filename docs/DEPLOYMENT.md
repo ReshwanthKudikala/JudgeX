@@ -33,8 +33,19 @@ Dev-only Postgres/Redis/Ollama for host-run apps remains in `docker-compose.yml`
 2. Set at minimum:
    - `POSTGRES_PASSWORD`
    - `JWT_SECRET` (≥32 chars)
-   - `CORS_ORIGIN` (public HTTPS origin; **no localhost**)
+   - `CORS_ORIGIN` (public HTTPS origin; **no localhost** in real deploys)
 3. Optional release metadata: `APP_VERSION`, `GIT_SHA`, `BUILD_TIME` (CI injects these).
+
+### Local production Docker testing (Vite on localhost)
+
+When running `docker-compose.prod.yml` against a host Vite app (`http://localhost:5173`), keep `NODE_ENV=production` and set:
+
+```bash
+CORS_ORIGIN=http://localhost:5173
+ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true
+```
+
+`ALLOW_LOCALHOST_CORS_IN_PRODUCTION` defaults to `false`. Without it, production validation still rejects localhost CORS origins. **Never enable this flag on a publicly reachable deployment.**
 
 API-only secrets are also documented in `backend/.env.production.example`.
 
@@ -160,7 +171,7 @@ CI (`.github/workflows/ci.yml`) builds frontend with commit SHA metadata.
 |---------|--------|
 | API unhealthy | `docker compose ... logs api`; `/ready` checks; migrations |
 | Jobs stuck queued | Worker logs + Docker socket; cleanup-worker reaper |
-| CORS errors | `CORS_ORIGIN` must match browser origin exactly |
+| CORS errors | `CORS_ORIGIN` must match browser origin exactly; for local Vite + prod compose set `ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true` |
 | 413 / large body | nginx `client_max_body_size` + `JSON_BODY_LIMIT` |
 | Redis AOF growth | Monitor volume size; ephemeral keys are short-lived |
 | Judge can't start containers | Socket mount, image tags `judgex-python` / `judgex-cpp` |

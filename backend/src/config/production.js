@@ -40,8 +40,14 @@ function assertProductionReady(cfg = config) {
   if (origins.length === 0) {
     problems.push('CORS_ORIGIN must list at least one production frontend origin');
   }
-  if (origins.some((o) => o.includes('localhost') || o.includes('127.0.0.1'))) {
-    problems.push('CORS_ORIGIN must not include localhost in production');
+  const hasLocalOrigin = origins.some(
+    (o) => o.includes('localhost') || o.includes('127.0.0.1'),
+  );
+  if (hasLocalOrigin && !cfg.security?.allowLocalhostCorsInProduction) {
+    problems.push(
+      'CORS_ORIGIN must not include localhost in production ' +
+        '(set ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true only for local prod Docker testing)',
+    );
   }
 
   if (problems.length > 0) {
@@ -74,6 +80,8 @@ function getStartupDiagnostics(cfg = config) {
     security: {
       rateLimitEnabled: cfg.security?.rateLimit?.enabled ?? true,
       corsOriginCount: cfg.server?.corsOrigins?.length ?? 0,
+      allowLocalhostCorsInProduction:
+        cfg.security?.allowLocalhostCorsInProduction === true,
       jsonBodyLimit: cfg.server?.jsonBodyLimit,
     },
   };

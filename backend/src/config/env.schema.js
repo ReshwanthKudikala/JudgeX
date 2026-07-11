@@ -15,6 +15,10 @@ const envSchema = z
     PORT: z.coerce.number().int().positive().default(4000),
     // Comma-separated list of allowed CORS origins.
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
+    // Explicit opt-in: allow localhost / 127.0.0.1 in CORS_ORIGIN under
+    // NODE_ENV=production (local production Docker / Vite hybrid testing only).
+    // Default false — real deployments must keep this unset/false.
+    ALLOW_LOCALHOST_CORS_IN_PRODUCTION: booleanish.default('false'),
     // Max JSON body size (express body-parser syntax, e.g. 1mb, 512kb).
     JSON_BODY_LIMIT: z.string().default('1mb'),
 
@@ -153,11 +157,16 @@ const envSchema = z
           message: 'CORS_ORIGIN must list at least one production frontend origin',
         });
       }
-      if (origins.some((o) => o.includes('localhost') || o.includes('127.0.0.1'))) {
+      const hasLocalOrigin = origins.some(
+        (o) => o.includes('localhost') || o.includes('127.0.0.1'),
+      );
+      if (hasLocalOrigin && !env.ALLOW_LOCALHOST_CORS_IN_PRODUCTION) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['CORS_ORIGIN'],
-          message: 'CORS_ORIGIN must not include localhost in production',
+          message:
+            'CORS_ORIGIN must not include localhost in production ' +
+            '(set ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true only for local prod Docker testing)',
         });
       }
     }

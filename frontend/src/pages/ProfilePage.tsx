@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Skeleton } from '@/components/common/Skeleton';
 import { useUserRank } from '@/features/leaderboard/hooks/useUserRank';
@@ -80,12 +81,20 @@ export function ProfilePage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <span
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-[#1a1a1a]"
-            aria-hidden
-          >
-            {user.username.charAt(0).toUpperCase()}
-          </span>
+          <div className="flex flex-col items-center gap-2">
+            <span
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-[#1a1a1a]"
+              aria-hidden
+            >
+              {user.username.charAt(0).toUpperCase()}
+            </span>
+            <Button variant="secondary" size="sm" disabled title="Coming soon">
+              Change Profile Picture
+              <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted">
+                Coming Soon
+              </span>
+            </Button>
+          </div>
           <div>
             <h1 className="text-2xl font-semibold text-white">{user.username}</h1>
             <p className="mt-0.5 text-sm text-muted">{user.email}</p>

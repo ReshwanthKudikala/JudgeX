@@ -84,6 +84,44 @@ describe('Production configuration validation', () => {
     );
   });
 
+  it('allows localhost CORS in production only when explicitly opted in', () => {
+    assert.doesNotThrow(() =>
+      assertProductionReady(
+        baseCfg({
+          security: {
+            rateLimit: { enabled: true },
+            allowLocalhostCorsInProduction: true,
+          },
+          server: {
+            port: 4000,
+            corsOrigins: ['http://localhost:5173'],
+            jsonBodyLimit: '1mb',
+          },
+        }),
+      ),
+    );
+  });
+
+  it('still rejects localhost CORS when the opt-in flag is false', () => {
+    assert.throws(
+      () =>
+        assertProductionReady(
+          baseCfg({
+            security: {
+              rateLimit: { enabled: true },
+              allowLocalhostCorsInProduction: false,
+            },
+            server: {
+              port: 4000,
+              corsOrigins: ['http://localhost:5173'],
+              jsonBodyLimit: '1mb',
+            },
+          }),
+        ),
+      /ALLOW_LOCALHOST_CORS_IN_PRODUCTION/,
+    );
+  });
+
   it('getStartupDiagnostics never includes secrets', () => {
     const snap = getStartupDiagnostics(baseCfg());
     const json = JSON.stringify(snap);

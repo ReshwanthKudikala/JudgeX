@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Trophy, User } from 'lucide-react';
+import { BookOpen, Trophy } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -10,7 +10,6 @@ import { useAuthStore } from '@/store';
 
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
-  const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthHydration();
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
@@ -19,8 +18,7 @@ export function DashboardPage() {
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-4 w-96 max-w-full" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-40 w-full rounded-lg" />
+        <div className="grid gap-4 sm:grid-cols-2">
           <Skeleton className="h-40 w-full rounded-lg" />
           <Skeleton className="h-40 w-full rounded-lg" />
         </div>
@@ -51,7 +49,7 @@ export function DashboardPage() {
         <h2 id="quick-actions-heading" className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
           Quick actions
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Card className="transition-colors hover:border-primary/40">
             <CardHeader>
               <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md bg-primary-muted text-primary">
@@ -81,23 +79,6 @@ export function DashboardPage() {
               <Link to={paths.leaderboard}>
                 <Button variant="secondary" size="sm">
                   Open leaderboard
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card className="transition-colors hover:border-primary/40">
-            <CardHeader>
-              <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md bg-primary-muted text-primary">
-                <User className="h-4 w-4" aria-hidden />
-              </div>
-              <CardTitle>Profile</CardTitle>
-              <CardDescription>Your account and stats</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link to={token ? paths.profile : paths.login}>
-                <Button variant="secondary" size="sm">
-                  {token ? 'View profile' : 'Sign in to view'}
                 </Button>
               </Link>
             </CardContent>

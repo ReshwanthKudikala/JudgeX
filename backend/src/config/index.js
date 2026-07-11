@@ -60,6 +60,7 @@ const config = Object.freeze({
 
   security: Object.freeze({
     bcryptSaltRounds: env.BCRYPT_SALT_ROUNDS,
+    allowLocalhostCorsInProduction: env.ALLOW_LOCALHOST_CORS_IN_PRODUCTION,
     rateLimit: Object.freeze({
       enabled: env.RATE_LIMIT_ENABLED,
       forceInTest: env.RATE_LIMIT_FORCE_IN_TEST,
