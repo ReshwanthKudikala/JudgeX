@@ -9,8 +9,8 @@ const { registerGracefulShutdown } = require('./bootstrap/graceful-shutdown');
 const { initInfrastructure, shutdownInfrastructure } = require('./infrastructure');
 
 async function start() {
-  // Apply the configured log level before anything logs.
-  configureLogger({ level: config.logging.level });
+  // Apply the configured log level/format before anything logs.
+  configureLogger({ level: config.logging.level, format: config.logging.format });
 
   try {
     assertProductionReady();
@@ -23,8 +23,6 @@ async function start() {
 
   logger.info('JudgeX API boot starting', getStartupDiagnostics());
 
-  // Connect backing services first. Required services that stay unreachable
-  // (after capped retries) abort startup — fail fast before accepting traffic.
   try {
     await initInfrastructure();
   } catch (err) {
@@ -41,11 +39,17 @@ async function start() {
     logger.info('JudgeX API started', {
       ...getStartupDiagnostics(),
       listen: `:${config.server.port}`,
-      probes: { liveness: '/health', readiness: '/ready', apiHealth: '/api/v1/health' },
+      probes: {
+        liveness: '/health',
+        live: '/health/live',
+        ready: '/health/ready',
+        readiness: '/ready',
+        apiHealth: '/api/v1/health',
+        metrics: '/metrics',
+      },
     });
   });
 
-  // On shutdown, stop accepting connections, then close DB/Redis cleanly.
   registerGracefulShutdown(server, { onShutdown: [shutdownInfrastructure] });
 
   return server;

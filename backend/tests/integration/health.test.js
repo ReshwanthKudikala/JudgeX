@@ -45,6 +45,38 @@ describe('Health / readiness', () => {
     assert.ok(res.body.diagnostics.queue.counts);
   });
 
+  it('liveness /health/live mirrors /health', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const res = await api().get('/health/live');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'ok');
+    assert.ok(res.headers['x-request-id']);
+  });
+
+  it('readiness /health/ready includes worker and docker checks', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const res = await api().get('/health/ready');
+    assert.ok([200, 503].includes(res.status));
+    assert.ok(res.body.checks.postgres);
+    assert.ok(res.body.checks.redis);
+    assert.ok(res.body.checks.bullmq);
+    assert.ok(res.body.checks.worker);
+    assert.ok(res.body.checks.docker);
+    assert.equal(typeof res.body.uptime, 'number');
+    assert.ok(res.body.version);
+  });
+
+  it('GET /metrics exposes Prometheus text', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const res = await api().get('/metrics');
+    assert.equal(res.status, 200);
+    assert.match(String(res.headers['content-type'] || ''), /text\/plain|openmetrics/i);
+    assert.match(res.text, /judgex_/);
+  });
+
   it('schema_migrations tracks the initial migration', async (t) => {
     if (!requireInfra(t)) return;
 

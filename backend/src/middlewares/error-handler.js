@@ -9,6 +9,7 @@ const {
 } = require('../shared/errors/http-errors');
 const { sendError } = require('../shared/http/response');
 const { logSecurityEvent } = require('../shared/security/security-log');
+const { trackError } = require('../shared/observability/error-tracking');
 
 const SECURITY_CODES = new Set([
   'UNAUTHENTICATED',
@@ -38,24 +39,16 @@ function errorHandler(err, req, res, next) {
     res.setHeader('Retry-After', String(err.retryAfterSec));
   }
 
-  // failed_login / permission_denied / rate_limited are logged at the source
-  // (auth controller, authorize, rate-limit) with richer context.
   if (SECURITY_CODES.has(code)) {
     logSecurityEvent('security_violation', { code, statusCode }, req);
   }
 
-  // Operational errors are expected; unexpected ones are logged at error level
-  // with the stack for debugging (never leaked to the client).
   if (isAppError && err.isOperational) {
     if (!SECURITY_CODES.has(code) && code !== 'INVALID_CREDENTIALS' && code !== 'RATE_LIMITED' && code !== 'FORBIDDEN') {
       log.warn(err.message, { code, statusCode });
     }
   } else {
-    log.error(err.message || 'Unhandled error', {
-      code,
-      statusCode,
-      stack: err.stack,
-    });
+    trackError('http.unhandled', err, { code, statusCode }, { log });
   }
 
   // Do not leak internals for non-operational/500 errors.

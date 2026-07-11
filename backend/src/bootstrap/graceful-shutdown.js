@@ -1,6 +1,7 @@
 // Drains connections and queues on SIGTERM/SIGINT; force-exits if it hangs.
 
 const { logger } = require('../shared/logger/logger');
+const { trackError } = require('../shared/observability/error-tracking');
 
 const DEFAULT_TIMEOUT_MS = 10000;
 
@@ -22,7 +23,6 @@ function registerGracefulShutdown(server, { onShutdown = [], timeoutMs = DEFAULT
     shuttingDown = true;
     logger.info('Shutdown initiated', { signal });
 
-    // Force-exit if graceful drain exceeds the deadline.
     const forceTimer = setTimeout(() => {
       logger.error('Graceful shutdown timed out; forcing exit');
       process.exit(1);
@@ -44,7 +44,7 @@ function registerGracefulShutdown(server, { onShutdown = [], timeoutMs = DEFAULT
       logger.info('Shutdown complete');
       process.exit(0);
     } catch (err) {
-      logger.error('Error during shutdown', { error: err.message, stack: err.stack });
+      trackError('api.shutdown', err);
       process.exit(1);
     }
   }
@@ -52,16 +52,15 @@ function registerGracefulShutdown(server, { onShutdown = [], timeoutMs = DEFAULT
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 
-  // Last-resort safety nets: log and shut down rather than crashing silently.
   process.on('uncaughtException', (err) => {
-    logger.error('Uncaught exception', { error: err.message, stack: err.stack });
+    trackError('api.uncaughtException', err);
     shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
-    logger.error('Unhandled promise rejection', {
-      error: reason instanceof Error ? reason.message : String(reason),
-      stack: reason instanceof Error ? reason.stack : undefined,
-    });
+    trackError(
+      'api.unhandledRejection',
+      reason instanceof Error ? reason : new Error(String(reason)),
+    );
     shutdown('unhandledRejection');
   });
 }

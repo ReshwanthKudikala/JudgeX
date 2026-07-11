@@ -86,6 +86,8 @@ const envSchema = z
 
     // --- Logging ---
     LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+    // json = production NDJSON; pretty = human-readable development lines.
+    LOG_FORMAT: z.enum(['json', 'pretty', 'auto']).default('auto'),
 
     // --- Feature flags ---
     FEATURE_AI_COMPILE_EXPLANATION: booleanish.default('true'),

@@ -114,10 +114,10 @@ class SubmissionService {
    * Create a submission in the initial 'queued' status, then enqueue it for
    * judging (persist-before-enqueue).
    *
-   * @param {{ userId: string, problemId: string, language: string, sourceCode: string }} input
+   * @param {{ userId: string, problemId: string, language: string, sourceCode: string, requestId?: string }} input
    * @returns {Promise<Object>} the created submission domain object (status 'queued').
    */
-  async createSubmission({ userId, problemId, language, sourceCode }) {
+  async createSubmission({ userId, problemId, language, sourceCode, requestId }) {
     const submission = await withTransaction(async (client) => {
       const user = await this.userRepository.findById(userId, client);
       if (!user) {
@@ -137,10 +137,11 @@ class SubmissionService {
     });
 
     try {
-      await this.enqueueSubmission(submission.id);
+      await this.enqueueSubmission(submission.id, { requestId });
     } catch (err) {
       logger.error('Failed to enqueue submission; leaving row in queued state for recovery', {
         submissionId: submission.id,
+        requestId: requestId || null,
         error: err.message,
       });
       if (err instanceof QueueError) throw err;

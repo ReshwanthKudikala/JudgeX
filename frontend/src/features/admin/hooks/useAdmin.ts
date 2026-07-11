@@ -6,6 +6,7 @@ import {
   demoteAdminUser,
   getAdminAnalytics,
   getAdminDashboard,
+  getAdminMonitoring,
   getAdminQueue,
   listAdminFailedJobs,
   listAdminUsers,
@@ -27,6 +28,16 @@ export function useAdminDashboard() {
     queryKey: ['admin', 'dashboard'],
     queryFn: getAdminDashboard,
     staleTime: 30_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useAdminMonitoring() {
+  return useQuery({
+    queryKey: ['admin', 'monitoring'],
+    queryFn: getAdminMonitoring,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
   });
 }
 

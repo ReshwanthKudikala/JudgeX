@@ -4,6 +4,7 @@ import type {
   AdminAnalytics,
   AdminDashboardOverview,
   AdminFailedJob,
+  AdminMonitoringSnapshot,
   AdminQueueStatus,
   AdminUser,
   AdminUserListParams,
@@ -104,6 +105,12 @@ export async function bulkModeration(input: {
 
 export async function getAdminQueue(): Promise<AdminQueueStatus> {
   return unwrapData(apiClient.get<ApiEnvelope<AdminQueueStatus>>('/admin/queue'));
+}
+
+export async function getAdminMonitoring(): Promise<AdminMonitoringSnapshot> {
+  return unwrapData(
+    apiClient.get<ApiEnvelope<AdminMonitoringSnapshot>>('/admin/monitoring'),
+  );
 }
 
 export async function listAdminFailedJobs(params: {

@@ -85,6 +85,15 @@ async function getQueueStatus(req, res, next) {
   }
 }
 
+async function getMonitoring(req, res, next) {
+  try {
+    const data = await adminPlatformService.getMonitoring();
+    sendSuccess(req, res, 200, data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function listFailedJobs(req, res, next) {
   try {
     const data = await adminPlatformService.listFailedJobs(req.query);
@@ -140,6 +149,7 @@ module.exports = {
   listModeration,
   bulkModeration,
   getQueueStatus,
+  getMonitoring,
   listFailedJobs,
   retryFailedJobs,
   clearCompletedJobs,

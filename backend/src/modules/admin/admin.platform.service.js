@@ -9,7 +9,10 @@ const {
   getSubmissionsQueue,
   SUBMISSIONS_QUEUE_NAME,
 } = require('../../infrastructure/queue/queues');
+const { getWorkerHeartbeat } = require('../../infrastructure/queue/worker-heartbeat');
+const { getReadiness } = require('../health/health.service');
 const { logger } = require('../../shared/logger/logger');
+const { trackError } = require('../../shared/observability/error-tracking');
 const { adminPlatformRepository } = require('./admin.platform.repository');
 const { auditLogRepository } = require('./admin.audit.repository');
 const { cacheGet, cacheSet, cacheDel } = require('./admin.cache');
@@ -49,6 +52,7 @@ class AdminPlatformService {
     const counts = await this.platformRepository.getOverviewCounts();
     let queue = null;
     let worker = null;
+    const heartbeat = await getWorkerHeartbeat();
     try {
       const q = getSubmissionsQueue();
       const jobCounts = await q.getJobCounts(
@@ -65,7 +69,9 @@ class AdminPlatformService {
         healthy: true,
       };
       worker = {
-        healthy: (jobCounts.active || 0) >= 0,
+        healthy: Boolean(heartbeat.ok),
+        uptime: heartbeat.uptime ?? null,
+        lastSeenAt: heartbeat.lastSeenAt ?? null,
         activeJobs: jobCounts.active || 0,
         waitingJobs: jobCounts.waiting || 0,
         failedJobs: jobCounts.failed || 0,
@@ -77,7 +83,14 @@ class AdminPlatformService {
         healthy: false,
         error: err instanceof Error ? err.message : String(err),
       };
-      worker = { healthy: false, activeJobs: 0, waitingJobs: 0, failedJobs: 0 };
+      worker = {
+        healthy: false,
+        uptime: null,
+        lastSeenAt: null,
+        activeJobs: 0,
+        waitingJobs: 0,
+        failedJobs: 0,
+      };
     }
 
     const payload = {
@@ -258,6 +271,64 @@ class AdminPlatformService {
     };
   }
 
+  /**
+   * Live platform monitoring snapshot (uncached) for the admin dashboard.
+   */
+  async getMonitoring() {
+    let readiness;
+    try {
+      readiness = await getReadiness();
+    } catch (err) {
+      trackError('admin.monitoring_readiness', err);
+      readiness = {
+        ready: false,
+        status: 'not_ready',
+        error: err instanceof Error ? err.message : String(err),
+        checks: {},
+      };
+    }
+
+    let recentFailures = [];
+    try {
+      const failed = await this.listFailedJobs({ start: 0, end: 9 });
+      recentFailures = failed.jobs;
+    } catch (err) {
+      logger.warn('Failed to list recent queue failures for monitoring', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const worker = readiness.checks?.worker || (await getWorkerHeartbeat());
+    const queueCounts = readiness.diagnostics?.queue?.counts || null;
+
+    return {
+      ready: Boolean(readiness.ready),
+      degraded: Boolean(readiness.degraded),
+      status: readiness.status || 'unknown',
+      uptime: readiness.uptime ?? process.uptime(),
+      version: readiness.version || null,
+      checks: {
+        postgres: readiness.checks?.postgres || { ok: false },
+        redis: readiness.checks?.redis || { ok: false },
+        bullmq: readiness.checks?.bullmq || { ok: false },
+        worker,
+        docker: readiness.checks?.docker || { ok: false },
+      },
+      queue: {
+        name: SUBMISSIONS_QUEUE_NAME,
+        depth: queueCounts,
+      },
+      worker: {
+        healthy: Boolean(worker.ok),
+        uptime: worker.uptime ?? null,
+        lastSeenAt: worker.lastSeenAt ?? null,
+        ageMs: worker.ageMs ?? null,
+      },
+      recentFailures,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   async listFailedJobs({ start = 0, end = 49 } = {}) {
     const queue = getSubmissionsQueue();
     const jobs = await queue.getFailed(start, end);
@@ -271,6 +342,7 @@ class AdminPlatformService {
         finishedOn: job.finishedOn || null,
         data: {
           submissionId: job.data?.submissionId || null,
+          requestId: job.data?.requestId || null,
         },
       })),
     };

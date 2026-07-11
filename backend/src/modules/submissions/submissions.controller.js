@@ -7,6 +7,7 @@
 
 const { submissionService } = require('./submissions.service');
 const { sendSuccess } = require('../../shared/http/response');
+const { metrics } = require('../../shared/observability/metrics');
 
 // POST /submissions → 202 { ...submission } (judging is asynchronous)
 async function createSubmission(req, res, next) {
@@ -17,7 +18,9 @@ async function createSubmission(req, res, next) {
       problemId,
       language,
       sourceCode,
+      requestId: req.requestId || req.correlationId,
     });
+    metrics.recordSubmissionCreated(language);
     sendSuccess(req, res, 202, submission);
   } catch (err) {
     next(err);

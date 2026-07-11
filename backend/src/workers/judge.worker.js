@@ -1,11 +1,6 @@
-// Background worker: consumes judge-queue jobs and (eventually) invokes the
-// judging pipeline. THIS SPRINT IS A SKELETON: it validates the job, loads the
-// submission, enforces the idempotency guard, and marks it running — then stops.
-// No Docker, compilation, execution, comparison, or verdict generation yet.
-//
-// Runs as its own process: `node src/workers/judge.worker.js`. It connects the
-// same infrastructure (PostgreSQL for SubmissionService, Redis for BullMQ) and
-// binds to the existing "judge" queue defined in infrastructure/queue/queues.js.
+// Background worker: consumes judge-queue jobs and invokes the judging pipeline.
+// Observability: requestId from job payload, Redis heartbeat, metrics.
+// Judge execution logic lives in judge.pipeline — unchanged here beyond timing/logs.
 
 const { Worker } = require('bullmq');
 
@@ -14,18 +9,24 @@ const { configure: configureLogger, createLogger } = require('../shared/logger/l
 const { initInfrastructure, shutdownInfrastructure, getRedis } = require('../infrastructure');
 const { SUBMISSIONS_QUEUE_NAME } = require('../infrastructure/queue/queues');
 const { SCHEMA_VERSION } = require('../infrastructure/queue/queue.service');
+const {
+  writeWorkerHeartbeat,
+} = require('../infrastructure/queue/worker-heartbeat');
 const { submissionService } = require('../modules/submissions/submissions.service');
 const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
 const { aiService } = require('../modules/ai/ai.service');
 const { NotFoundError } = require('../shared/errors/http-errors');
+const { metrics } = require('../shared/observability/metrics');
+const {
+  trackError,
+  registerProcessErrorHandlers,
+} = require('../shared/observability/error-tracking');
 
 const log = createLogger({ component: 'judge-worker' });
 
-// Skeleton concurrency: judging is CPU/Docker-bound, so this is tuned to cores
-// once execution exists (ARCHITECTURE.md §4.3). One slot is enough for now.
 const CONCURRENCY = 1;
+const HEARTBEAT_INTERVAL_MS = 10_000;
 
-// Statuses that are terminal — a job for one of these must not be reprocessed.
 const TERMINAL_STATUSES = new Set(['completed', 'error']);
 
 /**
@@ -50,39 +51,40 @@ function assertValidPayload(data) {
 async function processJob(job) {
   assertValidPayload(job.data);
   const { submissionId } = job.data;
+  const requestId = job.data.requestId || job.data.correlationId || null;
+  const jobLog = log.child({
+    requestId,
+    correlationId: requestId,
+    submissionId,
+    jobId: job.id,
+  });
 
-  log.info('Processing judge job', { jobId: job.id, submissionId, attempt: job.attemptsMade + 1 });
+  const started = Date.now();
+  jobLog.info('Processing judge job', { attempt: job.attemptsMade + 1 });
 
-  // Load the authoritative submission (Postgres is the source of truth).
   let submission;
   try {
     submission = await submissionService.getSubmissionById(submissionId);
   } catch (err) {
     if (err instanceof NotFoundError) {
-      // No backing row → nothing to judge; fail the job (do not retry-loop forever).
       throw new Error(`Submission ${submissionId} does not exist; failing job.`);
     }
     throw err;
   }
 
-  // Idempotency guard: never re-finalize/reprocess a terminal submission.
   if (TERMINAL_STATUSES.has(submission.status)) {
-    log.info('Submission already terminal; skipping', {
-      submissionId,
+    jobLog.info('Submission already terminal; skipping', {
       status: submission.status,
     });
+    metrics.recordJudgeJob('skipped');
     return { submissionId, skipped: true, status: submission.status };
   }
 
-  // Transition queued → running (worker has picked it up).
   await submissionService.markSubmissionRunning(submissionId);
 
   try {
-    // Delegate the compile → run → compare → verdict → persist flow to the pipeline.
     const outcome = await runJudgePipeline(submissionId);
 
-    // Non-critical path: after a CE verdict, optionally generate + persist an
-    // explanation. Failures are swallowed so judging remains authoritative.
     if (outcome.verdict === 'compile_error') {
       try {
         const judged = await submissionService.getSubmissionById(submissionId);
@@ -93,26 +95,29 @@ async function processJob(job) {
           compileOutput: judged.compileOutput,
         });
       } catch (err) {
-        log.warn('Post-judge AI explanation hook failed; ignoring', {
-          submissionId,
+        jobLog.warn('Post-judge AI explanation hook failed; ignoring', {
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
 
-    log.info('Submission judged', { submissionId, verdict: outcome.verdict });
+    const durationSeconds = (Date.now() - started) / 1000;
+    metrics.recordJudgeDuration(outcome.verdict, durationSeconds);
+    metrics.recordJudgeJob('completed');
+    jobLog.info('Submission judged', {
+      verdict: outcome.verdict,
+      durationMs: Math.round(durationSeconds * 1000),
+    });
     return { submissionId, verdict: outcome.verdict };
   } catch (err) {
-    // Persist Internal Error so the submission does not stay stuck in `running`.
+    metrics.recordJudgeJob('failed');
+    trackError('judge.pipeline', err, { submissionId }, { log: jobLog });
     try {
       await submissionService.failSubmissionInternal(submissionId, {
         message: err instanceof Error ? err.message : String(err),
       });
     } catch (persistErr) {
-      log.error('Failed to persist internal_error after judge failure', {
-        submissionId,
-        error: persistErr instanceof Error ? persistErr.message : String(persistErr),
-      });
+      trackError('judge.persist_internal_error', persistErr, { submissionId }, { log: jobLog });
     }
     throw err;
   }
@@ -120,30 +125,54 @@ async function processJob(job) {
 
 let worker = null;
 let shuttingDown = false;
+let heartbeatTimer = null;
 
 function registerWorkerEvents(w) {
   w.on('active', (job) => {
-    log.info('Job active', { jobId: job.id, submissionId: job.data && job.data.submissionId });
+    log.info('Job active', {
+      jobId: job.id,
+      submissionId: job.data && job.data.submissionId,
+      requestId: job.data && job.data.requestId,
+    });
   });
   w.on('completed', (job, result) => {
     log.info('Job completed', { jobId: job.id, result });
   });
   w.on('failed', (job, err) => {
-    log.warn('Job failed', {
-      jobId: job ? job.id : null,
-      submissionId: job && job.data ? job.data.submissionId : null,
-      error: err ? err.message : 'unknown',
-    });
+    trackError(
+      'bullmq.job_failed',
+      err || new Error('unknown'),
+      {
+        jobId: job ? job.id : null,
+        submissionId: job && job.data ? job.data.submissionId : null,
+        requestId: job && job.data ? job.data.requestId : null,
+      },
+    );
   });
   w.on('error', (err) => {
-    log.error('Worker error', { error: err.message });
+    trackError('bullmq.worker_error', err);
   });
+}
+
+async function beat() {
+  try {
+    await writeWorkerHeartbeat({ concurrency: CONCURRENCY });
+  } catch (err) {
+    log.warn('Worker heartbeat failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Worker shutdown initiated', { signal });
+
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 
   const forceTimer = setTimeout(() => {
     log.error('Worker graceful shutdown timed out; forcing exit');
@@ -153,7 +182,6 @@ async function shutdown(signal) {
 
   try {
     if (worker) {
-      // close() stops pulling new jobs and waits for in-flight jobs to finish.
       await worker.close();
       log.info('Worker closed');
     }
@@ -162,18 +190,21 @@ async function shutdown(signal) {
     log.info('Worker shutdown complete');
     process.exit(0);
   } catch (err) {
-    log.error('Error during worker shutdown', { error: err.message, stack: err.stack });
+    trackError('judge.worker_shutdown', err);
     process.exit(1);
   }
 }
 
 async function start() {
-  configureLogger({ level: config.logging.level });
+  configureLogger({
+    level: config.logging.level,
+    format: config.logging.format,
+  });
 
   try {
     await initInfrastructure();
   } catch (err) {
-    log.error('Infrastructure initialization failed; worker aborting', { error: err.message });
+    trackError('judge.worker_boot', err);
     await shutdownInfrastructure();
     process.exit(1);
   }
@@ -184,23 +215,22 @@ async function start() {
   });
   registerWorkerEvents(worker);
 
+  await beat();
+  heartbeatTimer = setInterval(() => {
+    void beat();
+  }, HEARTBEAT_INTERVAL_MS);
+  if (typeof heartbeatTimer.unref === 'function') heartbeatTimer.unref();
+
   log.info('Judge worker started', { queue: SUBMISSIONS_QUEUE_NAME, concurrency: CONCURRENCY });
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('uncaughtException', (err) => {
-    log.error('Uncaught exception', { error: err.message, stack: err.stack });
-    shutdown('uncaughtException');
-  });
-  process.on('unhandledRejection', (reason) => {
-    log.error('Unhandled promise rejection', {
-      error: reason instanceof Error ? reason.message : String(reason),
-    });
-    shutdown('unhandledRejection');
+  registerProcessErrorHandlers({
+    component: 'judge-worker',
+    onFatal: (signal) => shutdown(signal),
   });
 }
 
-// Only auto-boot when run as the process entrypoint (keeps processJob unit-testable).
 if (require.main === module) {
   start();
 }

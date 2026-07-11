@@ -185,6 +185,7 @@ router.post(
   platformController.bulkModeration,
 );
 router.get('/queue', ...requireAdmin, platformController.getQueueStatus);
+router.get('/monitoring', ...requireAdmin, platformController.getMonitoring);
 router.get(
   '/queue/failed',
   ...requireAdmin,

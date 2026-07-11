@@ -323,6 +323,24 @@ async function cleanup(sandbox) {
   }
 }
 
+/**
+ * Lightweight Docker daemon probe (observability only — not used by judging).
+ * @returns {Promise<{ ok: boolean, latencyMs?: number, error?: string }>}
+ */
+async function checkDockerHealth() {
+  const start = Date.now();
+  try {
+    await getDocker().ping();
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    return {
+      ok: false,
+      latencyMs: Date.now() - start,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 module.exports = {
   getDocker,
   createSandbox,
@@ -330,4 +348,5 @@ module.exports = {
   executeCommand,
   removeSandbox,
   cleanup,
+  checkDockerHealth,
 };

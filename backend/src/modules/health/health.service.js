@@ -1,5 +1,7 @@
 // Health / readiness probes for orchestrators (PRD NFR-OBS-3).
 // Liveness = process is up. Readiness = Postgres + Redis + BullMQ can serve traffic.
+// Extended checks (worker heartbeat, Docker) are reported without failing API readiness
+// when the API host does not run the judge worker / Docker daemon.
 
 const pkg = require('../../../package.json');
 const {
@@ -7,7 +9,10 @@ const {
   checkRedisHealth,
 } = require('../../infrastructure');
 const { getSubmissionsQueue, SUBMISSIONS_QUEUE_NAME } = require('../../infrastructure/queue/queues');
+const { getWorkerHeartbeat } = require('../../infrastructure/queue/worker-heartbeat');
+const { checkDockerHealth } = require('../../infrastructure/docker/docker.adapter');
 const { getLastReaperSweep } = require('../reaper/reaper.service');
+const { metrics } = require('../../shared/observability/metrics');
 
 /**
  * BullMQ / queue probe + counts (NFR-OBS-2).
@@ -25,6 +30,7 @@ async function checkBullmqHealth() {
       'delayed',
       'paused',
     );
+    metrics.setQueueDepth(counts);
     return {
       ok: true,
       queue: SUBMISSIONS_QUEUE_NAME,
@@ -54,21 +60,28 @@ function getLiveness() {
 }
 
 /**
- * Full readiness diagnostics: Postgres, Redis, BullMQ + queue/reaper stats.
- * @returns {Promise<{ ready: boolean, status: string, checks: object, diagnostics: object }>}
+ * Full readiness diagnostics: Postgres, Redis, BullMQ + worker/Docker/reaper.
+ * @returns {Promise<object>}
  */
 async function getReadiness() {
-  const [postgres, redis, bullmq] = await Promise.all([
+  const [postgres, redis, bullmq, worker, docker] = await Promise.all([
     checkPostgresHealth(),
     checkRedisHealth(),
     checkBullmqHealth(),
+    getWorkerHeartbeat(),
+    checkDockerHealth(),
   ]);
 
-  const checks = { postgres, redis, bullmq };
+  const checks = { postgres, redis, bullmq, worker, docker };
+  // API can accept traffic when core data plane is up. Worker/Docker are
+  // reported for operators; they may live on a separate host.
   const ready = Boolean(postgres.ok && redis.ok && bullmq.ok);
+  const degraded = ready && (!worker.ok || !docker.ok);
 
   return {
     ready,
+    degraded,
+    // Keep legacy status values (ready | not_ready) for orchestrators.
     status: ready ? 'ready' : 'not_ready',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
@@ -79,6 +92,8 @@ async function getReadiness() {
         ? { name: bullmq.queue, counts: bullmq.counts }
         : { name: SUBMISSIONS_QUEUE_NAME, error: bullmq.error },
       reaper: getLastReaperSweep(),
+      worker,
+      degraded,
     },
   };
 }

@@ -127,6 +127,12 @@ const config = Object.freeze({
 
   logging: Object.freeze({
     level: env.LOG_LEVEL,
+    format:
+      env.LOG_FORMAT === 'auto'
+        ? env.NODE_ENV === 'development'
+          ? 'pretty'
+          : 'json'
+        : env.LOG_FORMAT,
   }),
 
   featureFlags: resolveFeatureFlags(env),

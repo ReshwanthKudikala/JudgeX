@@ -32,10 +32,11 @@ const DEFAULT_JOB_OPTIONS = Object.freeze({
  * the submissionId for enqueue-side de-duplication (JUDGE_PIPELINE.md §7).
  *
  * @param {string} submissionId - UUID of the persisted (queued) submission.
+ * @param {{ requestId?: string }} [meta] - optional observability context.
  * @returns {Promise<import('bullmq').Job>} the enqueued job.
  * @throws {QueueError} when the job cannot be enqueued (e.g. Redis unavailable).
  */
-async function enqueueSubmission(submissionId) {
+async function enqueueSubmission(submissionId, meta = {}) {
   const queue = getSubmissionsQueue();
 
   const payload = {
@@ -43,6 +44,9 @@ async function enqueueSubmission(submissionId) {
     schemaVersion: SCHEMA_VERSION,
     enqueuedAt: new Date().toISOString(),
   };
+  if (meta.requestId) {
+    payload.requestId = meta.requestId;
+  }
 
   try {
     return await queue.add(JOB_NAME, payload, {

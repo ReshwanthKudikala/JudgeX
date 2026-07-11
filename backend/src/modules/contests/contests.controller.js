@@ -2,6 +2,7 @@
 
 const { contestService } = require('./contests.service');
 const { sendSuccess } = require('../../shared/http/response');
+const { metrics } = require('../../shared/observability/metrics');
 
 async function listContests(req, res, next) {
   try {
@@ -24,8 +25,10 @@ async function getContest(req, res, next) {
 async function joinContest(req, res, next) {
   try {
     const result = await contestService.joinContest(req.params.id, req.user.id);
+    metrics.recordContestJoin(result.alreadyJoined ? 'already_joined' : 'joined');
     sendSuccess(req, res, result.alreadyJoined ? 200 : 201, result);
   } catch (err) {
+    metrics.recordContestJoin('error');
     next(err);
   }
 }

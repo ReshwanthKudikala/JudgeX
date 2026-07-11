@@ -18,7 +18,42 @@ export interface AdminDashboardOverview {
     activeJobs: number;
     waitingJobs: number;
     failedJobs: number;
+    uptime?: number | null;
+    lastSeenAt?: string | null;
   };
+}
+
+export interface AdminMonitoringSnapshot {
+  ready: boolean;
+  degraded: boolean;
+  status: string;
+  uptime: number;
+  version: string | null;
+  checks: {
+    postgres: { ok: boolean; latencyMs?: number; error?: string };
+    redis: { ok: boolean; latencyMs?: number; error?: string };
+    bullmq: { ok: boolean; latencyMs?: number; error?: string; counts?: Record<string, number> };
+    worker: {
+      ok: boolean;
+      uptime?: number;
+      lastSeenAt?: string;
+      ageMs?: number;
+      error?: string;
+    };
+    docker: { ok: boolean; latencyMs?: number; error?: string };
+  };
+  queue: {
+    name: string;
+    depth: Record<string, number> | null;
+  };
+  worker: {
+    healthy: boolean;
+    uptime: number | null;
+    lastSeenAt: string | null;
+    ageMs: number | null;
+  };
+  recentFailures: AdminFailedJob[];
+  timestamp: string;
 }
 
 export interface AdminUser {
@@ -87,7 +122,7 @@ export interface AdminFailedJob {
   attemptsMade: number;
   timestamp: number;
   finishedOn: number | null;
-  data: { submissionId: string | null };
+  data: { submissionId: string | null; requestId?: string | null };
 }
 
 export interface AdminAnalytics {

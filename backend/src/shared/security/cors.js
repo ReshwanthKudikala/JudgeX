@@ -23,8 +23,15 @@ function buildCorsOptions(allowedOrigins) {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
-    exposedHeaders: ['X-Correlation-Id', 'Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-Request-ID'],
+    exposedHeaders: [
+      'X-Correlation-Id',
+      'X-Request-ID',
+      'Retry-After',
+      'X-RateLimit-Limit',
+      'X-RateLimit-Remaining',
+      'X-RateLimit-Reset',
+    ],
     maxAge: 600,
   };
 }
