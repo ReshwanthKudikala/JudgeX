@@ -1,13 +1,14 @@
 import { Navigate, Outlet } from 'react-router-dom';
 
 import { Spinner } from '@/components/common/Spinner';
+import { useAuthHydration } from '@/hooks/useAuthHydration';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 
 /** Auth pages only — signed-in users are sent to the dashboard. */
 export function PublicRoute() {
   const token = useAuthStore((s) => s.token);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isHydrated = useAuthHydration();
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
   if (!isHydrated || isValidatingSession) {

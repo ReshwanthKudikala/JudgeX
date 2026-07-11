@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import * as authApi from '@/api/auth.api';
+import { useAuthHydration } from '@/hooks/useAuthHydration';
 import { paths } from '@/routes/paths';
 import { useAuthStore, useToastStore } from '@/store';
 import type { LoginInput, RegisterInput } from '@/types/auth';
@@ -18,7 +19,7 @@ export function useAuth() {
   const token = useAuthStore((s) => s.token);
   const rememberMe = useAuthStore((s) => s.rememberMe);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isHydrated = useAuthHydration();
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
   const setSession = useAuthStore((s) => s.setSession);
   const setLoading = useAuthStore((s) => s.setLoading);
@@ -123,7 +124,7 @@ export function useUnauthorizedHandler() {
 /** After persist rehydration, validate the JWT via GET /auth/me. */
 export function useSessionBootstrap() {
   const token = useAuthStore((s) => s.token);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isHydrated = useAuthHydration();
   const setUser = useAuthStore((s) => s.setUser);
   const logout = useAuthStore((s) => s.logout);
   const setValidatingSession = useAuthStore((s) => s.setValidatingSession);

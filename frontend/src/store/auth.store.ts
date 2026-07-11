@@ -15,13 +15,10 @@ interface AuthState {
   token: string | null;
   rememberMe: boolean;
   isLoading: boolean;
-  isHydrated: boolean;
-  /** True while GET /auth/me is validating a restored token. */
   isValidatingSession: boolean;
   setSession: (user: User, token: string, rememberMe?: boolean) => void;
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
-  setHydrated: (hydrated: boolean) => void;
   setValidatingSession: (validating: boolean) => void;
   setRememberMe: (remember: boolean) => void;
   logout: () => void;
@@ -35,7 +32,6 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       rememberMe: getRememberMePreference(),
       isLoading: false,
-      isHydrated: false,
       isValidatingSession: false,
 
       setSession: (user, token, rememberMe = get().rememberMe) => {
@@ -54,9 +50,8 @@ export const useAuthStore = create<AuthState>()(
 
       setLoading: (isLoading) => set({ isLoading }),
 
-      setHydrated: (isHydrated) => set({ isHydrated }),
-
-      setValidatingSession: (isValidatingSession) => set({ isValidatingSession }),
+      setValidatingSession: (isValidatingSession) =>
+        set({ isValidatingSession }),
 
       setRememberMe: (rememberMe) => {
         setRememberMePreference(rememberMe);
@@ -79,20 +74,12 @@ export const useAuthStore = create<AuthState>()(
     {
       name: AUTH_PERSIST_KEY,
       storage: createJSONStorage(() => authPersistStorage),
+
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         rememberMe: state.rememberMe,
       }),
-      onRehydrateStorage: () => (state, _error) => {
-        useAuthStore.setState({
-          isHydrated: true,
-          rememberMe: state?.rememberMe ?? getRememberMePreference(),
-        });
-        if (state?.token) {
-          tokenStorage.set(state.token);
-        }
-      },
     },
   ),
 );

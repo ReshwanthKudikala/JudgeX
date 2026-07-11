@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { Spinner } from '@/components/common/Spinner';
+import { useAuthHydration } from '@/hooks/useAuthHydration';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 
@@ -8,7 +9,7 @@ import { useAuthStore } from '@/store';
 export function ProtectedRoute() {
   const location = useLocation();
   const token = useAuthStore((s) => s.token);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isHydrated = useAuthHydration();
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
   if (!isHydrated || isValidatingSession) {
