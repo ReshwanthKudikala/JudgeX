@@ -2,6 +2,7 @@
 
 const request = require('supertest');
 const { getApp, query } = require('./setup');
+const { TWO_SUM } = require('../../../scripts/demo-problems-data');
 
 function api() {
   return request(getApp());
@@ -57,15 +58,21 @@ async function createUser() {
   };
 }
 
+/**
+ * Create a published problem. Defaults match the Two Sum demo catalog entry
+ * (full statement + constraints). Does not attach sample cases — callers that
+ * need examples should POST/PUT test cases explicitly (keeps existing tests stable).
+ */
 async function createPublishedProblem(adminToken, overrides = {}) {
   const slug = overrides.slug || unique('prob');
   const body = {
-    title: 'Two Sum',
-    statement: 'Find two numbers that add up to target.',
-    difficulty: 'easy',
+    title: TWO_SUM.title,
+    statement: TWO_SUM.statement,
+    constraintsText: TWO_SUM.constraintsText,
+    difficulty: TWO_SUM.difficulty,
     isPublished: true,
-    timeLimitMs: 2000,
-    memoryLimitMb: 256,
+    timeLimitMs: TWO_SUM.timeLimitMs,
+    memoryLimitMb: TWO_SUM.memoryLimitMb,
     ...overrides,
     slug,
   };
@@ -75,6 +82,29 @@ async function createPublishedProblem(adminToken, overrides = {}) {
     .set('Authorization', `Bearer ${adminToken}`)
     .send(body);
   return { res, slug };
+}
+
+/**
+ * Attach public demo samples (isSample) without replace-all,
+ * so callers can add hidden cases separately afterward.
+ */
+async function attachDemoSamples(adminToken, problemId, samples = TWO_SUM.samples) {
+  const created = [];
+  for (let i = 0; i < samples.length; i += 1) {
+    const sample = samples[i];
+    const res = await api()
+      .post(`/api/v1/admin/problems/${problemId}/testcases`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        input: sample.input,
+        expectedOutput: sample.expectedOutput,
+        explanation: sample.explanation,
+        isSample: true,
+        displayOrder: i,
+      });
+    created.push(res);
+  }
+  return created;
 }
 
 async function seedUserStatistics(userId, stats = {}) {
@@ -129,6 +159,8 @@ module.exports = {
   createAdmin,
   createUser,
   createPublishedProblem,
+  attachDemoSamples,
   seedUserStatistics,
   seedJudgedSubmission,
+  TWO_SUM,
 };

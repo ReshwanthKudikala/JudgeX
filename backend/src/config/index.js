@@ -110,7 +110,11 @@ const config = Object.freeze({
   email: Object.freeze({
     provider: env.EMAIL_PROVIDER,
     from: env.EMAIL_FROM,
-    appPublicUrl: env.APP_PUBLIC_URL.replace(/\/$/, ''),
+    // Prefer FRONTEND_URL; accept deprecated APP_PUBLIC_URL; default matches local Vite.
+    frontendUrl: (env.FRONTEND_URL || env.APP_PUBLIC_URL || 'http://localhost:5173').replace(
+      /\/$/,
+      '',
+    ),
     smtp: Object.freeze({
       host: env.SMTP_HOST || null,
       port: env.SMTP_PORT,
@@ -132,6 +136,10 @@ const config = Object.freeze({
     pidLimit: env.JUDGE_PID_LIMIT,
     workerConcurrency: env.JUDGE_WORKER_CONCURRENCY,
     failFast: env.JUDGE_FAIL_FAST,
+    // Where the worker writes per-job dirs (must be visible to the Docker daemon).
+    workspaceDir: env.JUDGE_WORKSPACE_DIR || null,
+    // Path used in sandbox Binds (same as workspaceDir when host↔container paths match).
+    workspaceHostDir: env.JUDGE_WORKSPACE_HOST_DIR || env.JUDGE_WORKSPACE_DIR || null,
   }),
 
   reaper: Object.freeze({

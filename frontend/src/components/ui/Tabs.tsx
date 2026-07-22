@@ -89,8 +89,8 @@ export function TabsTrigger({
       className={cn(
         'rounded-sm px-3 py-1.5 text-sm font-medium transition-colors',
         selected
-          ? 'bg-card text-white shadow-card'
-          : 'text-muted hover:text-white',
+          ? 'border-primary bg-card text-white shadow-card'
+          : 'border-transparent text-muted hover:text-white',
         className,
       )}
       {...props}

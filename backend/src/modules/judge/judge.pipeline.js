@@ -84,6 +84,13 @@ async function runJudgePipeline(submissionId, deps = {}) {
       { path: sourceFiles[submission.language], content: submission.sourceCode },
     ]);
 
+    // 3b. Integration check: source must be visible inside the sandbox (not only
+    // on the worker FS) before we compile — catches DinD bind-mount failures early.
+    const sourceName = sourceFiles[submission.language];
+    if (typeof docker.assertWorkspaceFile === 'function') {
+      await docker.assertWorkspaceFile(sandbox, sourceName);
+    }
+
     // 4. Compile / prepare.
     const compileResult = await compile(submission.language, sandbox);
 

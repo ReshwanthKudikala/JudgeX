@@ -33,7 +33,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-app items-center gap-3 px-4 sm:px-6">
         <button
           type="button"
           className="rounded-md p-2 text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"

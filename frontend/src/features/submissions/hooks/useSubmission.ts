@@ -75,7 +75,12 @@ export function useSubmission() {
     retry: 1,
   });
 
-  const submission = submissionQuery.data ?? null;
+  // Only expose the submission that matches the active poll target — avoids
+  // briefly showing a previous run's stdout/verdict when starting a new submit.
+  const submission =
+    submissionId && submissionQuery.data?.id === submissionId
+      ? submissionQuery.data
+      : null;
   const isTerminal = submission ? isTerminalSubmission(submission) : false;
   const isPolling = Boolean(submissionId) && !isTerminal && !pollTimedOut;
 

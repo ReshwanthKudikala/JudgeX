@@ -35,3 +35,19 @@ export function clearDraft(problemSlug: string, language: EditorLanguage): void 
     /* ignore */
   }
 }
+
+/** Remove every problem draft. Call on logout so the next user never sees prior code. */
+export function clearAllDrafts(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(`${STORAGE_PREFIX}.`)) keys.push(key);
+    }
+    for (const key of keys) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    /* ignore */
+  }
+}

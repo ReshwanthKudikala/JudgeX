@@ -70,8 +70,19 @@ apiClient.interceptors.response.use(
     const isSessionProbe = requestUrl.includes('/auth/me');
 
     if (status === 401 && !isAuthCredentialRequest) {
+      // Avoid wiping persisted auth if a request raced before rehydration.
+      if (!useAuthStore.persist.hasHydrated()) {
+        return Promise.reject(
+          new ApiError(status, code, message, body?.error?.details),
+        );
+      }
+
       const hadSession = Boolean(useAuthStore.getState().token);
-      useAuthStore.getState().logout();
+      // Only clear when we actually sent a Bearer token (or had a session).
+      const sentAuth = Boolean(error.config?.headers?.Authorization);
+      if (hadSession || sentAuth) {
+        useAuthStore.getState().logout();
+      }
       // Session probe handles its own toast; avoid double notifications.
       if (hadSession && !isSessionProbe) {
         notifyUnauthorized(message || 'Your session has expired. Please sign in again.');

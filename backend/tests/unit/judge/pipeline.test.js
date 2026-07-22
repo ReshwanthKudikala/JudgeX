@@ -31,6 +31,7 @@ function makeDeps({ failFast, cases, runImpl }) {
       docker: {
         createSandbox: async () => ({ id: 'box' }),
         copyFiles: async () => {},
+        assertWorkspaceFile: async () => {},
         cleanup: async () => {},
       },
       compile: async () => ({ success: true, stdout: '', stderr: '' }),

@@ -105,17 +105,17 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
 
   return (
     <div
-      className={cn('flex min-h-[220px] flex-col gap-3', className)}
+      className={cn('flex min-h-0 flex-col gap-2', className)}
       aria-label="AI learning assistant"
     >
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1">
         {QUICK_ACTIONS.map((item) => (
           <Button
             key={item.label}
             type="button"
             variant="secondary"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-6 px-1.5 text-[10px]"
             disabled={isLoading}
             onClick={() => void runAction(item)}
           >
@@ -124,7 +124,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
         ))}
       </div>
 
-      <div className="max-h-56 flex-1 space-y-3 overflow-y-auto rounded-md border border-border bg-[#0c0e12]/p-3">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {messages.length === 0 ? (
           <p className="text-xs text-muted">
             Ask for hints, complexity, or help diagnosing a failed submission. AI is only
@@ -135,10 +135,10 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
             <div
               key={msg.id}
               className={cn(
-                'rounded-md px-2.5 py-2 text-xs',
+                'rounded px-2 py-1.5 text-xs',
                 msg.role === 'user'
                   ? 'bg-primary/10 text-foreground'
-                  : 'bg-muted/10 text-muted-foreground',
+                  : 'bg-white/[0.03] text-muted-foreground',
               )}
             >
               <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
@@ -166,7 +166,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
         ) : null}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex shrink-0 gap-2">
         <input
           type="text"
           value={draft}
@@ -179,12 +179,12 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           }}
           placeholder="Ask AI…"
           disabled={isLoading}
-          className="h-8 flex-1 rounded-md border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
+          className="h-7 flex-1 rounded border border-border/70 bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
         />
         <Button
           type="button"
           size="sm"
-          className="h-8"
+          className="h-7"
           disabled={isLoading || !draft.trim()}
           onClick={() => void handleAsk()}
         >
@@ -192,12 +192,12 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap gap-1">
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-[11px]"
+          className="h-6 px-1.5 text-[10px]"
           disabled={messages.length === 0}
           onClick={() => void copyLast()}
         >
@@ -207,7 +207,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-[11px]"
+          className="h-6 px-1.5 text-[10px]"
           disabled={messages.length === 0 || isLoading}
           onClick={clear}
         >

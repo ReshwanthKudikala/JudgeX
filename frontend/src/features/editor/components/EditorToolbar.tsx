@@ -16,7 +16,7 @@ export const EditorToolbar = memo(function EditorToolbar({
   isDirty = false,
 }: EditorToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-border px-3 py-2">
+    <div className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card/95 px-3 py-1.5 backdrop-blur-sm">
       <LanguageSelector value={language} onChange={onLanguageChange} />
       <EditorStatus language={language} isDirty={isDirty} />
     </div>

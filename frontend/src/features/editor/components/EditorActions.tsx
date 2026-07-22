@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Play, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import { cn } from '@/utils/cn';
 
 interface EditorActionsProps {
   onRun: () => void;
@@ -11,6 +12,7 @@ interface EditorActionsProps {
   /** Disables Submit while submitting/polling. */
   submitDisabled?: boolean;
   submitLoading?: boolean;
+  className?: string;
 }
 
 /**
@@ -23,13 +25,15 @@ export const EditorActions = memo(function EditorActions({
   runDisabled = false,
   submitDisabled = false,
   submitLoading = false,
+  className,
 }: EditorActionsProps) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-2">
+    <div className={cn('flex flex-wrap items-center justify-end gap-1.5', className)}>
       <Button
         type="button"
         variant="secondary"
         size="sm"
+        className="h-7 px-2.5 text-xs"
         disabled={runDisabled}
         onClick={onRun}
         aria-label="Run code"
@@ -40,6 +44,7 @@ export const EditorActions = memo(function EditorActions({
       <Button
         type="button"
         size="sm"
+        className="h-7 px-2.5 text-xs"
         disabled={submitDisabled || submitLoading}
         loading={submitLoading}
         onClick={onSubmit}

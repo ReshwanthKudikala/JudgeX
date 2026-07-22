@@ -19,10 +19,11 @@
     @apply border-border;
   }
 
+  /* Definite height chain so nested flex/grid can use min-h-0 + overflow. */
   html,
   body,
   #root {
-    @apply min-h-full;
+    @apply h-full min-h-full;
   }
 
   body {
@@ -56,5 +57,11 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Prevent text selection while dragging panel separators. */
+  body:has([data-separator='active']) {
+    user-select: none;
+    cursor: inherit;
   }
 }

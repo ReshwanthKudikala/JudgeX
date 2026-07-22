@@ -66,6 +66,13 @@ function getStartupDiagnostics(cfg = config) {
     databaseRequired: cfg.database.required,
     redisRequired: cfg.redis.required,
     aiProvider: cfg.ai.provider,
+    emailProvider: cfg.email?.provider || 'console',
+    emailSmtpConfigured: Boolean(
+      cfg.email?.provider === 'smtp' &&
+        cfg.email?.smtp?.host &&
+        cfg.email?.smtp?.user &&
+        cfg.email?.smtp?.pass,
+    ),
     featureFlags: cfg.featureFlags,
     reaper: {
       intervalMs: cfg.reaper.intervalMs,

@@ -3,7 +3,6 @@ import { memo } from 'react';
 import { ProblemConstraints } from '@/features/problems/components/ProblemConstraints';
 import { ProblemDescription } from '@/features/problems/components/ProblemDescription';
 import { ProblemExamples } from '@/features/problems/components/ProblemExamples';
-import { ProblemHeader } from '@/features/problems/components/ProblemHeader';
 import { SafeRichText } from '@/utils/safe-rich-text';
 import type { ProblemDetail } from '@/types/problems';
 
@@ -12,7 +11,7 @@ interface ProblemStatementPanelProps {
 }
 
 /**
- * Left panel body: header + description + optional examples/constraints/notes.
+ * Description tab body (header + tabs live in ProblemDetailPage).
  */
 export const ProblemStatementPanel = memo(function ProblemStatementPanel({
   problem,
@@ -21,8 +20,7 @@ export const ProblemStatementPanel = memo(function ProblemStatementPanel({
   const examples = problem.examples ?? [];
 
   return (
-    <div className="space-y-6">
-      <ProblemHeader problem={problem} />
+    <div className="space-y-5">
       <ProblemDescription statement={problem.statement} />
       <ProblemExamples examples={examples} />
       <ProblemConstraints constraintsText={constraints} />
@@ -30,7 +28,7 @@ export const ProblemStatementPanel = memo(function ProblemStatementPanel({
         <section aria-labelledby="problem-notes-heading" className="space-y-2">
           <h2
             id="problem-notes-heading"
-            className="text-sm font-semibold uppercase tracking-wide text-muted"
+            className="text-xs font-semibold uppercase tracking-wide text-muted"
           >
             Notes
           </h2>

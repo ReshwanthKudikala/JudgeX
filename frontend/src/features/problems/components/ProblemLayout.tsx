@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/utils/cn';
+
+const STORAGE_ID = 'judgex-problem-h-split';
+const PANEL_IDS = ['statement', 'editor'] as const;
 
 interface ProblemLayoutProps {
   breadcrumb?: ReactNode;
@@ -10,9 +15,9 @@ interface ProblemLayoutProps {
 }
 
 /**
- * LeetCode-style split layout:
- * - Desktop/tablet: statement | editor side-by-side
- * - Mobile: statement stacked above editor
+ * Split solve workspace:
+ * - Desktop (lg+): resizable statement | editor panes (persisted)
+ * - Mobile/tablet: stacked panels, no resize
  */
 export function ProblemLayout({
   breadcrumb,
@@ -20,27 +25,84 @@ export function ProblemLayout({
   editor,
   className,
 }: ProblemLayoutProps) {
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: STORAGE_ID,
+    panelIds: [...PANEL_IDS],
+    storage: localStorage,
+  });
+
   return (
-    <div className={cn('flex min-h-0 flex-col animate-fade-in', className)}>
-      {breadcrumb}
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col animate-fade-in',
+        isDesktop && 'overflow-hidden',
+        className,
+      )}
+    >
+      {breadcrumb ? <div className="shrink-0">{breadcrumb}</div> : null}
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2 lg:gap-0 lg:overflow-hidden lg:rounded-lg lg:border lg:border-border">
-        <section
-          className="min-h-0 overflow-y-auto rounded-lg border border-border bg-card p-4 sm:p-5 lg:rounded-none lg:border-0 lg:border-r lg:border-border"
-          aria-label="Problem statement"
+      {isDesktop ? (
+        <Group
+          id={STORAGE_ID}
+          orientation="horizontal"
+          defaultLayout={defaultLayout}
+          onLayoutChanged={onLayoutChanged}
+          className="min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card"
         >
-          {statement}
-        </section>
+          <Panel
+            id="statement"
+            defaultSize="45"
+            minSize={350}
+            className="min-h-0 min-w-0"
+          >
+            <section
+              className="h-full min-h-0 overflow-y-auto overscroll-contain"
+              aria-label="Problem statement"
+            >
+              {statement}
+            </section>
+          </Panel>
 
-        <aside
-          className="min-h-0 lg:overflow-y-auto lg:bg-card"
-          aria-label="Code editor panel"
-        >
-          <div className="h-full min-h-[420px] lg:min-h-[calc(100vh-11rem)]">
-            {editor}
-          </div>
-        </aside>
-      </div>
+          <Separator
+            className={cn(
+              'w-1.5 shrink-0 bg-border transition-colors',
+              'hover:bg-primary/50',
+              'data-[separator=active]:bg-primary data-[separator=focus]:bg-primary/40',
+            )}
+            aria-label="Resize problem and editor panels"
+          />
+
+          <Panel
+            id="editor"
+            defaultSize="55"
+            minSize={450}
+            className="min-h-0 min-w-0"
+          >
+            <aside
+              className="h-full min-h-0 overflow-hidden"
+              aria-label="Code editor panel"
+            >
+              <div className="flex h-full min-h-0 flex-col">{editor}</div>
+            </aside>
+          </Panel>
+        </Group>
+      ) : (
+        <div className="grid min-h-0 flex-1 gap-4">
+          <section
+            className="min-h-0 rounded-md border border-border bg-card"
+            aria-label="Problem statement"
+          >
+            {statement}
+          </section>
+          <aside
+            className="min-h-0 rounded-md border border-border bg-card"
+            aria-label="Code editor panel"
+          >
+            <div className="flex min-h-[420px] flex-col">{editor}</div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

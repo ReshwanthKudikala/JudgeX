@@ -1,18 +1,28 @@
-import { memo, useState } from 'react';
+import { memo } from 'react';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { LearningAssistantPanel } from '@/features/ai-assistant';
-import { ConsoleTabs } from '@/features/submissions/components/ConsoleTabs';
+import { LearningAssistantPanel } from '@/features/ai-assistant/components/LearningAssistantPanel';
+import {
+  ConsoleTabs,
+  type RunConsoleResult,
+  type WorkspaceMode,
+} from '@/features/submissions/components/ConsoleTabs';
 import type { AiCompileExplanation, Submission } from '@/types/submissions';
 import { cn } from '@/utils/cn';
-
-type BottomTab = 'console' | 'ai';
 
 interface EditorBottomPanelProps {
   problemId: string;
   language: 'python' | 'cpp';
   getSourceCode: () => string;
+  mode: WorkspaceMode;
+  onModeChange?: (mode: WorkspaceMode) => void;
+  runResult?: RunConsoleResult | null;
+  runInput?: string;
+  onRunInputChange?: (value: string) => void;
+  hasRunResult?: boolean;
+  hasSubmissionResult?: boolean;
+  /** Submit-mode submission only. */
   submission: Submission | null;
+  timeLimitMs?: number | null;
   aiExplanation: AiCompileExplanation | null;
   aiAvailable: boolean;
   aiLoading?: boolean;
@@ -21,61 +31,53 @@ interface EditorBottomPanelProps {
 }
 
 /**
- * Bottom region under the editor: Console | AI Assistant.
+ * Docked bottom workspace under the editor — Idle / Run / Submission + AI.
  */
 export const EditorBottomPanel = memo(function EditorBottomPanel({
   problemId,
   language,
   getSourceCode,
+  mode,
+  onModeChange,
+  runResult = null,
+  runInput = '',
+  onRunInputChange,
+  hasRunResult = false,
+  hasSubmissionResult = false,
   submission,
+  timeLimitMs = null,
   aiExplanation,
   aiAvailable,
   aiLoading = false,
   onRequestCompileExplanation,
   className,
 }: EditorBottomPanelProps) {
-  const [tab, setTab] = useState<BottomTab>('console');
-
   return (
-    <div
-      className={cn('border-t border-border bg-[#0c0e12] px-3 py-2', className)}
-      aria-label="Editor tools"
-      role="region"
-    >
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as BottomTab)}
-        defaultValue="console"
-      >
-        <TabsList className="h-8">
-          <TabsTrigger value="console" className="px-2.5 py-1 text-xs">
-            Console
-          </TabsTrigger>
-          <TabsTrigger value="ai" className="px-2.5 py-1 text-xs">
-            AI
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="console" className="mt-0 border-0 p-0">
-          <ConsoleTabs
-            submission={submission}
-            aiExplanation={aiExplanation}
-            aiAvailable={aiAvailable}
-            aiLoading={aiLoading}
-            onRequestCompileExplanation={onRequestCompileExplanation}
-            embedded
-          />
-        </TabsContent>
-
-        <TabsContent value="ai" className="mt-3">
-          <LearningAssistantPanel
-            problemId={problemId}
-            language={language}
-            getSourceCode={getSourceCode}
-            submissionId={submission?.id ?? null}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
+    <ConsoleTabs
+      mode={mode}
+      onModeChange={onModeChange}
+      runResult={runResult}
+      runInput={runInput}
+      onRunInputChange={onRunInputChange}
+      hasRunResult={hasRunResult}
+      hasSubmissionResult={hasSubmissionResult}
+      submission={mode === 'submit' ? submission : null}
+      timeLimitMs={timeLimitMs}
+      aiExplanation={aiExplanation}
+      aiAvailable={aiAvailable}
+      aiLoading={aiLoading}
+      onRequestCompileExplanation={onRequestCompileExplanation}
+      embedded
+      className={cn('min-h-0 flex-1', className)}
+      aiPanel={
+        <LearningAssistantPanel
+          problemId={problemId}
+          language={language}
+          getSourceCode={getSourceCode}
+          submissionId={submission?.id ?? null}
+          className="min-h-0 gap-2"
+        />
+      }
+    />
   );
 });

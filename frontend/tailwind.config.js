@@ -24,6 +24,10 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
+      /* App shell content width — keep Navbar / MainLayout / Footer in sync. */
+      maxWidth: {
+        app: '1600px',
+      },
       borderRadius: {
         lg: '0.5rem',
         md: '0.375rem',

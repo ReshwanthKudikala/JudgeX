@@ -23,7 +23,7 @@ function renderSafeRichText(raw: string): ReactNode[] {
       nodes.push(
         <pre
           key={`code-${chunkIndex}`}
-          className="my-3 overflow-x-auto rounded-md border border-border bg-[#0c0e12] p-3 font-mono text-[13px] leading-relaxed text-muted-foreground"
+          className="my-3.5 overflow-x-auto rounded-md border border-border/70 bg-[#0c0e12] p-3 font-mono text-[13px] leading-relaxed text-muted-foreground"
         >
           <code>{inner.replace(/^\n/, '').replace(/\n$/, '')}</code>
         </pre>,
@@ -45,7 +45,7 @@ function renderSafeRichText(raw: string): ReactNode[] {
           <ListTag
             key={`list-${chunkIndex}-${blockIndex}`}
             className={cn(
-              'my-3 space-y-1 pl-5 text-[15px] leading-7 text-muted-foreground',
+              'my-3.5 space-y-1.5 pl-5 text-[15px] leading-7 text-muted-foreground',
               ordered ? 'list-decimal' : 'list-disc',
             )}
           >
@@ -66,7 +66,7 @@ function renderSafeRichText(raw: string): ReactNode[] {
       nodes.push(
         <p
           key={`p-${chunkIndex}-${blockIndex}`}
-          className="my-3 text-[15px] leading-7 text-muted-foreground whitespace-pre-wrap"
+          className="my-3.5 text-[15px] leading-[1.75] text-muted-foreground whitespace-pre-wrap"
         >
           {lines.map((line, i) => (
             <span key={i}>

@@ -13,8 +13,8 @@ export const ProblemMetadata = memo(function ProblemMetadata({
   const showAcceptance = typeof problem.acceptanceRate === 'number';
 
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm">
-      <DifficultyBadge difficulty={problem.difficulty} />
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+      <DifficultyBadge difficulty={problem.difficulty} className="px-1.5 py-0 text-[11px]" />
       {showAcceptance ? (
         <span className="text-muted">
           Acceptance{' '}

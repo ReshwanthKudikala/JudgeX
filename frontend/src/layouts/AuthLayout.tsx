@@ -13,15 +13,17 @@ export function AuthLayout() {
         }}
       />
 
-      <header className="relative z-10 flex h-14 items-center px-6">
-        <Link to={paths.home} className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-[#1a1a1a]">
-            JX
-          </span>
-          <span className="text-base font-semibold text-white">
-            Judge<span className="text-primary">X</span>
-          </span>
-        </Link>
+      <header className="relative z-10">
+        <div className="mx-auto flex h-14 w-full max-w-app items-center px-4 sm:px-6">
+          <Link to={paths.home} className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-[#1a1a1a]">
+              JX
+            </span>
+            <span className="text-base font-semibold text-white">
+              Judge<span className="text-primary">X</span>
+            </span>
+          </Link>
+        </div>
       </header>
 
       <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-10">

@@ -24,10 +24,10 @@ export const ProblemConstraints = memo(function ProblemConstraints({
   if (!lines.length) return null;
 
   return (
-    <section aria-labelledby="problem-constraints-heading" className="space-y-3">
+    <section aria-labelledby="problem-constraints-heading" className="space-y-2">
       <h2
         id="problem-constraints-heading"
-        className="text-sm font-semibold uppercase tracking-wide text-muted"
+        className="text-xs font-semibold uppercase tracking-wide text-muted"
       >
         Constraints
       </h2>

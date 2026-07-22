@@ -37,7 +37,7 @@ function getDummyHash() {
 }
 
 function frontendUrl(path, query) {
-  const base = config.email.appPublicUrl.replace(/\/$/, '');
+  const base = config.email.frontendUrl.replace(/\/$/, '');
   const url = new URL(path, `${base}/`);
   if (query) {
     for (const [k, v] of Object.entries(query)) {

@@ -41,6 +41,41 @@ function getDocker() {
 }
 
 /**
+ * Root directory for per-job workspaces. Prefer JUDGE_WORKSPACE_DIR (shared mount
+ * visible to the host Docker daemon) over os.tmpdir() so bind mounts work when
+ * the worker itself runs inside a container.
+ */
+function getWorkspaceRoot() {
+  return config.judge.workspaceDir || os.tmpdir();
+}
+
+/**
+ * Map a worker-local workspace path to the path the Docker daemon must bind.
+ * When JUDGE_WORKSPACE_HOST_DIR differs from JUDGE_WORKSPACE_DIR (Windows host
+ * bind into a Linux container), rewrite the prefix; otherwise return hostDir.
+ */
+function toDaemonBindPath(hostDir) {
+  const workspaceRoot = getWorkspaceRoot();
+  const bindRoot = config.judge.workspaceHostDir || workspaceRoot;
+  let bindPath = hostDir;
+  if (bindRoot !== workspaceRoot) {
+    const relative = path.relative(workspaceRoot, hostDir);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new DockerError(
+        `Sandbox workspace ${hostDir} is outside configured root ${workspaceRoot}`,
+      );
+    }
+    // Manual join: worker often runs on Linux while bindRoot is a Windows host
+    // path (Docker Desktop). path.join would mishandle drive letters.
+    const root = String(bindRoot).replace(/\\/g, '/').replace(/\/+$/, '');
+    const rel = relative.split(path.sep).join('/');
+    bindPath = `${root}/${rel}`;
+  }
+  // Docker Desktop accepts forward-slash host paths.
+  return String(bindPath).replace(/\\/g, '/');
+}
+
+/**
  * Create and start an isolated, locked-down sandbox container with a private
  * temporary working directory bind-mounted in.
  *
@@ -63,10 +98,14 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
   const containerWorkdir = workdir || DEFAULT_WORKDIR;
   const containerUser = user || DEFAULT_USER;
 
-  // Private per-job workspace on the host, bind-mounted into the container.
-  // World-writable so the non-root container user can write compile artifacts.
-  const hostDir = await fs.mkdtemp(path.join(os.tmpdir(), 'judgex-'));
+  // Private per-job workspace under the shared (daemon-visible) root, then
+  // bind-mounted into the sandbox. World-writable so the non-root container
+  // user can write compile artifacts.
+  const workspaceRoot = getWorkspaceRoot();
+  await fs.mkdir(workspaceRoot, { recursive: true });
+  const hostDir = await fs.mkdtemp(path.join(workspaceRoot, 'judgex-'));
   await fs.chmod(hostDir, 0o777);
+  const bindSource = toDaemonBindPath(hostDir);
 
   const memoryBytes = (memoryMb ?? config.judge.memoryLimitMb) * 1024 * 1024;
   const nanoCpus = Math.round((cpus ?? DEFAULT_CPUS) * 1e9);
@@ -83,7 +122,7 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
       NetworkDisabled: true, // no networking at the container level…
       HostConfig: {
         NetworkMode: 'none', // …and at the host-config level (belt and suspenders)
-        Binds: [`${hostDir}:${containerWorkdir}:rw`],
+        Binds: [`${bindSource}:${containerWorkdir}:rw`],
         Memory: memoryBytes,
         MemorySwap: memoryBytes, // == Memory → disable swap so the cap is hard
         NanoCpus: nanoCpus,
@@ -109,8 +148,20 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
     throw new DockerError(`Failed to create sandbox: ${err.message}`);
   }
 
-  logger.info('Sandbox created', { containerId: container.id, image });
-  return { id: container.id, container, hostDir, workdir: containerWorkdir, user: containerUser };
+  logger.info('Sandbox created', {
+    containerId: container.id,
+    image,
+    hostDir,
+    bindSource,
+  });
+  return {
+    id: container.id,
+    container,
+    hostDir,
+    bindSource,
+    workdir: containerWorkdir,
+    user: containerUser,
+  };
 }
 
 /**
@@ -130,6 +181,32 @@ async function copyFiles(sandbox, files = []) {
     await fs.mkdir(path.dirname(dest), { recursive: true });
     // eslint-disable-next-line no-await-in-loop
     await fs.writeFile(dest, file.content, { mode: file.mode ?? 0o644 });
+  }
+}
+
+/**
+ * Integration check: confirm a relative path is visible *inside* the sandbox
+ * (catches DinD bind-mount mismatches that host-side fs.writeFile cannot).
+ *
+ * @param {object} sandbox - handle from createSandbox.
+ * @param {string} relativePath - e.g. main.cpp
+ */
+async function assertWorkspaceFile(sandbox, relativePath) {
+  if (!sandbox || !sandbox.container) {
+    throw new DockerError('assertWorkspaceFile requires a running sandbox.');
+  }
+  if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes('..')) {
+    throw new DockerError('assertWorkspaceFile requires a safe relative path.');
+  }
+  const containerPath = path.posix.join(sandbox.workdir || DEFAULT_WORKDIR, relativePath);
+  const result = await executeCommand(sandbox, {
+    cmd: ['test', '-f', containerPath],
+    timeoutMs: 3000,
+  });
+  if (result.exitCode !== 0) {
+    throw new DockerError(
+      `Source file missing inside sandbox: expected ${containerPath} (bind may not be host-visible)`,
+    );
   }
 }
 
@@ -345,6 +422,7 @@ module.exports = {
   getDocker,
   createSandbox,
   copyFiles,
+  assertWorkspaceFile,
   executeCommand,
   removeSandbox,
   cleanup,

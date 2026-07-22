@@ -17,6 +17,7 @@ const {
   closeRedis,
 } = require('./cache/redis.cache');
 const { closeSubmissionsQueue } = require('./queue/queues');
+const { warnEmailConfigAtStartup } = require('./email/email.service');
 
 // Connect one service; fail fast if it is required, otherwise degrade.
 async function connectService(name, connectFn, required) {
@@ -47,6 +48,9 @@ async function initInfrastructure() {
 
   await connectService('PostgreSQL', () => connectPostgres(retryOptions), config.database.required);
   await connectService('Redis', () => connectRedis(retryOptions), config.redis.required);
+
+  // Email is optional infrastructure: warn on misconfigured SMTP, never abort boot.
+  warnEmailConfigAtStartup();
 
   logger.info('Infrastructure initialized');
 }

@@ -6,12 +6,22 @@ import * as authApi from '@/api/auth.api';
 import { useAuthHydration } from '@/hooks/useAuthHydration';
 import { paths } from '@/routes/paths';
 import { useAuthStore, useToastStore } from '@/store';
+import { ApiError } from '@/types';
 import type { LoginInput, RegisterInput } from '@/types/auth';
 import {
   isProtectedPath,
   setUnauthorizedListener,
 } from '@/utils/auth-events';
 import { getFriendlyErrorMessage } from '@/utils/errors';
+
+function isAuthSessionFailure(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.status === 401 ||
+      err.code === 'TOKEN_EXPIRED' ||
+      err.code === 'UNAUTHENTICATED')
+  );
+}
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -149,13 +159,28 @@ export function useSessionBootstrap() {
         }
       } catch (err) {
         if (!cancelled) {
-          // Interceptor may already have cleared the store on 401.
-          logout();
-          pushToast({
-            title: 'Session expired',
-            description: getFriendlyErrorMessage(err, 'Please sign in again.'),
-            variant: 'error',
-          });
+          // Only clear the session when the token is actually rejected.
+          // Network / 5xx must not wipe a still-valid persisted JWT on refresh.
+          if (isAuthSessionFailure(err)) {
+            // Interceptor may already have cleared the store on 401.
+            if (useAuthStore.getState().token) {
+              logout();
+            }
+            pushToast({
+              title: 'Session expired',
+              description: getFriendlyErrorMessage(err, 'Please sign in again.'),
+              variant: 'error',
+            });
+          } else {
+            pushToast({
+              title: 'Could not verify session',
+              description: getFriendlyErrorMessage(
+                err,
+                'You are still signed in. Try again shortly.',
+              ),
+              variant: 'default',
+            });
+          }
         }
       } finally {
         if (!cancelled) {

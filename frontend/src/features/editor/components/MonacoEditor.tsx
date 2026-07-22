@@ -61,7 +61,7 @@ export const MonacoEditor = memo(function MonacoEditor({
   return (
     <div
       data-editor-slot="monaco"
-      className={cn('min-h-[240px] flex-1 bg-[#0c0e12]', className)}
+      className={cn('h-full min-h-[240px] bg-[#0c0e12]', className)}
       role="textbox"
       aria-label={readOnly ? 'Source code (read-only)' : 'Code editor'}
       aria-multiline="true"

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+import { clearAllDrafts } from '@/features/editor/persistence';
 import type { User } from '@/types';
 import {
   AUTH_PERSIST_KEY,
@@ -61,6 +62,8 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         tokenStorage.clear();
         authPersistStorage.removeItem(AUTH_PERSIST_KEY);
+        // Drafts are not keyed by user — wipe so the next session cannot reuse them.
+        clearAllDrafts();
         set({
           user: null,
           token: null,

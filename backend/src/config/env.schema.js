@@ -78,8 +78,11 @@ const envSchema = z
     // --- Email (console by default; SMTP optional) ---
     EMAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
     EMAIL_FROM: z.string().default('JudgeX <noreply@judgex.local>'),
-    // Public frontend origin used in verification / reset links.
-    APP_PUBLIC_URL: z.string().default('http://localhost:5173'),
+    // Public frontend origin for verification / password-reset links
+    // (e.g. http://localhost, http://localhost:5173, https://judgex.example.com).
+    FRONTEND_URL: z.string().optional(),
+    // Deprecated alias for FRONTEND_URL (still accepted for older .env files).
+    APP_PUBLIC_URL: z.string().optional(),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().positive().default(587),
     SMTP_SECURE: booleanish.default('false'),
@@ -100,6 +103,11 @@ const envSchema = z
     JUDGE_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
     // When true, stop after the first non-accepted test case (default).
     JUDGE_FAIL_FAST: booleanish.default('true'),
+    // Shared host-visible workspace for sandbox bind mounts (DinD). Empty → os.tmpdir().
+    JUDGE_WORKSPACE_DIR: z.string().optional(),
+    // Optional host path for Docker Binds when it differs from JUDGE_WORKSPACE_DIR
+    // (e.g. Windows project bind). Defaults to JUDGE_WORKSPACE_DIR / tmpdir.
+    JUDGE_WORKSPACE_HOST_DIR: z.string().optional(),
 
     // --- Object storage (optional in dev) ---
     STORAGE_BUCKET: z.string().optional(),

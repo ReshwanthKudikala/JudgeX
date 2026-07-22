@@ -34,7 +34,41 @@ Dev-only Postgres/Redis/Ollama for host-run apps remains in `docker-compose.yml`
    - `POSTGRES_PASSWORD`
    - `JWT_SECRET` (≥32 chars)
    - `CORS_ORIGIN` (public HTTPS origin; **no localhost** in real deploys)
+   - `FRONTEND_URL` (same public SPA origin; used in verification / password-reset email links)
 3. Optional release metadata: `APP_VERSION`, `GIT_SHA`, `BUILD_TIME` (CI injects these).
+
+### Email links (`FRONTEND_URL`)
+
+Verification and password-reset emails embed absolute frontend URLs built from `FRONTEND_URL` (not the API host):
+
+```bash
+FRONTEND_URL=https://judgex.example.com
+# Local nginx compose:  FRONTEND_URL=http://localhost
+# Local Vite only:      FRONTEND_URL=http://localhost:5173
+```
+
+`EMAIL_PROVIDER` defaults to `console` (logs `email_outbound` with the full link). Set `EMAIL_PROVIDER=smtp` plus `SMTP_*` for real delivery; both modes use `FRONTEND_URL`.
+
+### Gmail SMTP
+
+To send real verification / password-reset mail via Gmail:
+
+1. Enable **2-Step Verification** on the Google Account.
+2. Create an **App Password** (Google Account → Security → App passwords → Mail). Do **not** use the account’s normal password.
+3. Set:
+
+```bash
+EMAIL_PROVIDER=smtp
+EMAIL_FROM=JudgeX <your.address@gmail.com>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your.address@gmail.com
+SMTP_PASS=your-16-char-app-password
+FRONTEND_URL=https://judgex.example.com
+```
+
+Incomplete SMTP config logs a startup warning and falls back to console (the API still boots). SMTP passwords are never logged. Keep `EMAIL_PROVIDER=console` for local development when you do not need real delivery.
 
 ### Local production Docker testing (Vite on localhost)
 
@@ -42,8 +76,11 @@ When running `docker-compose.prod.yml` against a host Vite app (`http://localhos
 
 ```bash
 CORS_ORIGIN=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
 ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true
 ```
+
+For the full nginx stack on port 80, use `CORS_ORIGIN=http://localhost` and `FRONTEND_URL=http://localhost` instead.
 
 `ALLOW_LOCALHOST_CORS_IN_PRODUCTION` defaults to `false`. Without it, production validation still rejects localhost CORS origins. **Never enable this flag on a publicly reachable deployment.**
 

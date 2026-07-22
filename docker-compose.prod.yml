@@ -130,8 +130,12 @@ services:
       APP_VERSION: ${APP_VERSION:-0.1.0}
       GIT_SHA: ${GIT_SHA:-unknown}
       BUILD_TIME: ${BUILD_TIME:-}
+      # Project bind (not Desktop tmpfs): worker path vs host path for sandbox Binds.
+      JUDGE_WORKSPACE_DIR: ${JUDGE_WORKSPACE_DIR:-/var/judgex/workspace}
+      JUDGE_WORKSPACE_HOST_DIR: ${JUDGE_WORKSPACE_HOST_DIR}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./.judge-workspaces:/var/judgex/workspace
     networks:
       - judgex
     depends_on:
