@@ -7,8 +7,9 @@ import { cn } from '@/utils/cn';
 interface EditorActionsProps {
   onRun: () => void;
   onSubmit: () => void;
-  /** Disables Run (placeholder stays clickable unless true). */
+  /** Disables Run while a run request is in flight. */
   runDisabled?: boolean;
+  runLoading?: boolean;
   /** Disables Submit while submitting/polling. */
   submitDisabled?: boolean;
   submitLoading?: boolean;
@@ -16,13 +17,13 @@ interface EditorActionsProps {
 }
 
 /**
- * Run / Submit actions.
- * Run remains a Sprint-23 placeholder; Submit is wired in Sprint 24.
+ * Run / Submit actions. Independent loading/disabled flags per action.
  */
 export const EditorActions = memo(function EditorActions({
   onRun,
   onSubmit,
   runDisabled = false,
+  runLoading = false,
   submitDisabled = false,
   submitLoading = false,
   className,
@@ -34,7 +35,8 @@ export const EditorActions = memo(function EditorActions({
         variant="secondary"
         size="sm"
         className="h-7 px-2.5 text-xs"
-        disabled={runDisabled}
+        disabled={runDisabled || runLoading}
+        loading={runLoading}
         onClick={onRun}
         aria-label="Run code"
       >

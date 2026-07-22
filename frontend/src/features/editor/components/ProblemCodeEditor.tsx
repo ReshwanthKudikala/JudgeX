@@ -2,10 +2,12 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, memo } from '
 import { useNavigate } from 'react-router-dom';
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 
+import type { CodeRunResult } from '@/api/code.api';
 import { EditorBottomPanel } from '@/features/ai-assistant';
 import { EditorActions } from '@/features/editor/components/EditorActions';
 import { EditorToolbar } from '@/features/editor/components/EditorToolbar';
 import { useEditor } from '@/features/editor/hooks/useEditor';
+import { useRunCode } from '@/features/editor/hooks/useRunCode';
 import type {
   RunConsoleResult,
   WorkspaceMode,
@@ -21,6 +23,7 @@ import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 import { VERDICT_LABELS } from '@/types/submissions';
 import { cn } from '@/utils/cn';
+import { getFriendlyErrorMessage } from '@/utils/errors';
 
 const MonacoEditor = lazy(() =>
   import('@/features/editor/components/MonacoEditor').then((m) => ({
@@ -30,6 +33,21 @@ const MonacoEditor = lazy(() =>
 
 const V_STORAGE_ID = 'judgex-problem-v-split';
 const V_PANEL_IDS = ['monaco', 'console'] as const;
+
+function mapCodeRunToConsole(data: CodeRunResult): RunConsoleResult {
+  return {
+    stdin: data.stdin,
+    stdout: data.stdout,
+    stderr: data.stderr,
+    runtimeMs: data.runtimeMs,
+    memoryKb: data.memoryKb,
+    status: data.status,
+    exitCode: data.exitCode,
+    timedOut: data.timedOut,
+    compileSuccess: data.compile?.success ?? null,
+    pending: false,
+  };
+}
 
 interface ProblemCodeEditorProps {
   problemSlug: string;
@@ -45,6 +63,7 @@ interface ProblemCodeEditorProps {
  * Sprint 29: Console | AI learning assistant under the editor.
  * Desktop: resizable Monaco / console split (persisted).
  * Workspace modes: Idle | Run | Submission (separate state).
+ * Sprint 36.3: Run wired to POST /code/run.
  */
 export const ProblemCodeEditor = memo(function ProblemCodeEditor({
   problemSlug,
@@ -71,13 +90,15 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
     requestCompileExplanation,
   } = useSubmission();
 
+  const { run, isRunning } = useRunCode();
+
   /**
    * Workspace mode is driven by the last action.
    * Run and Submit keep independent state — switching mode never merges them.
    */
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('idle');
   const [runInput, setRunInput] = useState('');
-  const [runResult] = useState<RunConsoleResult | null>(null);
+  const [runResult, setRunResult] = useState<RunConsoleResult | null>(null);
 
   const busy = isSubmitting || isPolling;
   const hasRunResult = runResult != null && !runResult.pending;
@@ -85,20 +106,42 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
     submission && (submission.status === 'completed' || submission.status === 'error'),
   );
 
-  const handleRun = useCallback(() => {
-    // Enter Run mode without touching submission state.
-    setWorkspaceMode('run');
-    // Stub: keep any prior runResult; show empty run workspace until Run is wired.
-    // Do not clear submission — it remains available via the Submission chip.
-    toast({
-      title: 'Run coming next sprint.',
-      description: 'Use Submit to judge against the full test suite.',
-      variant: 'default',
-    });
-  }, [toast]);
-
   const languageRef = useRef<'cpp' | 'python'>('python');
   const codeRef = useRef('');
+  const runInputRef = useRef(runInput);
+  runInputRef.current = runInput;
+
+  const handleRun = useCallback(async () => {
+    if (isRunning) return;
+
+    if (!token) {
+      errorToast('Sign in required', 'Please sign in to run code.');
+      navigate(paths.login, {
+        state: { from: { pathname: paths.problemDetail(problemSlug) } },
+      });
+      return;
+    }
+
+    // Enter Run mode without touching submission state.
+    setWorkspaceMode('run');
+
+    try {
+      const trimmed = runInputRef.current;
+      const data = await run({
+        problemId,
+        language: languageRef.current,
+        sourceCode: codeRef.current,
+        ...(trimmed.length > 0 ? { customInput: trimmed } : {}),
+      });
+      setRunResult(mapCodeRunToConsole(data));
+      if (typeof data.stdin === 'string') {
+        setRunInput(data.stdin);
+      }
+    } catch (err) {
+      // Keep the previous Run result visible; never clear Submit state.
+      errorToast('Run failed', getFriendlyErrorMessage(err, 'Could not run your code.'));
+    }
+  }, [isRunning, token, errorToast, navigate, problemSlug, run, problemId]);
 
   const handleSubmit = useCallback(async () => {
     if (!token) {
@@ -125,7 +168,9 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
 
   const { language, code, setCode, setLanguage, isDirty } = useEditor({
     problemSlug,
-    onRun: handleRun,
+    onRun: () => {
+      void handleRun();
+    },
     onSubmit: () => {
       void handleSubmit();
     },
@@ -137,6 +182,9 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
 
   const getSourceCode = useCallback(() => codeRef.current, []);
 
+  const displayRunResult: RunConsoleResult | null = isRunning
+    ? { ...(runResult ?? {}), pending: true }
+    : runResult;
   useEffect(() => {
     if (!submitError) return;
     errorToast('Submission failed', getSubmissionErrorMessage(submitError));
@@ -209,17 +257,21 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
           ) : workspaceMode === 'run' ? (
             <p className="truncate text-xs text-sky-300/90">
               Run workspace
-              {runResult?.pending ? ' · running…' : hasRunResult ? ' · ready' : ''}
+              {isRunning ? ' · running…' : hasRunResult ? ' · ready' : ''}
             </p>
           ) : (
             <p className="truncate text-xs text-muted">Ready</p>
           )}
         </div>
         <EditorActions
-          onRun={handleRun}
+          onRun={() => {
+            void handleRun();
+          }}
           onSubmit={() => {
             void handleSubmit();
           }}
+          runDisabled={isRunning}
+          runLoading={isRunning}
           submitDisabled={busy}
           submitLoading={isSubmitting}
         />
@@ -230,10 +282,10 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
         getSourceCode={getSourceCode}
         mode={workspaceMode}
         onModeChange={setWorkspaceMode}
-        runResult={runResult}
+        runResult={displayRunResult}
         runInput={runInput}
         onRunInputChange={setRunInput}
-        hasRunResult={hasRunResult || workspaceMode === 'run'}
+        hasRunResult={hasRunResult || isRunning || workspaceMode === 'run'}
         hasSubmissionResult={hasSubmissionResult || workspaceMode === 'submit'}
         submission={submission}
         timeLimitMs={timeLimitMs}

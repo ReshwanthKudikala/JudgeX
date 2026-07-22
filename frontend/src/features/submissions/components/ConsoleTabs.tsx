@@ -23,6 +23,11 @@ export interface RunConsoleResult {
   runtimeMs?: number | null;
   memoryKb?: number | null;
   pending?: boolean;
+  /** Execution status from POST /code/run (not a graded verdict). */
+  status?: string | null;
+  exitCode?: number | null;
+  timedOut?: boolean;
+  compileSuccess?: boolean | null;
 }
 
 export type ConsoleTab = 'workspace' | 'ai';
@@ -237,6 +242,16 @@ function RunWorkspace({
   const stdout = result?.stdout != null ? result.stdout : null;
   const stderr = result?.stderr?.trim() ? result.stderr : null;
   const shownInput = result?.stdin ?? runInput;
+  const statusLabel =
+    result?.status === 'compile_error'
+      ? 'Compile error'
+      : result?.status === 'runtime_error'
+        ? 'Runtime error'
+        : result?.status === 'time_limit' || result?.timedOut
+          ? 'Timed out'
+          : result?.status === 'ok'
+            ? 'Finished'
+            : result?.status ?? null;
 
   return (
     <div className="space-y-3 px-3 py-2.5">
@@ -280,7 +295,11 @@ function RunWorkspace({
       </Field>
 
       {stderr ? (
-        <Field label="stderr">
+        <Field
+          label={
+            result?.status === 'compile_error' ? 'Compiler output' : 'stderr'
+          }
+        >
           <TerminalPre className="rounded border border-error/30 bg-error/5 px-2 py-1.5 text-error">
             {stderr}
           </TerminalPre>
@@ -290,12 +309,17 @@ function RunWorkspace({
       {!pending && result && !result.pending ? (
         <MetaRow
           items={[
+            statusLabel ? { label: 'Status', value: statusLabel } : null,
+            result.exitCode != null
+              ? { label: 'Exit', value: String(result.exitCode) }
+              : null,
             result.runtimeMs != null
               ? { label: 'Runtime', value: `${result.runtimeMs} ms` }
               : null,
             result.memoryKb != null
               ? { label: 'Memory', value: `${result.memoryKb} KB` }
               : null,
+            result.timedOut ? { label: 'Timed out', value: 'yes' } : null,
           ]}
         />
       ) : null}
