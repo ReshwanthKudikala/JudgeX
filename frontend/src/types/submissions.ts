@@ -29,8 +29,12 @@ export interface CreateSubmissionInput {
 /** Full submission from POST /submissions and GET /submissions/:id. */
 export interface Submission {
   id: string;
+  /** Alias of id (Sprint 37 list/detail field name). */
+  submissionId?: string;
   userId: string;
   problemId: string;
+  problemSlug?: string | null;
+  problemTitle?: string | null;
   language: SubmissionLanguage;
   sourceCode?: string;
   status: SubmissionStatus;
@@ -45,8 +49,11 @@ export interface Submission {
   failedTestIndex: number | null;
   passedTests?: number | null;
   totalTests?: number | null;
+  /** Viewer responses always omit stdout (may leak hidden actual output). */
   stdout?: string | null;
   stderr?: string | null;
+  /** Viewer-safe RE/TLE message (never hidden I/O). */
+  executionError?: string | null;
   submittedAt?: string;
   judgedAt?: string | null;
   createdAt?: string;
@@ -57,7 +64,7 @@ export interface Submission {
 /** List item from GET /submissions (no source / stdout / stderr). */
 export type SubmissionSummary = Omit<
   Submission,
-  'sourceCode' | 'compileOutput' | 'stdout' | 'stderr'
+  'sourceCode' | 'compileOutput' | 'stdout' | 'stderr' | 'executionError'
 > & {
   problem?: SubmissionProblemSummary;
 };

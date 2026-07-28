@@ -434,7 +434,6 @@ function SubmissionWorkspace({
   }
 
   if (verdict === 'wrong_answer') {
-    const yours = submission.stdout?.trim() ? submission.stdout : null;
     return (
       <VerdictCard
         ok={false}
@@ -444,10 +443,7 @@ function SubmissionWorkspace({
           submission.failedTestIndex != null
             ? { label: 'Failed Test', value: `#${submission.failedTestIndex + 1}` }
             : null,
-          // Expected output is not in the submission API payload — omit if absent.
-          yours
-            ? { label: 'Your Output', value: yours, mono: true, block: true }
-            : null,
+          // Never show actual output — it may belong to a hidden judge case.
           runtimeRow(submission),
           memoryRow(submission),
         ])}

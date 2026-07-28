@@ -61,7 +61,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           </NavLink>
           {token ? (
             <NavLink to={paths.submissions} className={navLinkClass}>
-              Submissions
+              My Submissions
             </NavLink>
           ) : null}
           <NavLink to={paths.leaderboard} className={navLinkClass}>

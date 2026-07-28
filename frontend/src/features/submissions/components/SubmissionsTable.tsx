@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { VerdictBadge } from '@/features/submissions/components/VerdictBadge';
 import { paths } from '@/routes/paths';
@@ -32,6 +32,8 @@ export function SubmissionsTable({
   isFetching = false,
   hideProblemColumn = false,
 }: SubmissionsTableProps) {
+  const navigate = useNavigate();
+
   return (
     <div
       className={cn(
@@ -40,7 +42,7 @@ export function SubmissionsTable({
       )}
     >
       <table className="w-full min-w-[640px] caption-bottom border-collapse text-sm">
-        <caption className="sr-only">Submission history</caption>
+        <caption className="sr-only">My submissions</caption>
         <thead className="sticky top-0 z-10 border-b border-border bg-[#151820]">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
@@ -58,43 +60,37 @@ export function SubmissionsTable({
               Runtime
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
-              Memory
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
-              Submitted
+              Submitted At
             </th>
           </tr>
         </thead>
         <tbody>
           {submissions.map((row) => {
-            const runtime = row.runtimeMs ?? row.runtime ?? null;
-            const memory = row.memoryKb ?? row.memory ?? null;
+            const id = row.submissionId ?? row.id;
+            const runtime = row.runtime ?? row.runtimeMs ?? null;
+            const title =
+              row.problem?.title ?? row.problemTitle ?? '—';
+
             return (
               <tr
-                key={row.id}
-                className="border-b border-border/80 transition-colors hover:bg-white/[0.03]"
+                key={id}
+                role="link"
+                tabIndex={0}
+                aria-label={`Open submission for ${title}`}
+                className="cursor-pointer border-b border-border/80 transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                onClick={() => navigate(paths.submissionDetail(id))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(paths.submissionDetail(id));
+                  }
+                }}
               >
                 <td className="px-4 py-3">
-                  <Link
-                    to={paths.submissionDetail(row.id)}
-                    className="inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                  >
-                    <VerdictBadge verdict={row.verdict} status={row.status} />
-                  </Link>
+                  <VerdictBadge verdict={row.verdict} status={row.status} />
                 </td>
                 {!hideProblemColumn ? (
-                  <td className="px-4 py-3">
-                    {row.problem ? (
-                      <Link
-                        to={paths.problemDetail(row.problem.slug)}
-                        className="font-medium text-white hover:text-primary"
-                      >
-                        {row.problem.title}
-                      </Link>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
+                  <td className="px-4 py-3 font-medium text-white">{title}</td>
                 ) : null}
                 <td className="px-4 py-3 text-muted-foreground">
                   {LANGUAGE_LABELS[row.language] ?? row.language}
@@ -102,16 +98,8 @@ export function SubmissionsTable({
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                   {runtime != null ? `${runtime} ms` : '—'}
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                  {memory != null ? `${memory} KB` : '—'}
-                </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  <Link
-                    to={paths.submissionDetail(row.id)}
-                    className="hover:text-white"
-                  >
-                    {formatWhen(row.submittedAt ?? row.createdAt)}
-                  </Link>
+                  {formatWhen(row.submittedAt ?? row.createdAt)}
                 </td>
               </tr>
             );

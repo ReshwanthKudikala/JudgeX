@@ -46,19 +46,35 @@ const createSubmissionSchema = z.object({
     .max(MAX_SOURCE_BYTES, 'Source code exceeds the maximum allowed size.'),
 });
 
+const uuidString = z.string().uuid();
+
 // GET /submissions — the current user's history (query params, all optional).
 // Unknown keys are stripped; the repository additionally allow-lists sort/filter.
-const listSubmissionsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-  status: STATUS.optional(),
-  verdict: VERDICT.optional(),
-  language: LANGUAGE.optional(),
-  problemId: z.string().uuid().optional(),
-  /** Case-insensitive problem title search (joined problems.title). */
-  q: z.string().trim().min(1).max(200).optional(),
-  sort: sortSchema.optional(),
-});
+const listSubmissionsQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    status: STATUS.optional(),
+    verdict: VERDICT.optional(),
+    language: LANGUAGE.optional(),
+    problemId: z.string().uuid().optional(),
+    /** Alias for problemId (Sprint 37 filter name). */
+    problem: z.string().trim().min(1).max(200).optional(),
+    /** Case-insensitive problem title search (joined problems.title). */
+    q: z.string().trim().min(1).max(200).optional(),
+    sort: sortSchema.optional(),
+  })
+  .transform((value) => {
+    const next = { ...value };
+    if (!next.problemId && next.problem && uuidString.safeParse(next.problem).success) {
+      next.problemId = next.problem;
+    } else if (next.problem && !next.q && !uuidString.safeParse(next.problem).success) {
+      // Non-UUID `problem` is treated as a title search.
+      next.q = next.problem;
+    }
+    delete next.problem;
+    return next;
+  });
 
 const submissionIdParamsSchema = z.object({
   id: z.string().uuid(),

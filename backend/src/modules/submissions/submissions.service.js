@@ -40,13 +40,16 @@ function toProblemSummary(row) {
   };
 }
 
-// Map a full submissions row into a camelCase domain object.
+// Map a full submissions row into a camelCase domain object (internal / worker).
 function toSubmissionDetail(row) {
   const problem = toProblemSummary(row);
   return {
     id: row.id,
+    submissionId: row.id,
     userId: row.user_id,
     problemId: row.problem_id,
+    problemSlug: row.problem_slug ?? problem?.slug ?? null,
+    problemTitle: row.problem_title ?? problem?.title ?? null,
     language: row.language,
     sourceCode: row.source_code,
     status: row.status,
@@ -71,13 +74,48 @@ function toSubmissionDetail(row) {
   };
 }
 
+/**
+ * Viewer-safe detail DTO for HTTP GET /submissions/:id.
+ * Never exposes hidden testcase input, expected output, or actual output
+ * (stdout from a failing case may be hidden I/O — omit it).
+ * Surfaces only: source, compile stderr (CE), runtime stderr (RE), failed index (WA).
+ */
+function toSubmissionDetailForViewer(row) {
+  const detail = toSubmissionDetail(row);
+  const verdict = detail.verdict;
+
+  const compileOutput =
+    verdict === 'compile_error' ? detail.compileOutput : null;
+  const stderr =
+    verdict === 'runtime_error' || verdict === 'internal_error'
+      ? detail.stderr
+      : null;
+
+  return {
+    ...detail,
+    // Always omit program stdout from viewer responses (may be hidden actual output).
+    stdout: null,
+    stderr,
+    compileOutput,
+    executionError:
+      verdict === 'runtime_error'
+        ? detail.stderr
+        : verdict === 'tle'
+          ? 'Time Limit Exceeded: execution exceeded the allowed time limit.'
+          : null,
+  };
+}
+
 // Map a lightweight history row (no source_code/compile_output) into a summary.
 function toSubmissionSummary(row) {
   const problem = toProblemSummary(row);
   return {
     id: row.id,
+    submissionId: row.id,
     userId: row.user_id,
     problemId: row.problem_id,
+    problemSlug: row.problem_slug ?? problem?.slug ?? null,
+    problemTitle: row.problem_title ?? problem?.title ?? null,
     language: row.language,
     status: row.status,
     verdict: row.verdict,
@@ -184,7 +222,7 @@ class SubmissionService {
       throw new ForbiddenError('You do not have access to this submission.');
     }
 
-    return toSubmissionDetail(row);
+    return toSubmissionDetailForViewer(row);
   }
 
   async getUserSubmissions(userId, filters = {}) {
@@ -325,4 +363,7 @@ module.exports = {
   SubmissionService,
   submissionService: new SubmissionService(),
   TERMINAL_VERDICTS,
+  toSubmissionDetail,
+  toSubmissionDetailForViewer,
+  toSubmissionSummary,
 };

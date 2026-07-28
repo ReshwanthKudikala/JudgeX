@@ -66,8 +66,10 @@ describe('Submission flow', () => {
 
     assert.equal(res.status, 200);
     assert.equal(res.body.data.id, submissionId);
+    assert.equal(res.body.data.submissionId, submissionId);
     assert.equal(res.body.data.language, 'python');
     assert.equal(res.body.data.sourceCode, 'print(1)');
+    assert.equal(res.body.data.stdout, null);
     assert.ok(res.body.data.problem);
     assert.equal(res.body.data.problem.id, problemRes.body.data.id);
   });
@@ -189,5 +191,12 @@ describe('Submission flow', () => {
     assert.equal(res.body.data.length, 2);
     assert.ok(res.body.meta.pagination);
     assert.equal(res.body.meta.pagination.total, 2);
+    assert.ok(res.body.data[0].submissionId);
+    assert.ok(res.body.data[0].problemSlug);
+    assert.ok(res.body.data[0].problemTitle);
+    assert.equal(
+      res.body.data[0].runtime,
+      res.body.data[0].runtimeMs,
+    );
   });
 });
