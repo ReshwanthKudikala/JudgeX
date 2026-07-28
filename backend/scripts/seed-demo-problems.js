@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 /**
- * Upsert portfolio demo problems with full statements, constraints, and public samples.
+ * Upsert portfolio demo problems with full statements, constraints,
+ * public samples, and hidden judge test cases.
  *
- * - Does not change schema / API / frontend.
+ * - Does not change schema / API / frontend / judge pipeline.
  * - Updates statement + constraints_text for known demo slugs.
- * - Replaces ONLY public (is_hidden = false) sample test cases.
- * - Leaves hidden judge cases untouched.
+ * - Replaces public (is_hidden = false) sample test cases from catalog.samples.
+ * - Replaces hidden (is_hidden = true) judge cases from catalog.hiddenTests.
  *
  * Usage (from backend/):
  *   node scripts/seed-demo-problems.js
  *   # or with compose env:
- *   docker compose -f ../docker-compose.prod.yml exec api node scripts/seed-demo-problems.js
+ *   docker compose -f ../docker-compose.prod.yml --env-file ../.env.production exec api node scripts/seed-demo-problems.js
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
@@ -92,8 +93,7 @@ async function upsertProblem(client, demo) {
 }
 
 /**
- * Drop public samples only, then insert the catalog samples.
- * Hidden rows (is_hidden = true) are never deleted or updated.
+ * Replace public samples (is_hidden = false) from catalog.samples.
  */
 async function replacePublicSamples(client, problemId, samples) {
   await client.query(
@@ -125,14 +125,58 @@ async function replacePublicSamples(client, problemId, samples) {
   }
 }
 
+/**
+ * Replace hidden judge cases (is_hidden = true) from catalog.hiddenTests.
+ * Display order continues after public samples so judge order is samples then hidden.
+ */
+async function replaceHiddenTests(client, problemId, hiddenTests, displayOrderStart) {
+  await client.query(
+    `DELETE FROM test_cases WHERE problem_id = $1 AND is_hidden = true`,
+    [problemId],
+  );
+
+  const cases = Array.isArray(hiddenTests) ? hiddenTests : [];
+  for (let i = 0; i < cases.length; i += 1) {
+    const test = cases[i];
+    const input = test.input;
+    const expected = test.expectedOutput;
+    await client.query(
+      `INSERT INTO test_cases (
+         id, problem_id, is_hidden, input_ref, expected_output_ref,
+         is_inline, size_bytes, display_order, explanation
+       ) VALUES (
+         $1, $2, true, $3, $4, true, $5, $6, $7
+       )`,
+      [
+        randomUUID(),
+        problemId,
+        input,
+        expected,
+        byteLength(input) + byteLength(expected),
+        displayOrderStart + i,
+        test.explanation ?? null,
+      ],
+    );
+  }
+}
+
 async function seedOne(pool, demo) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { id, created } = await upsertProblem(client, demo);
-    await replacePublicSamples(client, id, demo.samples);
+    const samples = demo.samples || [];
+    const hiddenTests = demo.hiddenTests || [];
+    await replacePublicSamples(client, id, samples);
+    await replaceHiddenTests(client, id, hiddenTests, samples.length);
     await client.query('COMMIT');
-    return { slug: demo.slug, id, created, samples: demo.samples.length };
+    return {
+      slug: demo.slug,
+      id,
+      created,
+      samples: samples.length,
+      hidden: hiddenTests.length,
+    };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -151,7 +195,6 @@ async function main() {
       delayMs: config.infra.startupRetryDelayMs,
     });
 
-    // Cache invalidation is best-effort (prod compose has Redis; local may not).
     try {
       await connectRedis({
         retries: Math.min(3, config.infra.startupRetries),
@@ -183,7 +226,12 @@ async function main() {
     }
 
     logger.info('Demo problem seed finished', {
-      problems: results.map((r) => r.slug),
+      problems: results.map((r) => ({
+        slug: r.slug,
+        public: r.samples,
+        hidden: r.hidden,
+        total: r.samples + r.hidden,
+      })),
     });
   } catch (err) {
     logger.error('Demo problem seed failed', {

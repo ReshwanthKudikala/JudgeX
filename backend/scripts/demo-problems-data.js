@@ -2,6 +2,10 @@
  * Demo / portfolio problem catalog (content only).
  * Used by seed-demo-problems.js and integration fixtures.
  * Schema / API / frontend are unchanged — this is data.
+ *
+ * Each problem has:
+ * - samples: public (is_hidden = false) — shown on the problem page / Run
+ * - hiddenTests: judge-only (is_hidden = true) — Submit only
  */
 
 const TWO_SUM = {
@@ -56,6 +60,33 @@ const TWO_SUM = {
       explanation: 'The only pair is the two elements at indices 0 and 1.',
     },
   ],
+  /** Judge-only cases (is_hidden = true). Expected indices = unique valid pair (smaller index first). */
+  hiddenTests: [
+    // Minimum length
+    { input: '2\n1 2\n3\n', expectedOutput: '0 1\n' },
+    // Negatives: -2 + -4 = -6
+    { input: '4\n-1 -2 -3 -4\n-6\n', expectedOutput: '1 3\n' },
+    // Mixed signs: -10 + 5 = -5
+    { input: '5\n-10 0 5 20 3\n-5\n', expectedOutput: '0 2\n' },
+    // Zeros summing to zero
+    { input: '4\n0 4 3 0\n0\n', expectedOutput: '0 3\n' },
+    // Mid-array pair: 3 + 4 = 7
+    { input: '6\n8 1 2 3 4 -1\n7\n', expectedOutput: '3 4\n' },
+    // Large magnitude values
+    { input: '3\n1000000000 -1000000000 5\n0\n', expectedOutput: '0 1\n' },
+    // Duplicate values, distinct indices
+    { input: '5\n5 5 5 5 1\n10\n', expectedOutput: '0 1\n' },
+    // Target equals twice a mid-array value
+    { input: '4\n1 4 4 2\n8\n', expectedOutput: '1 2\n' },
+    // Later pair: 8 + 1 = 9
+    { input: '7\n10 15 3 7 8 1 2\n9\n', expectedOutput: '4 5\n' },
+    // Two equal positives that sum with a negative elsewhere: -50 + 50 = 0
+    { input: '3\n-50 50 50\n0\n', expectedOutput: '0 1\n' },
+    // Longer sparse array: 13 + 17 = 30
+    { input: '10\n1 3 5 7 9 11 13 15 17 19\n30\n', expectedOutput: '6 8\n' },
+    // Early hit: 9 + 1 = 10
+    { input: '5\n9 1 8 2 7\n10\n', expectedOutput: '0 1\n' },
+  ],
 };
 
 const A_PLUS_B = {
@@ -97,6 +128,22 @@ const A_PLUS_B = {
       expectedOutput: '3\n',
       explanation: '-5 + 8 = 3.',
     },
+  ],
+  hiddenTests: [
+    { input: '0 0\n', expectedOutput: '0\n' },
+    { input: '-1 -1\n', expectedOutput: '-2\n' },
+    { input: '1000000000 1000000000\n', expectedOutput: '2000000000\n' },
+    { input: '-1000000000 1000000000\n', expectedOutput: '0\n' },
+    { input: '-1000000000 -1000000000\n', expectedOutput: '-2000000000\n' },
+    { input: '999999999 1\n', expectedOutput: '1000000000\n' },
+    { input: '42 0\n', expectedOutput: '42\n' },
+    { input: '0 -42\n', expectedOutput: '-42\n' },
+    { input: '123456789 987654321\n', expectedOutput: '1111111110\n' },
+    { input: '-7 7\n', expectedOutput: '0\n' },
+    { input: '1 -1000000000\n', expectedOutput: '-999999999\n' },
+    { input: '2147483647 1\n', expectedOutput: '2147483648\n' },
+    { input: '-2147483648 0\n', expectedOutput: '-2147483648\n' },
+    { input: '100 -50\n', expectedOutput: '50\n' },
   ],
 };
 
@@ -141,6 +188,28 @@ const PALINDROME_NUMBER = {
       expectedOutput: 'false\n',
       explanation: '10 backwards is 01, which is 1 — not equal to 10.',
     },
+  ],
+  hiddenTests: [
+    // Requested / classic edges
+    { input: '0\n', expectedOutput: 'true\n' },
+    { input: '1\n', expectedOutput: 'true\n' },
+    { input: '11\n', expectedOutput: 'true\n' },
+    { input: '22\n', expectedOutput: 'true\n' },
+    { input: '101\n', expectedOutput: 'true\n' },
+    { input: '1001\n', expectedOutput: 'true\n' },
+    { input: '12321\n', expectedOutput: 'true\n' },
+    { input: '1000000001\n', expectedOutput: 'true\n' },
+    { input: '2147447412\n', expectedOutput: 'true\n' },
+    { input: '2147483647\n', expectedOutput: 'false\n' },
+    { input: '100\n', expectedOutput: 'false\n' },
+    { input: '1000\n', expectedOutput: 'false\n' },
+    { input: '10010\n', expectedOutput: 'false\n' },
+    { input: '999999999\n', expectedOutput: 'true\n' },
+    // Extra corner / boundary coverage
+    { input: '-1\n', expectedOutput: 'false\n' },
+    { input: '-2147483648\n', expectedOutput: 'false\n' },
+    { input: '12\n', expectedOutput: 'false\n' },
+    { input: '1221\n', expectedOutput: 'true\n' },
   ],
 };
 
