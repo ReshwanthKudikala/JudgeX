@@ -1,6 +1,8 @@
-// Background worker: consumes judge-queue jobs and invokes the judging pipeline.
-// Observability: requestId from job payload, Redis heartbeat, metrics.
-// Judge execution logic lives in judge.pipeline — unchanged here beyond timing/logs.
+// Background worker: consumes judge-queue jobs and invokes the judging pipeline
+// or Run execution. Observability: requestId from job payload, Redis heartbeat.
+//
+// Docker / sandboxes run ONLY here — never in the API process.
+// Submit → runJudgePipeline; Run → executeCodeRun (shared ExecutionService).
 
 const { Worker } = require('bullmq');
 
@@ -8,14 +10,19 @@ const { config } = require('../config');
 const { configure: configureLogger, createLogger } = require('../shared/logger/logger');
 const { initInfrastructure, shutdownInfrastructure, getRedis } = require('../infrastructure');
 const { SUBMISSIONS_QUEUE_NAME } = require('../infrastructure/queue/queues');
-const { SCHEMA_VERSION } = require('../infrastructure/queue/queue.service');
+const {
+  SCHEMA_VERSION,
+  JOB_NAME,
+  RUN_JOB_NAME,
+} = require('../infrastructure/queue/queue.service');
 const {
   writeWorkerHeartbeat,
 } = require('../infrastructure/queue/worker-heartbeat');
 const { submissionService } = require('../modules/submissions/submissions.service');
 const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
+const { executeCodeRun } = require('../modules/code/code.service');
 const { aiService } = require('../modules/ai/ai.service');
-const { NotFoundError } = require('../shared/errors/http-errors');
+const { NotFoundError, ValidationError } = require('../shared/errors/http-errors');
 const { metrics } = require('../shared/observability/metrics');
 const {
   trackError,
@@ -32,11 +39,7 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 
 const TERMINAL_STATUSES = new Set(['completed', 'error']);
 
-/**
- * Validate the minimal job payload contract (JUDGE_PIPELINE.md §2).
- * Throws (→ job fails) on an unknown/mismatched shape.
- */
-function assertValidPayload(data) {
+function assertValidSubmissionPayload(data) {
   if (!data || typeof data.submissionId !== 'string' || data.submissionId.length === 0) {
     throw new Error('Invalid judge job payload: missing submissionId.');
   }
@@ -47,12 +50,78 @@ function assertValidPayload(data) {
   }
 }
 
+function assertValidRunPayload(data) {
+  if (!data || typeof data.problemId !== 'string' || !data.problemId) {
+    throw new Error('Invalid run job payload: missing problemId.');
+  }
+  if (typeof data.language !== 'string' || !data.language) {
+    throw new Error('Invalid run job payload: missing language.');
+  }
+  if (typeof data.sourceCode !== 'string' || !data.sourceCode) {
+    throw new Error('Invalid run job payload: missing sourceCode.');
+  }
+  if (data.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(
+      `Unsupported run job schemaVersion: got ${data.schemaVersion}, expected ${SCHEMA_VERSION}.`,
+    );
+  }
+}
+
 /**
- * Job processor. Returns a plain result (becomes the BullMQ job return value).
- * Throwing marks the job failed (BullMQ applies the producer-configured retries).
+ * Run job: execute public samples / custom stdin via ExecutionService.
+ * Return value is delivered to the API through waitUntilFinished.
  */
-async function processJob(job) {
-  assertValidPayload(job.data);
+async function processRunJob(job) {
+  assertValidRunPayload(job.data);
+  const requestId = job.data.requestId || job.data.correlationId || null;
+  const jobLog = log.child({
+    requestId,
+    correlationId: requestId,
+    problemId: job.data.problemId,
+    jobId: job.id,
+    jobName: RUN_JOB_NAME,
+  });
+
+  if (job.data.enqueuedAt) {
+    const waitMs = Date.now() - new Date(job.data.enqueuedAt).getTime();
+    metrics.recordQueueWait(waitMs / 1000);
+  }
+
+  const started = Date.now();
+  jobLog.info('Processing run job', { attempt: job.attemptsMade + 1 });
+
+  try {
+    const result = await executeCodeRun({
+      problemId: job.data.problemId,
+      language: job.data.language,
+      sourceCode: job.data.sourceCode,
+      customInput: job.data.customInput,
+    });
+    jobLog.info('Run job finished', {
+      status: result.status,
+      durationMs: Date.now() - started,
+      totalCount: result.totalCount,
+    });
+    return result;
+  } catch (err) {
+    // ValidationError (e.g. no public samples) should fail the job with a clear reason.
+    if (err instanceof ValidationError || err instanceof NotFoundError) {
+      jobLog.warn('Run job rejected', {
+        code: err.code,
+        message: err.message,
+      });
+    } else {
+      trackError('code.run', err, { problemId: job.data.problemId }, { log: jobLog });
+    }
+    throw err;
+  }
+}
+
+/**
+ * Submit job processor (unchanged behavior).
+ */
+async function processSubmissionJob(job) {
+  assertValidSubmissionPayload(job.data);
   const { submissionId } = job.data;
   const requestId = job.data.requestId || job.data.correlationId || null;
   const jobLog = log.child({
@@ -112,7 +181,6 @@ async function processJob(job) {
     const durationSeconds = (Date.now() - started) / 1000;
     metrics.recordJudgeDuration(outcome.verdict, durationSeconds);
     metrics.recordJudgeJob('completed');
-    // Acceptance (and rate) changes rankings; short TTL also covers other verdicts.
     if (outcome.verdict === 'accepted') {
       await invalidateLeaderboardCache();
     }
@@ -135,6 +203,23 @@ async function processJob(job) {
   }
 }
 
+/**
+ * Dispatch by job name: run-code vs judge-submission.
+ */
+async function processJob(job) {
+  if (job.name === RUN_JOB_NAME) {
+    return processRunJob(job);
+  }
+  // Default / JOB_NAME: submission judging (backward compatible).
+  if (job.name && job.name !== JOB_NAME) {
+    log.warn('Unknown judge queue job name; treating as submission', {
+      jobName: job.name,
+      jobId: job.id,
+    });
+  }
+  return processSubmissionJob(job);
+}
+
 let worker = null;
 let shuttingDown = false;
 let heartbeatTimer = null;
@@ -143,12 +228,14 @@ function registerWorkerEvents(w) {
   w.on('active', (job) => {
     log.info('Job active', {
       jobId: job.id,
+      jobName: job.name,
       submissionId: job.data && job.data.submissionId,
+      problemId: job.data && job.data.problemId,
       requestId: job.data && job.data.requestId,
     });
   });
   w.on('completed', (job, result) => {
-    log.info('Job completed', { jobId: job.id, result });
+    log.info('Job completed', { jobId: job.id, jobName: job.name, result });
   });
   w.on('failed', (job, err) => {
     trackError(
@@ -156,7 +243,9 @@ function registerWorkerEvents(w) {
       err || new Error('unknown'),
       {
         jobId: job ? job.id : null,
+        jobName: job ? job.name : null,
         submissionId: job && job.data ? job.data.submissionId : null,
+        problemId: job && job.data ? job.data.problemId : null,
         requestId: job && job.data ? job.data.requestId : null,
       },
     );
@@ -247,4 +336,9 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { processJob, start };
+module.exports = {
+  processJob,
+  processRunJob,
+  processSubmissionJob,
+  start,
+};

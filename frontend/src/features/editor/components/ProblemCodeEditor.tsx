@@ -36,15 +36,12 @@ const V_PANEL_IDS = ['monaco', 'console'] as const;
 
 function mapCodeRunToConsole(data: CodeRunResult): RunConsoleResult {
   return {
-    stdin: data.stdin,
-    stdout: data.stdout,
-    stderr: data.stderr,
-    runtimeMs: data.runtimeMs,
-    memoryKb: data.memoryKb,
     status: data.status,
-    exitCode: data.exitCode,
-    timedOut: data.timedOut,
     compileSuccess: data.compile?.success ?? null,
+    stderr: data.stderr ?? data.compile?.stderr ?? null,
+    results: Array.isArray(data.results) ? data.results : [],
+    passedCount: data.passedCount ?? 0,
+    totalCount: data.totalCount ?? 0,
     pending: false,
   };
 }
@@ -134,9 +131,6 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
         ...(trimmed.length > 0 ? { customInput: trimmed } : {}),
       });
       setRunResult(mapCodeRunToConsole(data));
-      if (typeof data.stdin === 'string') {
-        setRunInput(data.stdin);
-      }
     } catch (err) {
       // Keep the previous Run result visible; never clear Submit state.
       errorToast('Run failed', getFriendlyErrorMessage(err, 'Could not run your code.'));

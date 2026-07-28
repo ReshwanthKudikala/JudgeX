@@ -7,25 +7,36 @@ export interface CodeRunInput {
   problemId: string;
   language: EditorLanguage;
   sourceCode: string;
-  /** When omitted, the API uses the first public sample. */
+  /** When set, runs only this stdin (no sample comparison). */
   customInput?: string;
+}
+
+/** One public-sample (or custom) case from POST /code/run. */
+export interface CodeRunCaseResult {
+  index: number;
+  input: string;
+  expectedOutput: string | null;
+  actualOutput: string | null;
+  passed: boolean | null;
+  runtimeMs: number | null;
+  stderr: string | null;
+  timedOut: boolean;
+  exitCode: number | null;
 }
 
 /** POST /code/run success payload (matches backend CodeService). */
 export interface CodeRunResult {
-  status: 'ok' | 'compile_error' | 'runtime_error' | 'time_limit' | string;
+  status: 'ok' | 'compile_error' | 'runtime_error' | 'time_limit' | 'failed' | string;
   compile: {
     success: boolean;
     stdout: string | null;
     stderr: string | null;
   };
-  stdin: string;
-  stdout: string | null;
-  stderr: string | null;
-  exitCode: number | null;
-  runtimeMs: number | null;
-  memoryKb: number | null;
-  timedOut: boolean;
+  results: CodeRunCaseResult[];
+  passedCount: number;
+  totalCount: number;
+  /** Present on compile_error for convenience. */
+  stderr?: string | null;
 }
 
 /** POST /code/run → 200 CodeRunResult. Auth required. */

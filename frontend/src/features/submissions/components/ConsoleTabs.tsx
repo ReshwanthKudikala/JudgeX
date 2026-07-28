@@ -15,19 +15,29 @@ export type WorkspaceMode = 'idle' | 'run' | 'submit';
 /** @deprecated Prefer WorkspaceMode */
 export type ConsoleAction = WorkspaceMode;
 
+/** One sample/custom case shown in the Run workspace. */
+export interface RunCaseResult {
+  index: number;
+  input: string;
+  expectedOutput: string | null;
+  actualOutput: string | null;
+  passed: boolean | null;
+  runtimeMs: number | null;
+  stderr: string | null;
+  timedOut: boolean;
+  exitCode: number | null;
+}
+
 /** Run-only payload. Never shared with submission state. */
 export interface RunConsoleResult {
-  stdin?: string | null;
-  stdout?: string | null;
-  stderr?: string | null;
-  runtimeMs?: number | null;
-  memoryKb?: number | null;
   pending?: boolean;
-  /** Execution status from POST /code/run (not a graded verdict). */
   status?: string | null;
-  exitCode?: number | null;
-  timedOut?: boolean;
   compileSuccess?: boolean | null;
+  /** Compiler stderr when status === compile_error. */
+  stderr?: string | null;
+  results?: RunCaseResult[];
+  passedCount?: number;
+  totalCount?: number;
 }
 
 export type ConsoleTab = 'workspace' | 'ai';
@@ -239,19 +249,9 @@ function RunWorkspace({
   onRunInputChange?: (value: string) => void;
 }) {
   const pending = Boolean(result?.pending);
-  const stdout = result?.stdout != null ? result.stdout : null;
-  const stderr = result?.stderr?.trim() ? result.stderr : null;
-  const shownInput = result?.stdin ?? runInput;
-  const statusLabel =
-    result?.status === 'compile_error'
-      ? 'Compile error'
-      : result?.status === 'runtime_error'
-        ? 'Runtime error'
-        : result?.status === 'time_limit' || result?.timedOut
-          ? 'Timed out'
-          : result?.status === 'ok'
-            ? 'Finished'
-            : result?.status ?? null;
+  const compileFailed = result?.status === 'compile_error';
+  const compilerStderr = result?.stderr?.trim() ? result.stderr : null;
+  const cases = result?.results ?? [];
 
   return (
     <div className="space-y-3 px-3 py-2.5">
@@ -259,76 +259,119 @@ function RunWorkspace({
         Run result — sample I/O only (not a judge verdict)
       </p>
 
-      <Field label="Input">
+      <Field label="Custom input (optional)">
         {onRunInputChange && !pending ? (
           <textarea
             value={runInput}
             onChange={(e) => onRunInputChange(e.target.value)}
-            rows={3}
+            rows={2}
             spellCheck={false}
-            placeholder="stdin for your next Run…"
+            placeholder="Leave empty to run all public samples…"
             className={cn(
               'w-full resize-y rounded border border-border/50 bg-black/30 px-2 py-1.5',
               'font-mono text-[12px] leading-relaxed text-muted-foreground',
               'placeholder:text-muted/50 focus:border-sky-500/40 focus:outline-none',
             )}
-            aria-label="Run input"
+            aria-label="Custom run input"
           />
         ) : (
           <TerminalPre className="rounded border border-border/40 bg-black/20 px-2 py-1.5">
-            {shownInput.trim() ? shownInput : '(empty)'}
+            {runInput.trim() ? runInput : '(using public samples)'}
           </TerminalPre>
         )}
       </Field>
 
-      <Field label="Output">
-        {pending ? (
-          <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" aria-hidden />
-            Running…
-          </div>
-        ) : (
-          <TerminalPre className="rounded border border-border/40 bg-black/20 px-2 py-1.5">
-            {stdout != null && String(stdout).length > 0 ? stdout : '(empty)'}
-          </TerminalPre>
-        )}
-      </Field>
+      {pending ? (
+        <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" aria-hidden />
+          Running…
+        </div>
+      ) : null}
 
-      {stderr ? (
-        <Field
-          label={
-            result?.status === 'compile_error' ? 'Compiler output' : 'stderr'
-          }
-        >
+      {!pending && compileFailed ? (
+        <Field label="Compiler output">
           <TerminalPre className="rounded border border-error/30 bg-error/5 px-2 py-1.5 text-error">
-            {stderr}
+            {compilerStderr || '(no compiler output)'}
           </TerminalPre>
         </Field>
       ) : null}
 
-      {!pending && result && !result.pending ? (
-        <MetaRow
-          items={[
-            statusLabel ? { label: 'Status', value: statusLabel } : null,
-            result.exitCode != null
-              ? { label: 'Exit', value: String(result.exitCode) }
-              : null,
-            result.runtimeMs != null
-              ? { label: 'Runtime', value: `${result.runtimeMs} ms` }
-              : null,
-            result.memoryKb != null
-              ? { label: 'Memory', value: `${result.memoryKb} KB` }
-              : null,
-            result.timedOut ? { label: 'Timed out', value: 'yes' } : null,
-          ]}
-        />
+      {!pending && !compileFailed && cases.length > 0 ? (
+        <div className="space-y-2.5">
+          {result?.totalCount != null && result.totalCount > 0 ? (
+            <p className="font-mono text-[11px] text-muted">
+              Passed {result.passedCount ?? 0} / {result.totalCount} samples
+            </p>
+          ) : null}
+          {cases.map((c) => (
+            <SampleCaseCard key={c.index} caseResult={c} />
+          ))}
+        </div>
       ) : null}
 
       {!pending && !result ? (
         <p className="font-mono text-[11px] text-muted/60">
-          Press Run to execute against the input above.
+          Press Run to execute against public sample cases.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function SampleCaseCard({ caseResult }: { caseResult: RunCaseResult }) {
+  const mark =
+    caseResult.passed === true ? '✓' : caseResult.passed === false ? '✗' : '·';
+  const markClass =
+    caseResult.passed === true
+      ? 'text-success'
+      : caseResult.passed === false
+        ? 'text-error'
+        : 'text-muted';
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/50 bg-white/[0.02] px-2.5 py-2">
+      <p className={cn('text-sm font-semibold', markClass)}>
+        {mark} Case {caseResult.index + 1}
+        {caseResult.timedOut ? ' · Timed out' : ''}
+      </p>
+      <Field label="Input">
+        <TerminalPre className="rounded border border-border/40 bg-black/20 px-2 py-1.5">
+          {caseResult.input.trim() ? caseResult.input : '(empty)'}
+        </TerminalPre>
+      </Field>
+      {caseResult.expectedOutput != null ? (
+        <Field label="Expected Output">
+          <TerminalPre className="rounded border border-border/40 bg-black/20 px-2 py-1.5">
+            {caseResult.expectedOutput.trim()
+              ? caseResult.expectedOutput
+              : '(empty)'}
+          </TerminalPre>
+        </Field>
+      ) : null}
+      <Field label="Your Output">
+        <TerminalPre className="rounded border border-border/40 bg-black/20 px-2 py-1.5">
+          {caseResult.actualOutput != null && String(caseResult.actualOutput).length > 0
+            ? caseResult.actualOutput
+            : '(empty)'}
+        </TerminalPre>
+      </Field>
+      {caseResult.stderr ? (
+        <Field label="stderr">
+          <TerminalPre className="rounded border border-error/30 bg-error/5 px-2 py-1.5 text-error">
+            {caseResult.stderr}
+          </TerminalPre>
+        </Field>
+      ) : null}
+      <MetaRow
+        items={[
+          caseResult.runtimeMs != null
+            ? { label: 'Runtime', value: `${caseResult.runtimeMs} ms` }
+            : null,
+          caseResult.exitCode != null
+            ? { label: 'Exit', value: String(caseResult.exitCode) }
+            : null,
+        ]}
+      />
     </div>
   );
 }
