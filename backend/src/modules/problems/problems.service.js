@@ -25,6 +25,12 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Derived business metric: acceptance rate (%) rounded to one decimal (Sprint 38).
+function acceptanceRateOneDecimal(totalAccepted, totalSubmissions) {
+  if (totalSubmissions <= 0) return 0;
+  return Math.round((totalAccepted / totalSubmissions) * 1000) / 10;
+}
+
 // Derived business metric: acceptance rate (%) rounded to two decimals.
 function acceptanceRate(totalAccepted, totalSubmissions) {
   if (totalSubmissions <= 0) return 0;
@@ -120,6 +126,38 @@ class ProblemService {
       await setCachedProblemDetail(slug, detail);
     }
     return detail;
+  }
+
+  /**
+   * Live problem statistics from submissions (Sprint 38).
+   * Always computed from the submissions table — not denormalized counters.
+   * @param {string} slug
+   */
+  async getProblemStatistics(slug) {
+    const problem = await this.problemRepository.findBySlug(slug);
+    if (!problem) {
+      throw new NotFoundError('Problem not found.');
+    }
+
+    const row = await this.problemRepository.getLiveStatistics(problem.id);
+    const totalSubmissions = toNumber(row?.total_submissions);
+    const totalAcceptedSubmissions = toNumber(row?.total_accepted_submissions);
+    const acceptedUsers = toNumber(row?.accepted_users);
+    const averageRuntimeRaw = row?.average_runtime;
+    const averageRuntime =
+      averageRuntimeRaw == null || !Number.isFinite(Number(averageRuntimeRaw))
+        ? null
+        : Math.round(Number(averageRuntimeRaw));
+
+    return {
+      totalSubmissions,
+      totalAcceptedSubmissions,
+      acceptedUsers,
+      acceptanceRate: acceptanceRateOneDecimal(totalAcceptedSubmissions, totalSubmissions),
+      averageRuntime,
+      /** Alias of totalSubmissions (Sprint 38 compute list). */
+      totalAttempts: totalSubmissions,
+    };
   }
 
   /**

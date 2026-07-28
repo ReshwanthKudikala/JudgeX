@@ -20,6 +20,11 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
+const UserDashboardPage = lazy(() =>
+  import('@/pages/UserDashboardPage').then((m) => ({
+    default: m.DashboardPage,
+  })),
+);
 const ProblemsPage = lazy(() =>
   import('@/pages/ProblemsPage').then((m) => ({ default: m.ProblemsPage })),
 );
@@ -177,6 +182,14 @@ export const router = createBrowserRouter([
           {
             element: <ProtectedRoute />,
             children: [
+              {
+                path: paths.dashboard,
+                element: (
+                  <LazyRoute>
+                    <UserDashboardPage />
+                  </LazyRoute>
+                ),
+              },
               {
                 path: paths.submissions,
                 element: (

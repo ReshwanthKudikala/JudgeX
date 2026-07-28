@@ -27,6 +27,16 @@ async function getProblemBySlug(req, res, next) {
   }
 }
 
+// GET /problems/:slug/statistics → 200 live submission aggregates
+async function getProblemStatistics(req, res, next) {
+  try {
+    const statistics = await problemService.getProblemStatistics(req.params.slug);
+    sendSuccess(req, res, 200, statistics);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /problems/id/:id → 200 { ...problem }
 async function getProblemById(req, res, next) {
   try {
@@ -70,6 +80,7 @@ async function deleteProblem(req, res, next) {
 module.exports = {
   listProblems,
   getProblemBySlug,
+  getProblemStatistics,
   getProblemById,
   createProblem,
   updateProblem,

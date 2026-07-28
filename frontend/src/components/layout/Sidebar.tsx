@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Home,
   BookOpen,
   Flag,
   History,
@@ -20,7 +21,8 @@ interface SidebarProps {
 }
 
 const links = [
-  { to: paths.home, label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: paths.home, label: 'Home', icon: Home, end: true },
+  { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, auth: true },
   { to: paths.problems, label: 'Problems', icon: BookOpen },
   { to: paths.contests, label: 'Contests', icon: Flag },
   { to: paths.submissions, label: 'My Submissions', icon: History, auth: true },

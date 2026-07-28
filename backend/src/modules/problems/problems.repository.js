@@ -268,6 +268,30 @@ class ProblemRepository extends BaseRepository {
       client,
     );
   }
+
+  /**
+   * Live submission aggregates for a problem (no denormalized counters).
+   * @param {string} problemId - UUID.
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object>}
+   */
+  getLiveStatistics(problemId, client) {
+    return this.queryOne(
+      `SELECT
+         COUNT(*)::int AS total_submissions,
+         COUNT(*) FILTER (WHERE verdict = 'accepted')::int AS total_accepted_submissions,
+         COUNT(DISTINCT user_id) FILTER (WHERE verdict = 'accepted')::int AS accepted_users,
+         ROUND(
+           AVG(runtime_ms) FILTER (
+             WHERE verdict = 'accepted' AND runtime_ms IS NOT NULL
+           )
+         )::float AS average_runtime
+       FROM submissions
+      WHERE problem_id = $1`,
+      [problemId],
+      client,
+    );
+  }
 }
 
 module.exports = { ProblemRepository, problemRepository: new ProblemRepository() };

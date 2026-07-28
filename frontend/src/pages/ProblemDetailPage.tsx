@@ -11,6 +11,7 @@ import { ProblemHeader } from '@/features/problems/components/ProblemHeader';
 import { ProblemLayout } from '@/features/problems/components/ProblemLayout';
 import { ProblemSkeleton } from '@/features/problems/components/ProblemSkeleton';
 import { ProblemStatementPanel } from '@/features/problems/components/ProblemStatementPanel';
+import { ProblemStatisticsPanel } from '@/features/problems/components/ProblemStatisticsPanel';
 import { SubmissionsHistoryPanel } from '@/features/submissions/components/SubmissionsHistoryPanel';
 import { useProblem } from '@/features/problems/hooks/useProblem';
 import { useAuthStore } from '@/store';
@@ -75,6 +76,7 @@ export function ProblemDetailPage() {
 
             <div className="px-3 py-4 sm:px-4">
               <TabsContent value="description" className="mt-0">
+                <ProblemStatisticsPanel slug={problem.slug} />
                 <ProblemStatementPanel problem={problem} />
               </TabsContent>
               <TabsContent value="editorial" className="mt-0">

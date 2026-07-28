@@ -62,6 +62,12 @@ router.post(
   discussionController.createDiscussion,
 );
 router.get(
+  '/:slug/statistics',
+  problemsRateLimit,
+  validate(problemSlugRouteParamsSchema, 'params'),
+  controller.getProblemStatistics,
+);
+router.get(
   '/:slug',
   problemsRateLimit,
   validate(problemSlugRouteParamsSchema, 'params'),

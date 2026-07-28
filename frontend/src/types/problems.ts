@@ -68,3 +68,14 @@ export interface ProblemListResult {
   problems: ProblemSummary[];
   pagination: PaginationMeta;
 }
+
+/** Live aggregates from GET /problems/:slug/statistics (Sprint 38). */
+export interface ProblemStatistics {
+  totalSubmissions: number;
+  totalAcceptedSubmissions: number;
+  acceptedUsers: number;
+  acceptanceRate: number;
+  averageRuntime: number | null;
+  totalAttempts?: number;
+}
+

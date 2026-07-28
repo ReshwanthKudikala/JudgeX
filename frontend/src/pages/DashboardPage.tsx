@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Trophy } from 'lucide-react';
+import { BookOpen, LayoutDashboard, Trophy } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -8,8 +8,10 @@ import { useAuthHydration } from '@/hooks/useAuthHydration';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 
+/** Public home / welcome surface. Authenticated users are pointed to /dashboard. */
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthHydration();
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
@@ -46,10 +48,32 @@ export function DashboardPage() {
       </div>
 
       <section aria-labelledby="quick-actions-heading">
-        <h2 id="quick-actions-heading" className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
+        <h2
+          id="quick-actions-heading"
+          className="mb-3 text-sm font-medium uppercase tracking-wide text-muted"
+        >
           Quick actions
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {token ? (
+            <Card className="transition-colors hover:border-primary/40">
+              <CardHeader>
+                <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md bg-primary-muted text-primary">
+                  <LayoutDashboard className="h-4 w-4" aria-hidden />
+                </div>
+                <CardTitle>Dashboard</CardTitle>
+                <CardDescription>Your stats, streak, and recent activity</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link to={paths.dashboard}>
+                  <Button variant="secondary" size="sm">
+                    Open dashboard
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card className="transition-colors hover:border-primary/40">
             <CardHeader>
               <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md bg-primary-muted text-primary">
