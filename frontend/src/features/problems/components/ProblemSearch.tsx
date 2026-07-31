@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
 
 import { Input } from '@/components/ui/Input';
-import { paths } from '@/routes/paths';
 import { cn } from '@/utils/cn';
 
 interface ProblemSearchProps {
@@ -17,34 +15,10 @@ function modKeyLabel() {
   return /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 }
 
+/** Inline problem search (optional). Prefer header `HeaderSearch` for the app shell. */
 export function ProblemSearch({ value, onChange, className }: ProblemSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const mod = modKeyLabel();
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const modPressed = event.ctrlKey || event.metaKey;
-      if (!modPressed) return;
-      if (event.key !== 'k' && event.key !== 'K') return;
-
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      if (
-        tag === 'input' ||
-        tag === 'textarea' ||
-        target?.isContentEditable
-      ) {
-        // Allow Cmd+K even from inputs to jump to problem search.
-      }
-
-      event.preventDefault();
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -78,25 +52,4 @@ export function ProblemSearch({ value, onChange, className }: ProblemSearchProps
   );
 }
 
-/** Global Cmd/Ctrl+K → navigate to Problems and focus search. */
-export function GlobalProblemSearchShortcut() {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.ctrlKey || event.metaKey;
-      if (!mod || (event.key !== 'k' && event.key !== 'K')) return;
-
-      // Problems page handles focus locally.
-      if (location.pathname === paths.problems) return;
-
-      event.preventDefault();
-      navigate(`${paths.problems}#search`);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [navigate, location.pathname]);
-
-  return null;
-}
+export { GlobalProblemSearchShortcut } from '@/components/layout/HeaderSearch';

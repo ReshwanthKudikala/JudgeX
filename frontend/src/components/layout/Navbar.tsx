@@ -1,6 +1,8 @@
-import { NavLink, Link } from 'react-router-dom';
-import { Menu, LogOut } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Bell, ChevronDown, LogOut, Menu, PanelLeft, Settings, User } from 'lucide-react';
 
+import { HeaderSearch } from '@/components/layout/HeaderSearch';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -9,15 +11,9 @@ import { cn } from '@/utils/cn';
 
 interface NavbarProps {
   onMenuClick?: () => void;
+  onToggleCollapse?: () => void;
+  sidebarCollapsed?: boolean;
 }
-
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    'rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150',
-    isActive
-      ? 'bg-overlay text-foreground'
-      : 'text-muted hover:bg-overlay hover:text-foreground',
-  );
 
 function UserAvatar({ username }: { username: string }) {
   const initial = username.trim().charAt(0).toUpperCase() || '?';
@@ -31,82 +27,158 @@ function UserAvatar({ username }: { username: string }) {
   );
 }
 
-export function Navbar({ onMenuClick }: NavbarProps) {
+function UserMenu({
+  username,
+  onLogout,
+}: {
+  username: string;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        className={cn(
+          'flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted',
+          'transition-colors duration-150 hover:bg-overlay hover:text-foreground',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+        )}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Account menu for ${username}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <UserAvatar username={username} />
+        <span className="hidden max-w-[100px] truncate lg:inline">{username}</span>
+        <ChevronDown className="hidden h-3.5 w-3.5 sm:block" aria-hidden />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 z-50 mt-2 w-48 animate-slide-up rounded-lg border border-border bg-card py-1 shadow-card"
+        >
+          <Link
+            role="menuitem"
+            to={paths.profile}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-overlay hover:text-foreground"
+            onClick={() => setOpen(false)}
+          >
+            <User className="h-4 w-4" aria-hidden />
+            Profile
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            disabled
+            className="flex w-full cursor-not-allowed items-center gap-2 px-3 py-2 text-sm text-muted/60"
+            title="Coming soon"
+          >
+            <Settings className="h-4 w-4" aria-hidden />
+            Settings
+          </button>
+          <div className="my-1 border-t border-border" />
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-overlay hover:text-foreground"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+          >
+            <LogOut className="h-4 w-4" aria-hidden />
+            Logout
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Global action bar — no primary nav links (sidebar owns navigation). */
+export function Navbar({
+  onMenuClick,
+  onToggleCollapse,
+  sidebarCollapsed = false,
+}: NavbarProps) {
   const { user, token, logout } = useAuth();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-app items-center gap-3 px-4 sm:px-6">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-md">
+      <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:px-6">
         <button
           type="button"
-          className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
+          className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:hidden"
           onClick={onMenuClick}
           aria-label="Open navigation"
         >
           <Menu className="h-5 w-5" />
         </button>
 
-        <Link to={paths.home} className="flex shrink-0 items-center gap-2">
+        {onToggleCollapse ? (
+          <button
+            type="button"
+            className="hidden rounded-md p-2 text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:inline-flex"
+            onClick={onToggleCollapse}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={sidebarCollapsed}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        ) : null}
+
+        <Link
+          to={paths.home}
+          className="flex shrink-0 items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-on-primary">
             JX
           </span>
-          <span className="text-base font-semibold tracking-tight text-foreground">
+          <span className="hidden text-base font-semibold tracking-tight text-foreground sm:inline">
             Judge<span className="text-primary">X</span>
           </span>
         </Link>
 
-        <nav className="ml-4 hidden items-center gap-1 md:flex" aria-label="Primary">
-          <NavLink to={paths.problems} className={navLinkClass}>
-            Problems
-          </NavLink>
-          <NavLink to={paths.contests} className={navLinkClass}>
-            Contests
-          </NavLink>
-          {token ? (
-            <NavLink to={paths.submissions} className={navLinkClass}>
-              My Submissions
-            </NavLink>
-          ) : null}
-          <NavLink to={paths.leaderboard} className={navLinkClass}>
-            Leaderboard
-          </NavLink>
-          {token && user?.role === 'admin' ? (
-            <NavLink to={paths.admin} className={navLinkClass}>
-              Admin
-            </NavLink>
-          ) : null}
-          {token ? (
-            <NavLink to={paths.profile} className={navLinkClass}>
-              Profile
-            </NavLink>
-          ) : null}
-        </nav>
+        <div className="mx-2 min-w-0 flex-1 md:mx-4 md:flex md:justify-center">
+          <HeaderSearch className="w-full max-w-[12rem] sm:max-w-xs md:max-w-md" />
+        </div>
 
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <button
+            type="button"
+            disabled
+            className="hidden rounded-md p-2 text-muted/50 sm:inline-flex"
+            aria-label="Notifications (coming soon)"
+            title="Notifications — coming soon"
+          >
+            <Bell className="h-4 w-4" aria-hidden />
+          </button>
+
           <ThemeToggle />
+
           {token && user ? (
-            <>
-              <Link
-                to={paths.profile}
-                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                aria-label={`Profile for ${user.username}`}
-              >
-                <UserAvatar username={user.username} />
-                <span className="hidden max-w-[120px] truncate sm:inline">
-                  {user.username}
-                </span>
-              </Link>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => logout()}
-                aria-label="Sign out"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
-            </>
+            <UserMenu username={user.username} onLogout={() => logout()} />
           ) : (
             <>
               <Link
@@ -115,7 +187,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
               >
                 Login
               </Link>
-              <Link to={paths.register}>
+              <Link to={paths.register} className="hidden sm:inline-flex">
                 <Button size="sm">Register</Button>
               </Link>
             </>

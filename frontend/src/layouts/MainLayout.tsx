@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { matchPath, Outlet, useLocation } from 'react-router-dom';
 
 import { Navbar } from '@/components/layout/Navbar';
-import { Sidebar } from '@/components/layout/Sidebar';
+import {
+  Sidebar,
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+} from '@/components/layout/Sidebar';
 import { Footer } from '@/components/layout/Footer';
-import { GlobalProblemSearchShortcut } from '@/features/problems/components/ProblemSearch';
 import { cn } from '@/utils/cn';
 
 /** Problem solve workspace (`/problems/:slug`) — desktop uses a locked viewport. */
@@ -14,39 +17,58 @@ function useProblemWorkspace() {
 }
 
 export function MainLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   const isProblemWorkspace = useProblemWorkspace();
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      writeSidebarCollapsed(next);
+      return next;
+    });
+  };
 
   return (
     <div
       className={cn(
-        'flex flex-col bg-background',
+        'flex bg-background',
         isProblemWorkspace ? 'min-h-screen lg:h-dvh lg:overflow-hidden' : 'min-h-screen',
       )}
     >
-      <Navbar onMenuClick={() => setSidebarOpen(true)} />
-      <GlobalProblemSearchShortcut />
+      <Sidebar
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        collapsed={collapsed}
+        onToggleCollapsed={toggleCollapsed}
+      />
+
       <div
         className={cn(
-          'mx-auto flex w-full max-w-app flex-1',
+          'flex min-w-0 flex-1 flex-col',
           isProblemWorkspace && 'min-h-0',
         )}
       >
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Navbar
+          onMenuClick={() => setMobileOpen(true)}
+          onToggleCollapse={toggleCollapsed}
+          sidebarCollapsed={collapsed}
+        />
+
         <main
           className={cn(
-            'min-w-0 flex-1 px-4 sm:px-6',
+            'mx-auto w-full min-w-0 max-w-app flex-1 px-4 sm:px-6 lg:px-8',
             isProblemWorkspace
-              ? 'flex min-h-0 flex-col py-2 lg:overflow-hidden lg:py-2'
-              : 'py-6',
+              ? 'flex min-h-0 flex-col py-3 lg:overflow-hidden'
+              : 'py-8',
           )}
         >
           <Outlet />
         </main>
-      </div>
-      {/* Hide footer on desktop solve view so panels can use the full remaining height. */}
-      <div className={cn(isProblemWorkspace && 'lg:hidden')}>
-        <Footer />
+
+        <div className={cn(isProblemWorkspace && 'lg:hidden')}>
+          <Footer />
+        </div>
       </div>
     </div>
   );

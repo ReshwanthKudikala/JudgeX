@@ -1,7 +1,6 @@
 import { ProblemEmptyState } from '@/features/problems/components/ProblemEmptyState';
 import { ProblemErrorState } from '@/features/problems/components/ProblemErrorState';
 import { ProblemFilters } from '@/features/problems/components/ProblemFilters';
-import { ProblemSearch } from '@/features/problems/components/ProblemSearch';
 import { ProblemStats } from '@/features/problems/components/ProblemStats';
 import { ProblemsSkeleton } from '@/features/problems/components/ProblemsSkeleton';
 import { ProblemsTable } from '@/features/problems/components/ProblemsTable';
@@ -26,7 +25,6 @@ export function ProblemsPage() {
     error,
     refetch,
     onDifficultyChange,
-    onSearchChange,
     onSort,
     onPageChange,
   } = useProblems();
@@ -39,7 +37,8 @@ export function ProblemsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Problems</h1>
         <p className="mt-1 text-sm text-muted">
-          Browse the catalog and open a problem to start solving.
+          Browse the catalog and open a problem to start solving. Use the header
+          search or press Ctrl/⌘+K.
         </p>
       </div>
 
@@ -55,7 +54,11 @@ export function ProblemsPage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ProblemFilters difficulty={difficulty} onDifficultyChange={onDifficultyChange} />
-        <ProblemSearch value={search} onChange={onSearchChange} className="sm:ml-auto" />
+        {search.trim() ? (
+          <p className="text-xs text-muted sm:ml-auto" aria-live="polite">
+            Filtering by “{search.trim()}”
+          </p>
+        ) : null}
       </div>
 
       {isError ? (

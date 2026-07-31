@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 
 import { listProblems } from '@/api/problems.api';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -46,11 +47,20 @@ function matchesSearch(problem: ProblemSummary, search: string): boolean {
  * Stats Easy/Medium/Hard counts are computed from the current page only.
  */
 export function useProblems() {
+  const [searchParams] = useSearchParams();
+  const urlQ = searchParams.get('q') ?? '';
+
   const [page, setPage] = useState(1);
   const [difficulty, setDifficulty] = useState<ProblemDifficulty | 'all'>('all');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(urlQ);
   const [sortField, setSortField] = useState<ProblemSortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
+
+  // Header search owns `?q=` — keep list filter in sync.
+  useEffect(() => {
+    setSearch(urlQ);
+    setPage(1);
+  }, [urlQ]);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
