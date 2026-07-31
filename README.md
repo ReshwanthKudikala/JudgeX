@@ -1,457 +1,588 @@
-# 🚀 JudgeX
+<div align="center">
 
-> A production-ready AI-powered Online Coding Judge built with **Node.js**, **PostgreSQL**, **Redis**, **BullMQ**, **Docker**, and **React**.
+# JudgeX
 
-JudgeX is a modern competitive programming platform inspired by **LeetCode**, **Codeforces**, and **HackerRank**. Users can solve coding problems, submit **C++17** and **Python** solutions, receive automated verdicts from secure Docker sandboxes, climb the leaderboard, and get AI-powered compile error explanations.
+**A production-ready online coding judge inspired by LeetCode, HackerRank, and Codeforces.**
 
-![Backend](https://img.shields.io/badge/Backend-Production%20Ready-success)
-![Node.js](https://img.shields.io/badge/Node.js-20-green)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue)
-![Redis](https://img.shields.io/badge/Redis-7-red)
-![Docker](https://img.shields.io/badge/Docker-Enabled-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+Securely compile and execute user code in Docker sandboxes with asynchronous workers, a modular REST API, and a modern React SPA.
 
----
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![BullMQ](https://img.shields.io/badge/BullMQ-5-FF6B6B)](https://docs.bullmq.io/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![CI](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 
-# ✨ Features
+[Features](#features) · [Architecture](#architecture) · [Getting Started](#getting-started) · [Deployment](#production-deployment) · [Documentation](#documentation)
 
-## 🔐 Authentication
-
-- JWT Authentication
-- Secure password hashing (bcrypt)
-- Login & Registration
-- Stateless authentication
+</div>
 
 ---
 
-## 🛡️ Role-Based Access Control (RBAC)
+## Project Overview
 
-Roles supported:
+JudgeX is an online coding judge platform where users browse problems, write solutions in **C++** or **Python**, run code against public samples, submit for full judging, and track progress on a personal dashboard and global leaderboard.
 
-- User
-- Admin
+Unlike a simple CRUD demo, JudgeX is engineered around **secure untrusted code execution** and **horizontally scalable judging**:
 
-Admin users can:
+- The **API never runs user code** — it validates, persists, and enqueues work.
+- **BullMQ workers** pull jobs and invoke a shared **ExecutionService** that talks to **Docker sandboxes**.
+- **Hidden judge test cases** stay server-side; clients only see public samples and verdict metadata.
 
-- Create problems
-- Update problems
-- Delete problems
-- Replace test cases atomically
+Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and **HackerRank**, with a focus on production architecture and interview-grade system design.
 
 ---
 
-## 💻 Online Judge
+## Why JudgeX
 
-- Secure Docker sandbox execution
-- BullMQ asynchronous judging
-- Persist-before-enqueue architecture
-- Dedicated Judge Worker
-- Cleanup/Reaper Worker
-- Compile → Execute → Compare → Verdict pipeline
-- Queue recovery for failed enqueue operations
-
----
-
-## 🌐 Supported Languages
-
-- C++17
-- Python 3
+| Goal | How JudgeX addresses it |
+|------|-------------------------|
+| **Secure sandboxing** | Per-run Docker containers with network disabled, read-only rootfs, memory/CPU/PID limits |
+| **Distributed workers** | BullMQ-backed judge and cleanup workers; API stays stateless |
+| **Docker isolation** | Only the worker process holds the Docker socket |
+| **Production architecture** | Postgres source of truth, Redis for queues/cache, health checks, Docker Compose prod stack |
+| **Interview preparation** | Real patterns: async pipelines, RBAC, hidden test data, live analytics |
 
 ---
 
-## ⚖️ Verdict Engine
+## Features
 
-Supported verdicts:
+### Authentication
 
-- ✅ Accepted
-- ❌ Wrong Answer
-- 🔴 Compile Error
-- 💥 Runtime Error
-- ⏱️ Time Limit Exceeded
+- JWT-based authentication (register, login, email verification, password reset)
+- bcrypt password hashing
+- Stateless API sessions via Bearer tokens
 
----
+### Problem Solving
 
-## 🐳 Secure Docker Sandbox
+- Problem catalog with difficulty, constraints, and public sample test cases
+- Monaco-based code editor with language templates
+- Problem discussions and published editorials (where available)
+- Live problem statistics (acceptance rate, solvers, submissions, average runtime)
 
-Every submission executes inside an isolated Docker container with:
+### Judge
 
-- No networking
-- Read-only root filesystem
-- Memory limits
-- CPU limits
-- PID limits
-- Time limits
-- Non-root execution
-- Automatic cleanup
+- **Run Code** — executes **public sample** test cases only (worker-backed)
+- **Submit** — judges **all** test cases (public + hidden)
+- Verdicts: Accepted, Wrong Answer, TLE, Runtime Error, Compile Error, Memory Limit Exceeded
+- Shared `ExecutionService` used by Run and Submit paths
+- C++ and Python sandboxes (`judgex-cpp`, `judgex-python` images)
 
----
+### Submission System
 
-## 🤖 AI Compile Error Explanations
+- Paginated submission history with verdict, language, and runtime filters
+- Submission detail with read-only source, verdict panels, and owner-only access
+- Hidden testcase **metadata only** on failures (index — never I/O leakage)
 
-Supports:
+### Dashboard
 
-- Ollama (default)
-- OpenAI
+- Personal dashboard: solved counts by difficulty, acceptance rate, recent activity
+- Charts: problems solved by difficulty, accepted vs failed submissions
 
-Provides:
+### Analytics
 
-- Human-readable explanation
-- Likely cause
-- Possible fix
+- Per-problem live SQL aggregates from submission data
+- User progress stats and leaderboard rankings
 
-> AI never influences judging. Verdicts are always generated by the judge pipeline.
+### Admin
 
----
+- Admin dashboard, user management, moderation, analytics, queue monitor, audit logs
+- Role-based access (`user` / `admin`)
 
-## 🏆 Leaderboard
+### Infrastructure
 
-Global ranking based on:
+- PostgreSQL 17 · Redis 7 · BullMQ · Docker Compose (dev + prod)
+- Nginx edge proxy in production · health checks · stuck-submission reaper worker
+- Optional Ollama or OpenAI for AI features
 
-- Problems solved
-- Acceptance rate
-- Last solved timestamp
+### Testing
 
----
+- Unit tests · integration tests · end-to-end judge verdict tests
+- GitHub Actions CI (lint, build, tests)
 
-## 🚀 Production Features
+### AI
 
-- Database migrations
-- Health & readiness endpoints
-- Docker Compose deployment
-- Structured logging
-- Queue recovery
-- Background workers
-- Production configuration validation
+- AI compile-error explanation (Ollama or OpenAI)
+- Learning assistant panel for guided help (feature-flagged)
 
 ---
 
-# 🏗️ Architecture
+## Screenshots
 
-```text
-                          React Frontend
-                                 │
-                                 ▼
-                        Express REST API
-                                 │
-          ┌──────────────────────┴──────────────────────┐
-          │                                             │
-          ▼                                             ▼
-    PostgreSQL                                   Redis + BullMQ
-          ▲                                             │
-          │                                             ▼
-          │                                      Judge Worker
-          │                                             │
-          │                                             ▼
-          │                                   Docker Sandboxes
-          │                                   (C++ / Python)
-          │
-          ▼
-   Cleanup/Reaper Worker
+> Placeholder paths — add real captures under `docs/screenshots/` when available.
+
+| Screen | Preview |
+|--------|---------|
+| Login | ![Login](docs/screenshots/login.png) |
+| Problem page | ![Problem Page](docs/screenshots/problem.png) |
+| Run code | ![Run Code](docs/screenshots/run-code.png) |
+| Submission history | ![Submission History](docs/screenshots/submissions.png) |
+| Submission detail | ![Submission Detail](docs/screenshots/submission-detail.png) |
+| Dashboard | ![Dashboard](docs/screenshots/dashboard.png) |
+| Leaderboard | ![Leaderboard](docs/screenshots/leaderboard.png) |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph Client
+    FE[React SPA<br/>Vite + TypeScript]
+  end
+
+  subgraph API["API Layer"]
+    REST[Express REST API<br/>/api/v1]
+  end
+
+  subgraph Data
+    PG[(PostgreSQL)]
+    RD[(Redis)]
+  end
+
+  subgraph Queue["Async Processing"]
+    BQ[BullMQ Queues<br/>judge · run-code · cleanup]
+    JW[Judge Worker]
+    CW[Cleanup Worker]
+  end
+
+  subgraph Execution
+    ES[ExecutionService]
+    DA[Docker Adapter]
+    SB[Docker Sandbox<br/>cpp · python]
+  end
+
+  FE -->|HTTPS| REST
+  REST --> PG
+  REST --> RD
+  REST -->|enqueue| BQ
+  BQ --> JW
+  BQ --> CW
+  JW --> ES
+  ES --> DA
+  DA --> SB
+  JW --> PG
+  CW --> PG
+```
+
+**ASCII overview**
+
+```
+┌─────────────┐
+│   React     │  Monaco editor · React Query · Tailwind
+│   Frontend  │
+└──────┬──────┘
+       │ REST (JWT)
+       ▼
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Express    │────▶│  PostgreSQL  │     │    Redis    │
+│  API        │     │  (source of  │     │ BullMQ ·    │
+│             │────▶│   truth)     │     │ cache · RL  │
+└──────┬──────┘     └──────────────┘     └──────┬──────┘
+       │ enqueue                                  │
+       ▼                                          │
+┌─────────────┐                                   │
+│   BullMQ    │◀──────────────────────────────────┘
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│ Judge       │────▶│ ExecutionService │────▶│ Docker Sandbox  │
+│ Worker      │     │ compile · run    │     │ network off ·   │
+│ (+ cleanup) │     │ compare · verdict│     │ ro rootfs · caps│
+└─────────────┘     └──────────────────┘     └─────────────────┘
+
+⚠ The API NEVER executes untrusted code. Only the Judge Worker uses Docker.
 ```
 
 ---
 
-# 📁 Repository Structure
+## Judge Pipeline
 
-```text
-JudgeX/
-│
+### Run Code (public samples only)
+
+```
+Client → POST /code/run
+       → API enqueues run-code job (BullMQ)
+       → Worker: executeCodeRun
+       → ExecutionService
+       → Compile (if needed) → Execute each public sample → Compare stdout
+       → Return per-sample pass/fail (no DB submission row)
+```
+
+### Submit (full judging)
+
+```
+Client → POST /submissions
+       → API persists submission (queued) → enqueue judge job
+       → Worker: judge pipeline
+       → ExecutionService
+       → Load ALL test cases (public + hidden)
+       → Compile → Execute each case → Compare → Aggregate verdict
+       → Persist result (verdict, runtime, failed index, compile/stderr)
+```
+
+### Hidden testcase protection
+
+- Run endpoints and public problem APIs expose **only** `is_hidden = false` samples.
+- Submit judges hidden cases server-side; API responses never include hidden input, expected output, or actual output.
+- Wrong Answer detail exposes **failed testcase index** only.
+
+---
+
+## Key Engineering Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **API never executes Docker** | Shrinks attack surface; API containers need no `docker.sock` |
+| **Worker owns Docker** | Single privileged execution path, easier to harden and scale |
+| **Shared ExecutionService** | One compile/run/compare implementation for Run and Submit |
+| **BullMQ** | Reliable async judging, back-pressure, job deduplication by submission ID |
+| **Hidden testcase security** | Server-side-only hidden rows; viewer DTOs strip sensitive I/O |
+| **Owner-only submission access** | `getSubmissionForViewer` enforces user ownership (or admin) |
+| **Live SQL analytics** | Problem stats and dashboard aggregates read `submissions` directly — always fresh |
+| **Docker sandbox isolation** | `NetworkDisabled`, `ReadonlyRootfs`, memory swap disabled, CPU/PID caps |
+
+---
+
+## Technology Stack
+
+| Layer | Technologies |
+|-------|----------------|
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, Zustand, Monaco Editor, Recharts, React Router |
+| **Backend** | Node.js 20+, Express, modular monolith (`src/modules/*`) |
+| **Database** | PostgreSQL 17 |
+| **Queue / cache** | Redis 7, BullMQ, ioredis |
+| **Sandbox** | Docker, dockerode, `judgex-cpp` / `judgex-python` images |
+| **Authentication** | JWT (`jsonwebtoken`), bcrypt |
+| **Validation** | Zod (API), express middleware |
+| **Testing** | Node test runner, integration + E2E suites |
+| **Deployment** | Docker Compose, Nginx, multi-stage builds |
+
+---
+
+## Repository Structure
+
+```
+judgex/
 ├── backend/
 │   ├── src/
-│   ├── workers/
-│   ├── scripts/
-│   └── Dockerfiles
-│
+│   │   ├── modules/          # auth, problems, submissions, code, judge, dashboard, …
+│   │   ├── workers/            # judge.worker.js, cleanup.worker.js
+│   │   ├── infrastructure/     # database, queue, docker, cache, ai-provider
+│   │   ├── middlewares/        # authenticate, authorize, validate, rate-limit
+│   │   └── bootstrap/          # module-registry, app wiring
+│   ├── scripts/                # migrations, demo seed, benchmarks
+│   └── tests/                  # unit, integration, e2e
 ├── frontend/
-│
-├── docs/
-│
+│   ├── src/
+│   │   ├── api/                # typed API clients
+│   │   ├── features/           # editor, submissions, problems, dashboard, …
+│   │   ├── pages/              # route-level views
+│   │   ├── routes/             # React Router config
+│   │   └── components/         # shared UI primitives
+│   └── public/
 ├── docker/
-│
-├── docker-compose.yml
-├── docker-compose.prod.yml
-│
+│   ├── images/                 # python & cpp sandbox Dockerfile
+│   └── nginx/                  # prod reverse proxy config
+├── docs/                       # architecture, API, DB design, deployment
+├── docker-compose.yml          # dev: postgres, redis, ollama
+├── docker-compose.prod.yml     # prod: nginx, api, worker, cleanup, data stores
+├── .github/workflows/ci.yml
 └── README.md
 ```
 
 ---
 
-# 📚 Documentation
+## Getting Started
 
-The project is designed using detailed architecture documents.
+### Prerequisites
 
-| Document | Description |
-|----------|-------------|
-| PRD.md | Product Requirements |
-| ARCHITECTURE.md | System Architecture |
-| DATABASE_DESIGN.md | Database Design |
-| BACKEND_STRUCTURE.md | Backend Architecture |
-| API_SPECIFICATION.md | REST API Specification |
-| JUDGE_PIPELINE.md | Judge Pipeline |
+- **Node.js** ≥ 20
+- **Docker** & Docker Compose
+- **npm** (or compatible package manager)
 
----
-
-# 🛠️ Tech Stack
-
-| Layer | Technology |
-|--------|------------|
-| Backend | Node.js, Express |
-| Database | PostgreSQL |
-| Queue | BullMQ, Redis |
-| Sandbox | Docker, Dockerode |
-| Authentication | JWT, bcrypt |
-| Validation | Zod |
-| AI | Ollama, OpenAI |
-| Frontend | React, Vite, TailwindCSS, Monaco Editor |
-| Testing | Node Test Runner, Supertest |
-
----
-
-# ⚙️ Local Development
-
-## Prerequisites
-
-- Node.js 20+
-- Docker Desktop
-- Git
-
-Verify installation:
+### 1. Clone
 
 ```bash
-docker --version
-docker compose version
-node --version
+git clone https://github.com/your-org/judgex.git
+cd judgex
 ```
 
----
-
-## Clone Repository
-
-```bash
-git clone https://github.com/ReshwanthKudikala/JudgeX.git
-
-cd JudgeX
-```
-
----
-
-## Configure Environment
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Edit at least:
-
-- JWT_SECRET
-
----
-
-## Start Infrastructure
+### 2. Start backing services (development)
 
 ```bash
 docker compose up -d
 ```
 
----
+This starts PostgreSQL, Redis, and Ollama (optional AI). See [`docker/README.md`](docker/README.md).
 
-## Install Backend
+### 3. Build sandbox images
+
+```bash
+docker build -t judgex-python ./docker/images/python
+docker build -t judgex-cpp ./docker/images/cpp
+```
+
+### 4. Backend
 
 ```bash
 cd backend
-
-npm install
-
+cp .env.example .env          # edit JWT_SECRET, URLs as needed
+npm ci
 npm run db:migrate
-
-npm run dev
+npm run db:seed:demo          # optional demo problems
+npm run dev                   # API on :4000
 ```
 
-Start Judge Worker
+### 5. Judge worker (separate terminal)
 
 ```bash
-npm run worker:judge
+cd backend
+npm run worker:judge:dev
 ```
 
-Start Cleanup Worker
+### 6. Cleanup worker (optional, recommended)
 
 ```bash
+cd backend
 npm run worker:cleanup
 ```
 
----
-
-## Build Sandbox Images
-
-```bash
-docker build -t judgex-python ./docker/images/python
-
-docker build -t judgex-cpp ./docker/images/cpp
-```
-
----
-
-## Frontend
+### 7. Frontend
 
 ```bash
 cd frontend
-
-npm install
-
-npm run dev
+npm ci
+npm run dev                   # Vite on :5173
 ```
+
+Open **http://localhost:5173**. API defaults to **http://localhost:4000/api/v1**.
 
 ---
 
-# 🚀 Production Deployment
+## Production Deployment
 
-Create the production environment:
+Production runs the full stack via **`docker-compose.prod.yml`**:
+
+| Service | Role |
+|---------|------|
+| `nginx` | Edge TLS/proxy, static SPA, API upstream |
+| `frontend` | Built React assets |
+| `api` | Express API (runs migrations on start) |
+| `worker` | Judge worker (`docker.sock` + workspace mount) |
+| `cleanup-worker` | Stuck-submission reaper |
+| `postgres` | Persistent data |
+| `redis` | BullMQ + cache (AOF) |
 
 ```bash
-cp .env.production.example .env.production
+cp .env.production.example .env.production   # set secrets
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Configure:
-
-- POSTGRES_PASSWORD
-- JWT_SECRET
-- CORS_ORIGIN
-
-Build sandbox images:
+Build sandbox images on the host (or CI) before judging:
 
 ```bash
 docker build -t judgex-python ./docker/images/python
-
 docker build -t judgex-cpp ./docker/images/cpp
 ```
 
-Start the production stack:
-
-```bash
-docker compose \
--f docker-compose.prod.yml \
---env-file .env.production \
-up -d --build
-```
-
-Verify deployment:
-
-```bash
-curl http://localhost:4000/ready
-```
+Full guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ---
 
-# ❤️ Health Endpoints
+## Environment Variables
 
-| Endpoint | Purpose |
-|----------|---------|
-| `/health` | Liveness |
-| `/ready` | Readiness |
-| `/api/v1/health` | Detailed readiness |
-
----
-
-# 🧪 Testing
-
-Run Unit Tests
-
-```bash
-npm run test:unit
-```
-
-Run Integration Tests
-
-```bash
-npm run test:integration
-```
-
-Run End-to-End Tests
-
-```bash
-npm run test:e2e
-```
-
----
-
-# 📡 API Modules
-
-| Module | Endpoint |
-|---------|----------|
-| Authentication | `/api/v1/auth` |
-| Problems | `/api/v1/problems` |
-| Submissions | `/api/v1/submissions` |
-| Leaderboard | `/api/v1/leaderboard` |
-| AI | `/api/v1/ai` |
-| Admin | `/api/v1/admin` |
-
----
-
-# 📊 Current Status
-
-## ✅ Completed
-
-- JWT Authentication
-- RBAC
-- Problem Management
-- Test Case Management
-- Submission Pipeline
-- BullMQ Queue
-- Judge Worker
-- Cleanup Worker
-- Docker Sandbox
-- Verdict Engine
-- Leaderboard
-- AI Compile Error Explanations
-- Database Migrations
-- Health & Readiness Endpoints
-- Production Docker Deployment
-- Unit Tests
-- Integration Tests
-- End-to-End Tests
-
----
-
-# 🗺️ Roadmap
-
-- [x] Production-ready Backend
-- [x] Docker Sandbox
-- [x] BullMQ Queue
-- [x] AI Compile Error Explanations
-- [x] Leaderboard
-- [x] Production Deployment
-- [ ] React Frontend
-- [ ] Monaco Code Editor
-- [ ] User Dashboard
-- [ ] Contest System
-- [ ] Profile Analytics
-- [ ] Discussion Forum
-
----
-
-# 📸 Screenshots
-
-Frontend screenshots and demo GIFs will be added after the frontend is completed.
-
----
-
-# 🏷️ Releases
-
-| Version | Description |
+| Variable | Description |
 |----------|-------------|
-| **v0.3** | Judge Worker Foundation |
-| **v1.0** | Production-Ready Backend |
+| `NODE_ENV` | `development` or `production` |
+| `PORT` | API listen port (default `4000`) |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Compose bootstrap credentials |
+| `REDIS_URL` | Redis connection string |
+| `JWT_SECRET` | Signing secret (≥ 32 chars in production) |
+| `JWT_EXPIRES_IN` | Token TTL (e.g. `7d`, `15m`) |
+| `CORS_ORIGIN` | Allowed frontend origin(s) |
+| `FRONTEND_URL` | Base URL for email verification / reset links |
+| `BCRYPT_SALT_ROUNDS` | Password hashing cost |
+| `AI_PROVIDER` | `ollama` or `openai` |
+| `OLLAMA_BASE_URL` | Ollama API base URL |
+| `OLLAMA_MODEL` | Model name (e.g. `llama3`) |
+| `OPENAI_API_KEY` | OpenAI key when `AI_PROVIDER=openai` |
+| `OPENAI_MODEL` | OpenAI model (e.g. `gpt-4o-mini`) |
+| `JUDGE_TIME_LIMIT_MS` | Per-run CPU time cap |
+| `JUDGE_MEMORY_LIMIT_MB` | Sandbox memory limit |
+| `JUDGE_PID_LIMIT` | Max PIDs per sandbox |
+| `JUDGE_WORKER_CONCURRENCY` | Parallel jobs per worker |
+| `JUDGE_WORKSPACE_DIR` | In-container workspace path |
+| `JUDGE_WORKSPACE_HOST_DIR` | Host path for sandbox bind mounts |
+| `FEATURE_AI_COMPILE_EXPLANATION` | Enable AI compile explanations |
+| `EMAIL_PROVIDER` | `console` or `smtp` |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | SMTP credentials |
+| `LOG_LEVEL` | Logging verbosity |
+| `REAPER_*` | Stuck-queue sweeper tuning |
+
+See [`backend/.env.example`](backend/.env.example) and [`.env.production.example`](.env.production.example).
 
 ---
 
-# 👨‍💻 Author
+## API Modules
 
-**Reshwanth Kudikala**
+Base path: **`/api/v1`**
 
-- GitHub: https://github.com/ReshwanthKudikala
+| Module | Prefix | Highlights |
+|--------|--------|------------|
+| **Authentication** | `/auth` | Register, login, verify email, password reset |
+| **Problems** | `/problems` | Catalog, detail, statistics, discussions, editorials |
+| **Submissions** | `/submissions` | Submit, history, detail, user stats |
+| **Code** | `/code` | Run code (public samples, worker-backed) |
+| **Dashboard** | `/dashboard` | User summary, charts, recent activity |
+| **Leaderboard** | `/leaderboard` | Global rankings, user rank |
+| **Contests** | `/contests` | Contest listing, participation, scoreboard |
+| **Discussions** | `/discussions`, `/comments` | Threads and replies |
+| **AI** | `/ai` | Compile explanations, learning assistant |
+| **Admin** | `/admin` | Dashboard, users, moderation, analytics, queue, audit |
+
+Specification: [`docs/API_SPECIFICATION.md`](docs/API_SPECIFICATION.md).
 
 ---
 
-# 📄 License
+## Security Features
 
-This project is licensed under the MIT License.
+- JWT authentication with configurable expiry
+- RBAC (`user` / `admin`) on protected routes
+- Docker isolation per execution (ephemeral containers)
+- Read-only root filesystem in sandboxes
+- Memory and CPU limits per run
+- PID limits (fork-bomb mitigation)
+- Network disabled in sandboxes
+- Hidden testcase I/O never exposed to clients
+- Owner (or admin) authorization on submission detail
+- Helmet, CORS, Redis-backed rate limiting
+- bcrypt password hashing
+
+Details: [`docs/SECURITY.md`](docs/SECURITY.md).
+
+---
+
+## Testing
+
+```bash
+# Backend — from backend/
+npm run test:unit
+npm run test:integration    # requires Postgres + Redis
+npm run test:e2e            # judge verdict E2E
+
+# Frontend — from frontend/
+npm run lint
+npm run build
+```
+
+CI runs on every push and pull request via [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design and component boundaries |
+| [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) | Schema, indexes, enums |
+| [`docs/API_SPECIFICATION.md`](docs/API_SPECIFICATION.md) | REST API reference |
+| [`docs/JUDGE_PIPELINE.md`](docs/JUDGE_PIPELINE.md) | Judging flow and queue contracts |
+| [`docs/PRD.md`](docs/PRD.md) | Product requirements |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment guide |
+| [`docs/BACKEND_STRUCTURE.md`](docs/BACKEND_STRUCTURE.md) | Backend module layout |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Security model |
+| [`docker/README.md`](docker/README.md) | Local Docker infrastructure |
+
+---
+
+## Current Status
+
+### Complete
+
+- [x] JWT authentication & email flows
+- [x] RBAC (user / admin)
+- [x] React frontend with Monaco editor
+- [x] Run code (public samples, worker-backed)
+- [x] Submit code (full judge pipeline)
+- [x] Public sample & hidden judge test cases
+- [x] Worker-based Docker execution
+- [x] BullMQ queues & cleanup reaper
+- [x] Shared ExecutionService
+- [x] Submission history & detail pages
+- [x] Problem statistics (live SQL)
+- [x] User dashboard with charts
+- [x] Global leaderboard
+- [x] AI compile-error explanation
+- [x] PostgreSQL & Redis
+- [x] Docker Compose dev & prod stacks
+- [x] Health checks
+- [x] Unit, integration, and E2E tests
+- [x] GitHub Actions CI
+
+### Planned
+
+- [ ] Expanded admin panel & ops tooling
+- [ ] Rich editorial content & authoring workflow
+- [ ] Full AI learning coach
+- [ ] Contest series & rating systems
+- [ ] Daily challenge
+- [ ] Discussion enhancements (voting, moderation UX)
+- [ ] Company / curated problem lists
+- [ ] Achievements & badges
+- [ ] Solve streak tracking
+
+---
+
+## Roadmap
+
+| Phase | Focus |
+|-------|--------|
+| **Q1** | Streak tracking, daily challenge, achievement system |
+| **Q2** | Contest ratings, company problem lists, editorial CMS |
+| **Q3** | AI coach expansion, discussion quality tools |
+| **Q4** | Multi-region workers, advanced observability |
+
+---
+
+## Contributing
+
+Contributions are welcome. Please open an issue to discuss significant changes before submitting a pull request.
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Ensure `npm run lint` and tests pass locally before opening a PR.
+
+---
+
+## License
+
+This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+
+---
+
+## Author
+
+**Your Name**
+
+- GitHub: [@your-github](https://github.com/your-github)
+- LinkedIn: [Your Profile](https://linkedin.com/in/your-profile)
+- Email: you@example.com
+
+---
+
+<div align="center">
+
+Built with care for secure, scalable competitive programming infrastructure.
+
+**JudgeX** — practice hard, judge fairly, ship confidently.
+
+</div>
