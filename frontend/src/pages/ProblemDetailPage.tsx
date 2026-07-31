@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
@@ -17,17 +18,21 @@ import { useProblem } from '@/features/problems/hooks/useProblem';
 import { useAuthStore } from '@/store';
 
 const tabTriggerClass =
-  'rounded-none border-b-2 bg-transparent px-3 py-2 text-xs shadow-none hover:bg-transparent';
+  'rounded-none border-b-2 bg-transparent px-3 py-2 text-xs shadow-none transition-colors duration-150 hover:bg-transparent';
 
 export function ProblemDetailPage() {
   const { slug, problemId } = useParams<{ slug?: string; problemId?: string }>();
   const problemSlug = slug ?? problemId;
   const token = useAuthStore((s) => s.token);
-  // Remount editor when auth identity changes so in-memory code / run / submit reset.
   const workspaceOwnerKey = useAuthStore((s) => s.user?.id ?? 'anon');
+  const [tab, setTab] = useState('description');
 
   const { data: problem, isLoading, isError, error, refetch } = useProblem(problemSlug);
-  const { data: editorial } = useEditorial(problem?.slug);
+  const {
+    data: editorial,
+    isLoading: editorialLoading,
+    isFetched: editorialFetched,
+  } = useEditorial(problem?.slug);
 
   if (!problemSlug) {
     return <ProblemErrorState notFound />;
@@ -50,21 +55,32 @@ export function ProblemDetailPage() {
     );
   }
 
+  const hasEditorial = Boolean(editorial);
+  // Avoid flashing the Editorial tab before we know whether content exists.
+  const showEditorialTab = editorialFetched && hasEditorial && !editorialLoading;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ProblemLayout
         breadcrumb={<ProblemBreadcrumb title={problem.title} />}
         statement={
-          <Tabs defaultValue="description" className="min-h-0">
+          <Tabs
+            defaultValue="description"
+            value={tab}
+            onValueChange={setTab}
+            className="min-h-0"
+          >
             <div className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur-sm">
               <ProblemHeader problem={problem} />
               <TabsList className="h-auto w-full justify-start gap-0 rounded-none border-0 bg-transparent p-0 px-3 sm:px-4">
                 <TabsTrigger value="description" className={tabTriggerClass}>
                   Description
                 </TabsTrigger>
-                <TabsTrigger value="editorial" className={tabTriggerClass}>
-                  Editorial
-                </TabsTrigger>
+                {showEditorialTab ? (
+                  <TabsTrigger value="editorial" className={tabTriggerClass}>
+                    Editorial
+                  </TabsTrigger>
+                ) : null}
                 <TabsTrigger value="submissions" className={tabTriggerClass}>
                   Submissions
                 </TabsTrigger>
@@ -79,15 +95,15 @@ export function ProblemDetailPage() {
                 <ProblemStatisticsPanel slug={problem.slug} />
                 <ProblemStatementPanel problem={problem} />
               </TabsContent>
-              <TabsContent value="editorial" className="mt-0">
-                {editorial ? (
-                  <EditorialPanel editorial={editorial} />
-                ) : (
-                  <p className="py-8 text-center text-sm text-muted">
-                    Editorial for this problem is coming soon.
-                  </p>
-                )}
-              </TabsContent>
+              {showEditorialTab && editorial ? (
+                <TabsContent value="editorial" className="mt-0">
+                  <EditorialPanel
+                    editorial={editorial}
+                    problemSlug={problem.slug}
+                    onCancelReveal={() => setTab('description')}
+                  />
+                </TabsContent>
+              ) : null}
               <TabsContent value="submissions" className="mt-0">
                 {token ? (
                   <SubmissionsHistoryPanel
