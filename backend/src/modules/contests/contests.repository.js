@@ -3,7 +3,7 @@
 const { BaseRepository } = require('../../infrastructure/database/base.repository');
 
 const CONTEST_COLUMNS = `
-  id, title, description, start_time, end_time, duration_minutes,
+  id, slug, title, description, start_time, end_time, duration_minutes,
   visibility, status, is_deleted, deleted_at, created_by, created_at, updated_at
 `;
 
@@ -12,12 +12,13 @@ class ContestRepository extends BaseRepository {
     const id = this.newId();
     return this.queryOne(
       `INSERT INTO contests (
-         id, title, description, start_time, end_time, duration_minutes,
+         id, slug, title, description, start_time, end_time, duration_minutes,
          visibility, status, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING ${CONTEST_COLUMNS}`,
       [
         id,
+        data.slug,
         data.title,
         data.description ?? null,
         data.startTime,
@@ -42,6 +43,27 @@ class ContestRepository extends BaseRepository {
     );
   }
 
+  findBySlug(slug, client) {
+    return this.queryOne(
+      `SELECT ${CONTEST_COLUMNS}
+         FROM contests
+        WHERE slug = $1
+          AND is_deleted = false`,
+      [slug],
+      client,
+    );
+  }
+
+  /** Resolve by UUID or slug. */
+  findByIdOrSlug(idOrSlug, client) {
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRe.test(String(idOrSlug))) {
+      return this.findById(idOrSlug, client);
+    }
+    return this.findBySlug(idOrSlug, client);
+  }
+
   /** Admin detail — includes soft-deleted for GET before delete confirmation. */
   findByIdAdmin(id, client) {
     return this.queryOne(
@@ -55,6 +77,7 @@ class ContestRepository extends BaseRepository {
 
   updateContest(id, patch, client) {
     const mapping = {
+      slug: 'slug',
       title: 'title',
       description: 'description',
       startTime: 'start_time',

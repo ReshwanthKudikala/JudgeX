@@ -104,7 +104,7 @@ export const ConsoleTabs = memo(function ConsoleTabs({
   return (
     <div
       className={cn(
-        'flex min-h-0 flex-1 flex-col bg-[#0c0e12]',
+        'flex min-h-0 flex-1 flex-col bg-editor',
         !embedded && 'border-t border-border',
         className,
       )}
@@ -193,7 +193,7 @@ function ModeBadge({
             'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors',
             mode === 'run'
               ? 'bg-sky-500/20 text-sky-300'
-              : 'text-muted/70 hover:bg-white/5 hover:text-muted-foreground',
+              : 'text-muted/70 hover:bg-overlay hover:text-muted-foreground',
           )}
         >
           Run
@@ -212,7 +212,7 @@ function ModeBadge({
             'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors',
             mode === 'submit'
               ? 'bg-violet-500/20 text-violet-300'
-              : 'text-muted/70 hover:bg-white/5 hover:text-muted-foreground',
+              : 'text-muted/70 hover:bg-overlay hover:text-muted-foreground',
           )}
         >
           Submission

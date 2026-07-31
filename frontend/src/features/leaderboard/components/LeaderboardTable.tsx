@@ -28,7 +28,7 @@ export const LeaderboardTable = memo(function LeaderboardTable({
     >
       <table className="w-full min-w-[720px] caption-bottom border-collapse text-sm">
         <caption className="sr-only">Global leaderboard rankings</caption>
-        <thead className="sticky top-0 z-10 border-b border-border bg-[#151820]">
+        <thead className="sticky top-0 z-10 border-b border-border bg-surface">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
               Rank
@@ -60,7 +60,7 @@ export const LeaderboardTable = memo(function LeaderboardTable({
                   'border-b border-border/80 transition-colors',
                   isMe
                     ? 'bg-primary/10 hover:bg-primary/15'
-                    : 'hover:bg-white/[0.03]',
+                    : 'hover:bg-overlay',
                 )}
               >
                 <td className="px-4 py-3 font-mono text-muted-foreground">
@@ -69,12 +69,12 @@ export const LeaderboardTable = memo(function LeaderboardTable({
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-foreground"
                       aria-hidden
                     >
                       {row.username.charAt(0).toUpperCase()}
                     </span>
-                    <span className="font-medium text-white">
+                    <span className="font-medium text-foreground">
                       {row.username}
                       {isMe ? (
                         <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -93,7 +93,7 @@ export const LeaderboardTable = memo(function LeaderboardTable({
                 <td className="px-4 py-3 font-mono text-muted-foreground">
                   {formatRate(row.acceptanceRate)}
                 </td>
-                <td className="px-4 py-3 font-mono font-medium text-white">
+                <td className="px-4 py-3 font-mono font-medium text-foreground">
                   {row.score}
                 </td>
               </tr>

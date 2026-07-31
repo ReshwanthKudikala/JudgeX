@@ -69,7 +69,7 @@ export function MarkdownEditor({
           Nothing to preview.
         </div>
       ) : (
-        <div className="min-h-[96px] rounded-md border border-border bg-[#0c0e12] px-3 py-2">
+        <div className="min-h-[96px] rounded-md border border-border bg-editor px-3 py-2">
           <MarkdownRenderer markdown={value} />
         </div>
       )}

@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 import { cn } from '@/utils/cn';
@@ -39,7 +40,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     <>
       <div
         className={cn(
-          'fixed inset-0 z-40 bg-black/50 transition-opacity lg:hidden',
+          'fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 lg:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={onClose}
@@ -53,18 +54,18 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
       >
         <div className="flex h-14 items-center justify-between border-b border-border px-4 lg:hidden">
-          <span className="text-sm font-semibold text-white">Menu</span>
+          <span className="text-sm font-semibold text-foreground">Menu</span>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-muted hover:bg-white/5 hover:text-white"
+            className="rounded-md p-1.5 text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             aria-label="Close navigation"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 p-3">
+        <nav className="flex flex-1 flex-col gap-1 p-3" aria-label="Sidebar">
           {links.map((link) => {
             if ('auth' in link && link.auth && !token) return null;
             if ('admin' in link && link.admin && user?.role !== 'admin') return null;
@@ -77,22 +78,23 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 onClick={onClose}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150',
                     isActive
                       ? 'bg-primary-muted text-primary'
-                      : 'text-muted hover:bg-white/5 hover:text-white',
+                      : 'text-muted hover:bg-overlay hover:text-foreground',
                   )
                 }
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className="h-4 w-4 shrink-0" aria-hidden />
                 {link.label}
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="border-t border-border p-4 text-xs text-muted">
-          JudgeX · Dark theme
+        <div className="flex items-center justify-between gap-2 border-t border-border p-3">
+          <span className="text-xs text-muted">Appearance</span>
+          <ThemeToggle />
         </div>
       </aside>
     </>

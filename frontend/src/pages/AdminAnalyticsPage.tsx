@@ -14,13 +14,19 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Skeleton } from '@/components/common/Skeleton';
 import { useAdminAnalytics } from '@/features/admin/hooks/useAdmin';
+import { useChartTheme } from '@/hooks/useChartTheme';
 import { ApiError } from '@/types';
 
 export function AdminAnalyticsPage() {
   const { data, isLoading, isError, error, refetch } = useAdminAnalytics(14);
+  const chartTheme = useChartTheme();
 
   if (isLoading) {
-    return <Skeleton className="h-96 w-full rounded-lg" />;
+    return (
+      <div aria-busy="true" aria-label="Loading analytics">
+        <Skeleton className="h-96 w-full rounded-lg" />
+      </div>
+    );
   }
 
   if (isError || !data) {
@@ -34,8 +40,16 @@ export function AdminAnalyticsPage() {
     );
   }
 
+  const tooltipStyle = {
+    backgroundColor: chartTheme.tooltip.background,
+    border: `1px solid ${chartTheme.tooltip.border}`,
+    borderRadius: 8,
+    color: chartTheme.tooltip.color,
+  };
+  const tick = { fill: chartTheme.tick, fontSize: 11 };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       <Card>
         <CardHeader>
           <CardTitle>Daily submissions</CardTitle>
@@ -43,13 +57,23 @@ export function AdminAnalyticsPage() {
         <CardContent className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.dailySubmissions}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="date" tick={{ fill: '#999', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#999', fontSize: 11 }} />
-              <Tooltip />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+              <XAxis dataKey="date" tick={tick} />
+              <YAxis tick={tick} />
+              <Tooltip contentStyle={tooltipStyle} />
               <Legend />
-              <Line type="monotone" dataKey="submissions" stroke="#60a5fa" strokeWidth={2} />
-              <Line type="monotone" dataKey="accepted" stroke="#34d399" strokeWidth={2} />
+              <Line
+                type="monotone"
+                dataKey="submissions"
+                stroke={chartTheme.series.blue}
+                strokeWidth={2}
+              />
+              <Line
+                type="monotone"
+                dataKey="accepted"
+                stroke={chartTheme.series.green}
+                strokeWidth={2}
+              />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -63,11 +87,11 @@ export function AdminAnalyticsPage() {
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.languageUsage}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="language" tick={{ fill: '#999', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#999', fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#a78bfa" />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis dataKey="language" tick={tick} />
+                <YAxis tick={tick} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="count" fill={chartTheme.series.purple} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -80,11 +104,11 @@ export function AdminAnalyticsPage() {
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.contestParticipation}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="title" tick={{ fill: '#999', fontSize: 10 }} hide />
-                <YAxis tick={{ fill: '#999', fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="participants" fill="#fbbf24" />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis dataKey="title" tick={{ fill: chartTheme.tick, fontSize: 10 }} hide />
+                <YAxis tick={tick} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="participants" fill={chartTheme.difficulty.medium} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

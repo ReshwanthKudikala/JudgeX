@@ -5,11 +5,11 @@ import { cn } from '@/utils/cn';
 
 const variants = {
   primary:
-    'bg-primary text-[#1a1a1a] hover:bg-primary-hover focus-visible:ring-primary',
+    'bg-primary text-on-primary hover:bg-primary-hover focus-visible:ring-primary shadow-sm',
   secondary:
-    'bg-transparent border border-border text-muted-foreground hover:bg-white/5 hover:text-white focus-visible:ring-border',
+    'bg-transparent border border-border text-muted-foreground hover:bg-overlay hover:text-foreground focus-visible:ring-border',
   ghost:
-    'bg-transparent text-muted-foreground hover:bg-white/5 hover:text-white focus-visible:ring-border',
+    'bg-transparent text-muted-foreground hover:bg-overlay hover:text-foreground focus-visible:ring-border',
   danger:
     'bg-error/15 text-error border border-error/30 hover:bg-error/25 focus-visible:ring-error',
 } as const;
@@ -43,16 +43,22 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors duration-150',
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         'disabled:pointer-events-none disabled:opacity-50',
+        'active:scale-[0.98]',
         variants[variant],
         sizes[size],
         className,
       )}
       {...props}
     >
-      {loading ? <Spinner size="sm" className="text-current [&_div]:border-current [&_div]:border-t-transparent" /> : null}
+      {loading ? (
+        <Spinner
+          size="sm"
+          className="text-current [&_div]:border-current [&_div]:border-t-transparent"
+        />
+      ) : null}
       {children}
     </button>
   ),

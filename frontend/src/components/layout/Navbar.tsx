@@ -1,6 +1,7 @@
 import { NavLink, Link } from 'react-router-dom';
 import { Menu, LogOut } from 'lucide-react';
 
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { paths } from '@/routes/paths';
@@ -12,15 +13,17 @@ interface NavbarProps {
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'px-3 py-2 text-sm font-medium transition-colors rounded-md',
-    isActive ? 'text-white bg-white/5' : 'text-muted hover:text-white hover:bg-white/5',
+    'rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150',
+    isActive
+      ? 'bg-overlay text-foreground'
+      : 'text-muted hover:bg-overlay hover:text-foreground',
   );
 
 function UserAvatar({ username }: { username: string }) {
   const initial = username.trim().charAt(0).toUpperCase() || '?';
   return (
     <span
-      className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-[#1a1a1a]"
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary"
       aria-hidden
     >
       {initial}
@@ -36,7 +39,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
       <div className="mx-auto flex h-14 max-w-app items-center gap-3 px-4 sm:px-6">
         <button
           type="button"
-          className="rounded-md p-2 text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
+          className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
           onClick={onMenuClick}
           aria-label="Open navigation"
         >
@@ -44,10 +47,10 @@ export function Navbar({ onMenuClick }: NavbarProps) {
         </button>
 
         <Link to={paths.home} className="flex shrink-0 items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-[#1a1a1a]">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-on-primary">
             JX
           </span>
-          <span className="text-base font-semibold tracking-tight text-white">
+          <span className="text-base font-semibold tracking-tight text-foreground">
             Judge<span className="text-primary">X</span>
           </span>
         </Link>
@@ -79,16 +82,19 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           ) : null}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <ThemeToggle />
           {token && user ? (
             <>
               <Link
                 to={paths.profile}
-                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 aria-label={`Profile for ${user.username}`}
               >
                 <UserAvatar username={user.username} />
-                <span className="hidden max-w-[120px] truncate sm:inline">{user.username}</span>
+                <span className="hidden max-w-[120px] truncate sm:inline">
+                  {user.username}
+                </span>
               </Link>
               <Button
                 type="button"
@@ -105,7 +111,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             <>
               <Link
                 to={paths.login}
-                className="inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                className="inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-muted transition-colors duration-150 hover:bg-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
               >
                 Login
               </Link>

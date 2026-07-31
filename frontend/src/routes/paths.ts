@@ -16,6 +16,7 @@ export const paths = {
   submissionDetail: (submissionId = ':submissionId') =>
     `/submissions/${submissionId}`,
   contests: '/contests',
+  /** Prefer slug; UUID still works via API resolver. */
   contestDetail: (contestId = ':contestId') => `/contests/${contestId}`,
   contestScoreboard: (contestId = ':contestId') =>
     `/contests/${contestId}/scoreboard`,

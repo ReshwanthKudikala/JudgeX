@@ -38,7 +38,7 @@ export function ProblemFilters({
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
               active
                 ? 'bg-primary-muted text-primary'
-                : 'text-muted hover:bg-white/5 hover:text-white',
+                : 'text-muted hover:bg-overlay hover:text-foreground',
             )}
           >
             {opt.label}

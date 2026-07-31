@@ -17,7 +17,7 @@ export function DiscussionsList({ discussions, problemSlug }: DiscussionsListPro
         <li key={item.id}>
           <Link
             to={paths.discussionDetail(problemSlug, item.id)}
-            className="block rounded-lg border border-border px-3 py-3 transition-colors hover:border-primary/40 hover:bg-white/[0.02]"
+            className="block rounded-lg border border-border px-3 py-3 transition-colors hover:border-primary/40 hover:bg-overlay"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h3 className="text-sm font-medium text-foreground">{item.title}</h3>

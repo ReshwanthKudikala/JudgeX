@@ -38,7 +38,7 @@ export function ContestScoreboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Scoreboard</p>
-          <h1 className="mt-1 text-2xl font-semibold text-white">
+          <h1 className="mt-1 text-2xl font-semibold text-foreground">
             <Link
               to={paths.contestDetail(contest.id)}
               className="hover:text-primary"

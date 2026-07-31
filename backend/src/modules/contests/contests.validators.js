@@ -13,6 +13,13 @@ const contestProblemSchema = z.object({
 
 const createContestSchema = z.object({
   title: z.string().trim().min(1).max(200),
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase kebab-case.')
+    .optional(),
   description: z.string().optional(),
   startTime: z.coerce.date(),
   endTime: z.coerce.date(),
@@ -24,6 +31,13 @@ const createContestSchema = z.object({
 const updateContestSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
+    slug: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase kebab-case.')
+      .optional(),
     description: z.string().nullable().optional(),
     startTime: z.coerce.date().optional(),
     endTime: z.coerce.date().optional(),
@@ -46,8 +60,9 @@ const scoreboardQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
+/** Contest path param: UUID or slug. */
 const contestIdParamsSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().trim().min(1).max(120),
 });
 
 module.exports = {

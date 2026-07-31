@@ -32,7 +32,7 @@ export function ProblemErrorState({
       >
         <FileQuestion className="h-8 w-8 text-muted" aria-hidden />
         <div>
-          <p className="text-base font-medium text-white">Problem not found</p>
+          <p className="text-base font-medium text-foreground">Problem not found</p>
           <p className="mt-1 max-w-md text-sm text-muted">
             This problem may have been removed or the link is incorrect.
           </p>
@@ -53,7 +53,7 @@ export function ProblemErrorState({
     >
       <AlertCircle className="h-8 w-8 text-error" aria-hidden />
       <div>
-        <p className="text-base font-medium text-white">
+        <p className="text-base font-medium text-foreground">
           {title ?? 'Couldn’t load problems'}
         </p>
         <p className="mt-1 max-w-md text-sm text-muted">

@@ -15,11 +15,13 @@ function StatCell({
   hint?: string;
 }) {
   return (
-    <div className="rounded-md border border-border/80 bg-[#12151c] px-3 py-2.5">
+    <div className="rounded-md border border-border/80 bg-surface px-3 py-2.5 transition-colors duration-150">
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted">
         {label}
       </p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-white">{value}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
       {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
   );
@@ -30,7 +32,11 @@ export function ProblemStatisticsPanel({ slug }: ProblemStatisticsPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div
+        className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
+        aria-busy="true"
+        aria-label="Loading statistics"
+      >
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-[68px] w-full rounded-md" />
         ))}

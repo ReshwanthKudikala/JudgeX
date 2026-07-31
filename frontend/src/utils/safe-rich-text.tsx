@@ -23,7 +23,7 @@ function renderSafeRichText(raw: string): ReactNode[] {
       nodes.push(
         <pre
           key={`code-${chunkIndex}`}
-          className="my-3.5 overflow-x-auto rounded-md border border-border/70 bg-[#0c0e12] p-3 font-mono text-[13px] leading-relaxed text-muted-foreground"
+          className="my-3.5 overflow-x-auto rounded-md border border-border/70 bg-editor p-3 font-mono text-[13px] leading-relaxed text-muted-foreground"
         >
           <code>{inner.replace(/^\n/, '').replace(/\n$/, '')}</code>
         </pre>,

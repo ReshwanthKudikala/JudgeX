@@ -21,7 +21,7 @@ export const ConsolePanel = memo(function ConsolePanel({
 
   return (
     <div
-      className={cn('border-t border-border bg-[#0c0e12] px-3 py-2', className)}
+      className={cn('border-t border-border bg-editor px-3 py-2', className)}
       aria-label="Execution console"
       role="region"
     >

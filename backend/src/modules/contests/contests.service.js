@@ -26,6 +26,15 @@ function minutesBetween(start, end) {
   return Math.max(1, Math.round(ms / 60000));
 }
 
+function slugifyTitle(title) {
+  return String(title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120) || 'contest';
+}
+
 class ContestService {
   constructor({
     contestRepository: contestRepo,
@@ -74,6 +83,7 @@ class ContestService {
       const row = await this.contestRepository.createContest(
         {
           title: data.title,
+          slug: data.slug || slugifyTitle(data.title),
           description: data.description,
           startTime,
           endTime,
@@ -199,17 +209,17 @@ class ContestService {
   }
 
   async getContestById(id, viewer = null) {
-    const row = await this.contestRepository.findById(id);
+    const row = await this.contestRepository.findByIdOrSlug(id);
     if (!row) throw new NotFoundError('Contest not found.');
     if (row.visibility === 'private') {
       const isAdmin = viewer?.role === 'admin';
       if (!isAdmin) throw new NotFoundError('Contest not found.');
     }
-    return this.#toDetail(row, { viewer, includeProblems: false });
+    return this.#toDetail(row, { viewer, includeProblems: true });
   }
 
   async joinContest(id, userId) {
-    const row = await this.contestRepository.findById(id);
+    const row = await this.contestRepository.findByIdOrSlug(id);
     if (!row) throw new NotFoundError('Contest not found.');
     if (row.visibility === 'private') {
       throw new ForbiddenError('This contest is private.');
@@ -220,17 +230,18 @@ class ContestService {
       throw new ConflictError('Contest has already ended.');
     }
 
-    const existing = await this.contestRepository.findParticipant(id, userId);
+    const contestId = row.id;
+    const existing = await this.contestRepository.findParticipant(contestId, userId);
     if (existing) {
       return {
-        contestId: id,
+        contestId,
         userId,
         joinedAt: existing.joined_at,
         alreadyJoined: true,
       };
     }
 
-    const participant = await this.contestRepository.addParticipant(id, userId);
+    const participant = await this.contestRepository.addParticipant(contestId, userId);
     return {
       contestId: participant.contest_id,
       userId: participant.user_id,
@@ -240,34 +251,23 @@ class ContestService {
   }
 
   /**
-   * Problem list with visibility rules:
-   * - upcoming: hidden (empty / marked hidden) except admin
-   * - running: participants only
-   * - ended: public
+   * Problem list for contest detail (Sprint 39 demo experience).
+   * Public contests expose problem metadata + links to existing problem pages.
+   * Contest-mode judging / virtual registration remain future work.
    */
   async getContestProblems(id, viewer = null) {
-    const row = await this.contestRepository.findById(id);
+    const row = await this.contestRepository.findByIdOrSlug(id);
     if (!row) throw new NotFoundError('Contest not found.');
 
+    if (row.visibility === 'private') {
+      const isAdmin = viewer?.role === 'admin';
+      if (!isAdmin) throw new NotFoundError('Contest not found.');
+    }
+
     const status = deriveContestStatus(row);
-    const isAdmin = viewer?.role === 'admin';
-    let isParticipant = false;
-    if (viewer?.id) {
-      const p = await this.contestRepository.findParticipant(id, viewer.id);
-      isParticipant = Boolean(p);
-    }
-
-    if (status === 'upcoming' && !isAdmin) {
-      return { contestId: id, status, problems: [], hidden: true };
-    }
-
-    if (status === 'running' && !isParticipant && !isAdmin) {
-      throw new ForbiddenError('Join the contest to view problems.');
-    }
-
-    const problems = await this.contestRepository.listContestProblems(id);
+    const problems = await this.contestRepository.listContestProblems(row.id);
     return {
-      contestId: id,
+      contestId: row.id,
       status,
       problems: problems.map((p) => toContestProblem(p, { hideDetails: false })),
       hidden: false,
@@ -275,13 +275,13 @@ class ContestService {
   }
 
   async getScoreboard(id, filters = {}) {
-    const row = await this.contestRepository.findById(id);
+    const row = await this.contestRepository.findByIdOrSlug(id);
     if (!row) throw new NotFoundError('Contest not found.');
 
     const status = deriveContestStatus(row);
     if (status === 'upcoming') {
       return {
-        contestId: id,
+        contestId: row.id,
         status,
         entries: [],
         pagination: {
@@ -290,19 +290,19 @@ class ContestService {
           total: 0,
           totalPages: 0,
         },
-        participantCount: await this.contestRepository.countParticipants(id),
+        participantCount: await this.contestRepository.countParticipants(row.id),
       };
     }
 
     const { page, limit, offset } = this.contestRepository.buildPagination(filters);
-    const { rows, total } = await this.contestRepository.getScoreboard(id, {
+    const { rows, total } = await this.contestRepository.getScoreboard(row.id, {
       page,
       limit,
       offset,
     });
 
     return {
-      contestId: id,
+      contestId: row.id,
       status,
       entries: rows.map((r) => ({
         rank: r.rank,
@@ -322,7 +322,7 @@ class ContestService {
     };
   }
 
-  async #toDetail(row, { viewer = null, includeProblems = true, hideDetails, client } = {}) {
+  async #toDetail(row, { viewer = null, includeProblems = true, client } = {}) {
     const participantCount = await this.contestRepository.countParticipants(row.id, client);
     let joined = false;
     if (viewer?.id) {
@@ -334,17 +334,7 @@ class ContestService {
 
     if (!includeProblems) return summary;
 
-    const status = deriveContestStatus(row);
-    const isAdmin = viewer?.role === 'admin';
-    const shouldHide =
-      hideDetails === true ||
-      (status === 'upcoming' && !isAdmin) ||
-      (status === 'running' && !joined && !isAdmin);
-
-    if (shouldHide && !isAdmin) {
-      return { ...summary, problems: [] };
-    }
-
+    // Public browsing: always attach problem metadata for presentation.
     const problems = await this.contestRepository.listContestProblems(row.id, client);
     return {
       ...summary,

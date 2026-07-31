@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm font-medium uppercase tracking-wider text-primary">
             Something went wrong
           </p>
-          <h1 className="text-2xl font-semibold text-white">Unexpected application error</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Unexpected application error</h1>
           <p className="max-w-md text-sm text-muted">{this.state.message}</p>
           <div className="flex gap-3">
             <Button variant="secondary" onClick={this.handleReset}>

@@ -11,17 +11,17 @@ import { cn } from '@/utils/cn';
 const VERDICT_CLASS: Record<SubmissionVerdict, string> = {
   accepted: 'border-success/40 bg-success/15 text-success',
   wrong_answer: 'border-error/40 bg-error/15 text-error',
-  tle: 'border-amber-400/40 bg-amber-400/15 text-amber-300',
+  tle: 'border-warning/40 bg-warning/15 text-warning',
   runtime_error: 'border-error/40 bg-error/15 text-error',
-  compile_error: 'border-orange-400/40 bg-orange-400/15 text-orange-300',
-  memory_limit_exceeded: 'border-amber-400/40 bg-amber-400/15 text-amber-300',
+  compile_error: 'border-warning/40 bg-warning/15 text-warning',
+  memory_limit_exceeded: 'border-warning/40 bg-warning/15 text-warning',
   internal_error: 'border-error/40 bg-error/15 text-error',
 };
 
 const STATUS_CLASS: Record<SubmissionStatus, string> = {
-  queued: 'border-border bg-white/5 text-muted-foreground',
+  queued: 'border-border bg-overlay text-muted-foreground',
   running: 'border-primary/40 bg-primary-muted text-primary',
-  completed: 'border-border bg-white/5 text-muted-foreground',
+  completed: 'border-border bg-overlay text-muted-foreground',
   error: 'border-error/40 bg-error/15 text-error',
 };
 
@@ -40,7 +40,7 @@ export const VerdictBadge = memo(function VerdictBadge({
     return (
       <span
         className={cn(
-          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold',
+          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors duration-150',
           VERDICT_CLASS[verdict],
           className,
         )}
@@ -54,7 +54,7 @@ export const VerdictBadge = memo(function VerdictBadge({
     return (
       <span
         className={cn(
-          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold',
+          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors duration-150',
           STATUS_CLASS[status],
           className,
         )}

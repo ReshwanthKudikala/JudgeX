@@ -11,17 +11,27 @@ export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>)
 }
 
 export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn('border-b border-border bg-[#151820]', className)} {...props} />;
+  return (
+    <thead
+      className={cn('sticky top-0 z-10 border-b border-border bg-surface', className)}
+      {...props}
+    />
+  );
 }
 
 export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody className={cn('[&_tr:hover]:bg-white/[0.02]', className)} {...props} />;
+  return (
+    <tbody className={cn('[&_tr:hover]:bg-overlay', className)} {...props} />
+  );
 }
 
 export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={cn('border-b border-border transition-colors last:border-0', className)}
+      className={cn(
+        'border-b border-border transition-colors duration-150 last:border-0',
+        className,
+      )}
       {...props}
     />
   );
@@ -40,7 +50,9 @@ export function TableHead({ className, ...props }: ThHTMLAttributes<HTMLTableCel
 }
 
 export function TableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('px-4 py-3 align-middle text-muted-foreground', className)} {...props} />;
+  return (
+    <td className={cn('px-4 py-3 align-middle text-muted-foreground', className)} {...props} />
+  );
 }
 
 export function TableEmpty({ children }: { children?: ReactNode }) {

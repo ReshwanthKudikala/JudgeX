@@ -31,7 +31,7 @@ export function ContestsTable({ contests, isFetching = false }: ContestsTablePro
     >
       <table className="w-full min-w-[640px] caption-bottom border-collapse text-sm">
         <caption className="sr-only">Contests</caption>
-        <thead className="sticky top-0 z-10 border-b border-border bg-[#151820]">
+        <thead className="sticky top-0 z-10 border-b border-border bg-surface">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
               Contest
@@ -54,12 +54,12 @@ export function ContestsTable({ contests, isFetching = false }: ContestsTablePro
           {contests.map((c) => (
             <tr
               key={c.id}
-              className="border-b border-border/80 transition-colors hover:bg-white/[0.03]"
+              className="border-b border-border/80 transition-colors hover:bg-overlay"
             >
               <td className="px-4 py-3">
                 <Link
                   to={paths.contestDetail(c.id)}
-                  className="font-medium text-white hover:text-primary"
+                  className="font-medium text-foreground hover:text-primary"
                 >
                   {c.title}
                 </Link>

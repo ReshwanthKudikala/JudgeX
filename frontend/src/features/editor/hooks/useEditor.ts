@@ -24,12 +24,14 @@ function resolveInitialCode(slug: string, language: EditorLanguage): string {
 
 export interface UseEditorOptions {
   problemSlug: string;
-  /** Ctrl/Cmd+S — Run placeholder. */
+  /** Ctrl/Cmd+Shift+Enter — Run. */
   onRun?: () => void;
-  /** Ctrl/Cmd+Enter — Submit (Sprint 24). */
+  /** Ctrl/Cmd+Enter — Submit. */
   onSubmit?: () => void;
   /** When true, keyboard submit is ignored. */
   submitDisabled?: boolean;
+  /** When true, keyboard run is ignored. */
+  runDisabled?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export function useEditor({
   onRun,
   onSubmit,
   submitDisabled = false,
+  runDisabled = false,
 }: UseEditorOptions) {
   const [language, setLanguageState] = useState<EditorLanguage>(loadLanguagePreference);
   const [code, setCodeState] = useState(() =>
@@ -54,6 +57,7 @@ export function useEditor({
   const runRef = useRef(onRun);
   const submitRef = useRef(onSubmit);
   const submitDisabledRef = useRef(submitDisabled);
+  const runDisabledRef = useRef(runDisabled);
 
   languageRef.current = language;
   codeRef.current = code;
@@ -61,6 +65,7 @@ export function useEditor({
   runRef.current = onRun;
   submitRef.current = onSubmit;
   submitDisabledRef.current = submitDisabled;
+  runDisabledRef.current = runDisabled;
 
   const setCode = useCallback((next: string) => {
     setCodeState(next);
@@ -102,12 +107,15 @@ export function useEditor({
       const mod = event.ctrlKey || event.metaKey;
       if (!mod) return;
 
-      if (event.key === 's' || event.key === 'S') {
+      // Ctrl/Cmd+Shift+Enter → Run
+      if (event.key === 'Enter' && event.shiftKey) {
         event.preventDefault();
+        if (runDisabledRef.current) return;
         runRef.current?.();
         return;
       }
 
+      // Ctrl/Cmd+Enter → Submit
       if (event.key === 'Enter') {
         event.preventDefault();
         if (submitDisabledRef.current) return;

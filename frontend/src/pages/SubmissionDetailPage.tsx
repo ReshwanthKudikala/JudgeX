@@ -71,7 +71,7 @@ export function SubmissionDetailPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-        <Link to={paths.submissions} className="hover:text-white">
+        <Link to={paths.submissions} className="hover:text-foreground">
           My Submissions
         </Link>
         <span aria-hidden>/</span>
@@ -82,7 +82,7 @@ export function SubmissionDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted">Problem</p>
-            <h1 className="truncate text-2xl font-semibold text-white">
+            <h1 className="truncate text-2xl font-semibold text-foreground">
               {problemSlug ? (
                 <Link
                   to={paths.problemDetail(problemSlug)}
@@ -145,7 +145,7 @@ export function SubmissionDetailPage() {
       ) : null}
 
       <section className="overflow-hidden rounded-lg border border-border">
-        <div className="border-b border-border bg-[#151820] px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted">
+        <div className="border-b border-border bg-surface px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted">
           Source code
         </div>
         <div className="h-[360px] sm:h-[420px]">

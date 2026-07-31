@@ -25,6 +25,7 @@ function toContestSummary(row, extras = {}) {
   const status = deriveContestStatus(row);
   return {
     id: row.id,
+    slug: row.slug ?? null,
     title: row.title,
     description: row.description ?? null,
     startTime: row.start_time,

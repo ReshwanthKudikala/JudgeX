@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 
 import { monacoLanguageId, type EditorLanguage } from '@/features/editor/types';
+import { useThemeStore } from '@/store/theme.store';
 import { cn } from '@/utils/cn';
 
 interface MonacoEditorProps {
@@ -15,8 +16,12 @@ interface MonacoEditorProps {
 const EDITOR_OPTIONS = {
   minimap: { enabled: false },
   fontSize: 14,
+  lineHeight: 22,
   fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   fontLigatures: true,
+  cursorBlinking: 'smooth' as const,
+  cursorSmoothCaretAnimation: 'on' as const,
+  smoothScrolling: true,
   tabSize: 4,
   insertSpaces: true,
   detectIndentation: false,
@@ -28,14 +33,16 @@ const EDITOR_OPTIONS = {
   matchBrackets: 'always' as const,
   autoIndent: 'full' as const,
   renderLineHighlight: 'line' as const,
-  padding: { top: 12, bottom: 12 },
+  padding: { top: 14, bottom: 14 },
   scrollbar: {
-    verticalScrollbarSize: 8,
-    horizontalScrollbarSize: 8,
+    verticalScrollbarSize: 10,
+    horizontalScrollbarSize: 10,
+    useShadows: false,
   },
   overviewRulerLanes: 0,
   hideCursorInOverviewRuler: true,
   fixedOverflowWidgets: true,
+  renderWhitespace: 'selection' as const,
 };
 
 export const MonacoEditor = memo(function MonacoEditor({
@@ -45,6 +52,9 @@ export const MonacoEditor = memo(function MonacoEditor({
   readOnly = false,
   className,
 }: MonacoEditorProps) {
+  const resolved = useThemeStore((s) => s.resolved);
+  const monacoTheme = resolved === 'dark' ? 'vs-dark' : 'light';
+
   const options = useMemo(
     () => ({
       ...EDITOR_OPTIONS,
@@ -61,16 +71,16 @@ export const MonacoEditor = memo(function MonacoEditor({
   return (
     <div
       data-editor-slot="monaco"
-      className={cn('h-full min-h-[240px] bg-[#0c0e12]', className)}
+      className={cn('h-full min-h-[240px] bg-editor', className)}
       role="textbox"
       aria-label={readOnly ? 'Source code (read-only)' : 'Code editor'}
       aria-multiline="true"
       aria-readonly={readOnly || undefined}
     >
       <Editor
-        key={language}
+        key={`${language}-${monacoTheme}`}
         height="100%"
-        theme="vs-dark"
+        theme={monacoTheme}
         language={monacoLanguageId(language)}
         value={value}
         options={options}
@@ -80,7 +90,7 @@ export const MonacoEditor = memo(function MonacoEditor({
           if (typeof next === 'string') onChange(next);
         }}
         loading={
-          <div className="flex h-full min-h-[240px] items-center justify-center bg-[#0c0e12] text-sm text-muted">
+          <div className="flex h-full min-h-[240px] items-center justify-center bg-editor text-sm text-muted">
             Loading editor…
           </div>
         }

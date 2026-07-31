@@ -11,7 +11,6 @@ import { cn } from '@/utils/cn';
 interface SubmissionsTableProps {
   submissions: SubmissionSummary[];
   isFetching?: boolean;
-  /** Hide the Problem column when scoped to one problem. */
   hideProblemColumn?: boolean;
 }
 
@@ -37,13 +36,13 @@ export function SubmissionsTable({
   return (
     <div
       className={cn(
-        'relative overflow-x-auto rounded-lg border border-border',
+        'relative overflow-x-auto rounded-lg border border-border shadow-card transition-opacity duration-150',
         isFetching && 'opacity-80',
       )}
     >
       <table className="w-full min-w-[640px] caption-bottom border-collapse text-sm">
         <caption className="sr-only">My submissions</caption>
-        <thead className="sticky top-0 z-10 border-b border-border bg-[#151820]">
+        <thead className="sticky top-0 z-10 border-b border-border bg-surface">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
               Verdict
@@ -68,8 +67,7 @@ export function SubmissionsTable({
           {submissions.map((row) => {
             const id = row.submissionId ?? row.id;
             const runtime = row.runtime ?? row.runtimeMs ?? null;
-            const title =
-              row.problem?.title ?? row.problemTitle ?? '—';
+            const title = row.problem?.title ?? row.problemTitle ?? '—';
 
             return (
               <tr
@@ -77,7 +75,7 @@ export function SubmissionsTable({
                 role="link"
                 tabIndex={0}
                 aria-label={`Open submission for ${title}`}
-                className="cursor-pointer border-b border-border/80 transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                className="cursor-pointer border-b border-border/80 transition-colors duration-150 hover:bg-overlay focus-visible:bg-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
                 onClick={() => navigate(paths.submissionDetail(id))}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -90,7 +88,7 @@ export function SubmissionsTable({
                   <VerdictBadge verdict={row.verdict} status={row.status} />
                 </td>
                 {!hideProblemColumn ? (
-                  <td className="px-4 py-3 font-medium text-white">{title}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">{title}</td>
                 ) : null}
                 <td className="px-4 py-3 text-muted-foreground">
                   {LANGUAGE_LABELS[row.language] ?? row.language}

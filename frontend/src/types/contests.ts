@@ -13,6 +13,7 @@ export interface ContestProblem {
 
 export interface ContestSummary {
   id: string;
+  slug?: string | null;
   title: string;
   description?: string | null;
   startTime: string;
@@ -83,5 +84,5 @@ export interface ScoreboardResult {
 export const CONTEST_STATUS_LABELS: Record<ContestStatus, string> = {
   upcoming: 'Upcoming',
   running: 'Running',
-  ended: 'Ended',
+  ended: 'Past',
 };

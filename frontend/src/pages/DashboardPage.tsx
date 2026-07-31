@@ -31,7 +31,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-semibold text-white">
+        <h1 className="text-2xl font-semibold text-foreground">
           {user ? (
             <>
               Welcome back, <span className="text-primary">{user.username}</span>

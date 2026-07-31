@@ -61,7 +61,7 @@ function MonoBlock({
       <p className="mb-0.5 text-[11px] font-medium text-muted">{label}</p>
       <pre
         className={cn(
-          'overflow-x-auto rounded border border-border/60 bg-[#0c0e12] px-2.5 py-2',
+          'overflow-x-auto rounded border border-border/60 bg-editor px-2.5 py-2',
           'font-mono text-[13px] leading-relaxed text-muted-foreground whitespace-pre-wrap',
         )}
       >

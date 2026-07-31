@@ -21,7 +21,7 @@ export function ContestScoreboardTable({
     >
       <table className="w-full min-w-[560px] caption-bottom border-collapse text-sm">
         <caption className="sr-only">Contest scoreboard</caption>
-        <thead className="sticky top-0 z-10 border-b border-border bg-[#151820]">
+        <thead className="sticky top-0 z-10 border-b border-border bg-surface">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
               Rank
@@ -45,13 +45,13 @@ export function ContestScoreboardTable({
                 key={row.userId}
                 className={cn(
                   'border-b border-border/80',
-                  isMe ? 'bg-primary/10' : 'hover:bg-white/[0.03]',
+                  isMe ? 'bg-primary/10' : 'hover:bg-overlay',
                 )}
               >
                 <td className="px-4 py-3 font-mono text-muted-foreground">
                   #{row.rank}
                 </td>
-                <td className="px-4 py-3 font-medium text-white">
+                <td className="px-4 py-3 font-medium text-foreground">
                   {row.username}
                   {isMe ? (
                     <span className="ml-2 text-[10px] uppercase text-primary">You</span>

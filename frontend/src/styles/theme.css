@@ -1,11 +1,65 @@
-/* Theme tokens mirrored for non-Tailwind consumers (future editor chrome). */
+/* JudgeX design tokens — light default, overridden by .dark */
+
 :root {
-  --jx-bg: #0f1117;
-  --jx-card: #1a1d24;
-  --jx-border: #2b2f36;
-  --jx-primary: #ffa116;
-  --jx-success: #2ecc71;
-  --jx-error: #ef4444;
+  color-scheme: light;
+  --color-background: #f4f5f7;
+  --color-card: #ffffff;
+  --color-surface: #eef0f3;
+  --color-border: #d8dce3;
+  --color-primary: #e8920f;
+  --color-primary-hover: #d4830c;
+  --color-primary-muted: rgba(232, 146, 15, 0.12);
+  --color-success: #1a9f55;
+  --color-error: #dc2626;
+  --color-warning: #d97706;
+  --color-muted: #6b7280;
+  --color-muted-foreground: #374151;
+  --color-foreground: #111827;
+  --color-on-primary: #1a1a1a;
+  --color-overlay: rgba(17, 24, 39, 0.05);
+  --color-overlay-strong: rgba(17, 24, 39, 0.08);
+  --color-skeleton: #e5e7eb;
+  --color-editor: #f8f9fb;
+  --color-scrollbar: #c5cad3;
+  --color-scrollbar-hover: #9aa3b0;
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.06), 0 0 0 1px rgba(17, 24, 39, 0.02);
+  --radius-lg: 0.5rem;
+  --radius-md: 0.375rem;
+  --radius-sm: 0.25rem;
+  --space-unit: 0.25rem;
+  --transition-fast: 150ms;
+  --transition-base: 200ms;
+  --jx-bg: var(--color-background);
+  --jx-card: var(--color-card);
+  --jx-border: var(--color-border);
+  --jx-primary: var(--color-primary);
+  --jx-success: var(--color-success);
+  --jx-error: var(--color-error);
   --jx-font-sans: 'Inter', system-ui, sans-serif;
   --jx-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-background: #0f1117;
+  --color-card: #1a1d24;
+  --color-surface: #151820;
+  --color-border: #2b2f36;
+  --color-primary: #ffa116;
+  --color-primary-hover: #e8920f;
+  --color-primary-muted: rgba(255, 161, 22, 0.15);
+  --color-success: #2ecc71;
+  --color-error: #ef4444;
+  --color-warning: #fbbf24;
+  --color-muted: #8b949e;
+  --color-muted-foreground: #c9d1d9;
+  --color-foreground: #f0f3f6;
+  --color-on-primary: #1a1a1a;
+  --color-overlay: rgba(255, 255, 255, 0.05);
+  --color-overlay-strong: rgba(255, 255, 255, 0.08);
+  --color-skeleton: #242830;
+  --color-editor: #0c0e12;
+  --color-scrollbar: #2b2f36;
+  --color-scrollbar-hover: #3d4450;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04);
 }

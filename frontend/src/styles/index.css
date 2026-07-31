@@ -2,24 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-  --color-background: #0f1117;
-  --color-card: #1a1d24;
-  --color-border: #2b2f36;
-  --color-primary: #ffa116;
-  --color-success: #2ecc71;
-  --color-error: #ef4444;
-  --color-muted: #8b949e;
-  --color-foreground: #c9d1d9;
-}
-
 @layer base {
   * {
     @apply border-border;
   }
 
-  /* Definite height chain so nested flex/grid can use min-h-0 + overflow. */
   html,
   body,
   #root {
@@ -27,14 +14,14 @@
   }
 
   body {
-    @apply bg-background font-sans text-muted-foreground;
+    @apply bg-background font-sans text-muted-foreground antialiased;
   }
 
   ::selection {
-    @apply bg-primary/30 text-white;
+    background: color-mix(in srgb, var(--color-primary) 30%, transparent);
+    color: var(--color-foreground);
   }
 
-  /* Scrollbar — LeetCode-like subtle dark bars */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -45,12 +32,17 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #2b2f36;
+    background: var(--color-scrollbar);
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #3d4450;
+    background: var(--color-scrollbar-hover);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 70%, transparent);
+    outline-offset: 2px;
   }
 }
 
@@ -59,7 +51,28 @@
     text-wrap: balance;
   }
 
-  /* Prevent text selection while dragging panel separators. */
+  .bg-overlay {
+    background-color: var(--color-overlay);
+  }
+
+  .bg-overlay-strong {
+    background-color: var(--color-overlay-strong);
+  }
+
+  .hover-overlay {
+    @apply transition-colors duration-150;
+  }
+
+  .hover-overlay:hover {
+    background-color: var(--color-overlay);
+  }
+
+  .transition-ui {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: var(--transition-base);
+    transition-timing-function: ease-out;
+  }
+
   body:has([data-separator='active']) {
     user-select: none;
     cursor: inherit;

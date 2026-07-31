@@ -63,7 +63,7 @@ export function TabsList({ className, ...props }: HTMLAttributes<HTMLDivElement>
     <div
       role="tablist"
       className={cn(
-        'inline-flex items-center gap-1 rounded-md border border-border bg-[#151820] p-1',
+        'inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1',
         className,
       )}
       {...props}
@@ -89,8 +89,8 @@ export function TabsTrigger({
       className={cn(
         'rounded-sm px-3 py-1.5 text-sm font-medium transition-colors',
         selected
-          ? 'border-primary bg-card text-white shadow-card'
-          : 'border-transparent text-muted hover:text-white',
+          ? 'border-primary bg-card text-foreground shadow-card'
+          : 'border-transparent text-muted hover:text-foreground',
         className,
       )}
       {...props}

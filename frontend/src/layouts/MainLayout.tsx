@@ -4,6 +4,7 @@ import { matchPath, Outlet, useLocation } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Footer } from '@/components/layout/Footer';
+import { GlobalProblemSearchShortcut } from '@/features/problems/components/ProblemSearch';
 import { cn } from '@/utils/cn';
 
 /** Problem solve workspace (`/problems/:slug`) — desktop uses a locked viewport. */
@@ -24,6 +25,7 @@ export function MainLayout() {
       )}
     >
       <Navbar onMenuClick={() => setSidebarOpen(true)} />
+      <GlobalProblemSearchShortcut />
       <div
         className={cn(
           'mx-auto flex w-full max-w-app flex-1',

@@ -37,7 +37,7 @@ export function ProblemsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-semibold text-white">Problems</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Problems</h1>
         <p className="mt-1 text-sm text-muted">
           Browse the catalog and open a problem to start solving.
         </p>

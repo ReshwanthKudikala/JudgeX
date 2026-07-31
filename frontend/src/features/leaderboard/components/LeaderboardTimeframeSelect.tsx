@@ -17,7 +17,7 @@ export function LeaderboardTimeframeSelect({
 }: LeaderboardTimeframeSelectProps) {
   return (
     <div
-      className="inline-flex items-center gap-1 rounded-md border border-border bg-[#151820] p-1"
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1"
       role="group"
       aria-label="Leaderboard timeframe"
     >
@@ -31,8 +31,8 @@ export function LeaderboardTimeframeSelect({
             className={cn(
               'rounded-sm px-3 py-1.5 text-xs font-medium transition-colors',
               active
-                ? 'bg-card text-white shadow-card'
-                : 'text-muted hover:text-white',
+                ? 'bg-card text-foreground shadow-card'
+                : 'text-muted hover:text-foreground',
             )}
             aria-pressed={active}
           >

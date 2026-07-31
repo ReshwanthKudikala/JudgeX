@@ -22,7 +22,7 @@ export function ProblemStats({
   return (
     <div className={cn('space-y-2', className)}>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Problems" value={total} valueClassName="text-white" />
+        <StatCard label="Total Problems" value={total} valueClassName="text-foreground" />
         <StatCard label="Easy" value={easy} valueClassName="text-success" />
         <StatCard label="Medium" value={medium} valueClassName="text-amber-300" />
         <StatCard label="Hard" value={hard} valueClassName="text-error" />

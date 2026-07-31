@@ -24,10 +24,10 @@ export function Footer() {
           </span>
         </p>
         <div className="flex gap-4">
-          <Link to={paths.problems} className="transition-colors hover:text-white">
+          <Link to={paths.problems} className="transition-colors hover:text-foreground">
             Problems
           </Link>
-          <Link to={paths.leaderboard} className="transition-colors hover:text-white">
+          <Link to={paths.leaderboard} className="transition-colors hover:text-foreground">
             Leaderboard
           </Link>
         </div>

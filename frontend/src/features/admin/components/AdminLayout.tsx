@@ -40,7 +40,7 @@ export function AdminLayout() {
                   'inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium',
                   isActive
                     ? 'bg-primary-muted text-primary'
-                    : 'text-muted hover:bg-white/5 hover:text-foreground',
+                    : 'text-muted hover:bg-overlay hover:text-foreground',
                 )
               }
             >

@@ -32,8 +32,8 @@ export const MarkdownBody = memo(function MarkdownBody({
         '[&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm',
         '[&_th]:border [&_th]:border-border [&_th]:bg-muted/20 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left',
         '[&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2',
-        '[&_code]:rounded [&_code]:bg-[#0c0e12] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px]',
-        '[&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-border [&_pre]:bg-[#0c0e12] [&_pre]:p-3',
+        '[&_code]:rounded [&_code]:bg-editor [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px]',
+        '[&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-border [&_pre]:bg-editor [&_pre]:p-3',
         '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
         className,
       )}

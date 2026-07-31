@@ -36,7 +36,7 @@ export function ProblemsTable({
     >
       <table className="w-full min-w-[520px] caption-bottom border-collapse text-sm">
         <caption className="sr-only">JudgeX problem catalog</caption>
-        <thead className="sticky top-0 z-10 border-b border-border bg-[#151820]">
+        <thead className="sticky top-0 z-10 border-b border-border bg-surface">
           <tr>
             <th
               scope="col"
@@ -117,8 +117,8 @@ function SortableHead({
         onClick={() => onSort(field)}
         className={cn(
           'inline-flex items-center gap-1.5 rounded-sm transition-colors',
-          'hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-          isActive && 'text-white',
+          'hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+          isActive && 'text-foreground',
         )}
         aria-label={`Sort by ${label}${isActive ? `, currently ${dir}ending` : ''}`}
       >

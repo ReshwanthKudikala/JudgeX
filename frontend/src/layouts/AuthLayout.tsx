@@ -19,7 +19,7 @@ export function AuthLayout() {
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-[#1a1a1a]">
               JX
             </span>
-            <span className="text-base font-semibold text-white">
+            <span className="text-base font-semibold text-foreground">
               Judge<span className="text-primary">X</span>
             </span>
           </Link>

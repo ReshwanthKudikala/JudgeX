@@ -60,7 +60,7 @@ export function Dialog({
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
             {title ? (
-              <h2 id="dialog-title" className="text-base font-semibold text-white">
+              <h2 id="dialog-title" className="text-base font-semibold text-foreground">
                 {title}
               </h2>
             ) : null}
@@ -71,7 +71,7 @@ export function Dialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-muted transition-colors hover:bg-white/5 hover:text-white"
+            className="rounded-md p-1 text-muted transition-colors hover:bg-overlay hover:text-foreground"
             aria-label="Close"
           >
             <X className="h-4 w-4" />

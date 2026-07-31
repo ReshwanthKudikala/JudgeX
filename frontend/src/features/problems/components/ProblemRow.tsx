@@ -56,7 +56,7 @@ export const ProblemRow = memo(function ProblemRow({
       </td>
       <td className="px-4 py-3.5 align-middle">
         <div className="min-w-0">
-          <span className="font-medium text-white transition-colors group-hover:text-primary">
+          <span className="font-medium text-foreground transition-colors group-hover:text-primary">
             {problem.title}
           </span>
           {showTags && problem.tags && problem.tags.length > 0 ? (

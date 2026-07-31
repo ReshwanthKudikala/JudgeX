@@ -40,7 +40,7 @@ export function ProblemSkeleton() {
             <Skeleton className="h-7 w-32" />
             <Skeleton className="h-3 w-20" />
           </div>
-          <div className="flex flex-1 items-center justify-center bg-[#0c0e12]">
+          <div className="flex flex-1 items-center justify-center bg-editor">
             <Skeleton className="h-4 w-36" />
           </div>
           <div className="flex justify-end gap-2 border-t border-border px-3 py-1.5">

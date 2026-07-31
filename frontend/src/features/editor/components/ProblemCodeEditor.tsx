@@ -169,6 +169,7 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
       void handleSubmit();
     },
     submitDisabled: busy,
+    runDisabled: isRunning,
   });
 
   languageRef.current = language;
@@ -228,7 +229,7 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
     <div className="relative h-full min-h-0 overflow-hidden">
       <Suspense
         fallback={
-          <div className="flex h-full items-center justify-center bg-[#0c0e12] text-sm text-muted">
+          <div className="flex h-full items-center justify-center bg-editor text-sm text-muted">
             Loading editor…
           </div>
         }
@@ -239,7 +240,7 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
   );
 
   const consoleDock = (
-    <div className="flex h-full min-h-0 flex-col bg-[#0c0e12]">
+    <div className="flex h-full min-h-0 flex-col bg-editor">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/50 px-2">
         <div className="min-w-0 flex-1">
           {workspaceMode === 'submit' ? (

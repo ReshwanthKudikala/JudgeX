@@ -1,24 +1,24 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Play, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/utils/cn';
 
+function modKeyLabel() {
+  if (typeof navigator === 'undefined') return 'Ctrl';
+  return /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+}
+
 interface EditorActionsProps {
   onRun: () => void;
   onSubmit: () => void;
-  /** Disables Run while a run request is in flight. */
   runDisabled?: boolean;
   runLoading?: boolean;
-  /** Disables Submit while submitting/polling. */
   submitDisabled?: boolean;
   submitLoading?: boolean;
   className?: string;
 }
 
-/**
- * Run / Submit actions. Independent loading/disabled flags per action.
- */
 export const EditorActions = memo(function EditorActions({
   onRun,
   onSubmit,
@@ -28,6 +28,8 @@ export const EditorActions = memo(function EditorActions({
   submitLoading = false,
   className,
 }: EditorActionsProps) {
+  const mod = useMemo(() => modKeyLabel(), []);
+
   return (
     <div className={cn('flex flex-wrap items-center justify-end gap-1.5', className)}>
       <Button
@@ -38,7 +40,8 @@ export const EditorActions = memo(function EditorActions({
         disabled={runDisabled || runLoading}
         loading={runLoading}
         onClick={onRun}
-        aria-label="Run code"
+        aria-label={`Run code (${mod}+Shift+Enter)`}
+        title={`Run (${mod}+Shift+Enter)`}
       >
         <Play className="h-3.5 w-3.5" aria-hidden />
         Run
@@ -50,7 +53,8 @@ export const EditorActions = memo(function EditorActions({
         disabled={submitDisabled || submitLoading}
         loading={submitLoading}
         onClick={onSubmit}
-        aria-label="Submit solution"
+        aria-label={`Submit solution (${mod}+Enter)`}
+        title={`Submit (${mod}+Enter)`}
       >
         <Send className="h-3.5 w-3.5" aria-hidden />
         Submit

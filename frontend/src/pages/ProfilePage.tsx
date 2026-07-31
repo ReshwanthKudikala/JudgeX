@@ -46,9 +46,9 @@ function StatCard({
   href?: string;
 }) {
   const body = (
-    <div className="rounded-lg border border-border bg-[#12151b] px-4 py-3 transition-colors hover:border-primary/40">
+    <div className="rounded-lg border border-border bg-surface px-4 py-3 transition-colors hover:border-primary/40">
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+      <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
     </div>
   );
   if (href) {
@@ -153,7 +153,7 @@ export function ProfilePage() {
             </Button>
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-white">{user.username}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">{user.username}</h1>
             <p className="mt-0.5 text-sm text-muted">{user.email}</p>
           </div>
         </div>
@@ -210,7 +210,7 @@ export function ProfilePage() {
         <CardContent className="space-y-1 text-sm">
           <div className="flex items-center justify-between border-b border-border py-3">
             <span className="text-muted">Username</span>
-            <span className="font-medium text-white">{user.username}</span>
+            <span className="font-medium text-foreground">{user.username}</span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border py-3">
             <span className="text-muted">Email</span>
@@ -372,7 +372,7 @@ export function ProfilePage() {
               >
                 <Link
                   to={paths.problemDetail(item.slug)}
-                  className="font-medium text-white hover:text-primary"
+                  className="font-medium text-foreground hover:text-primary"
                 >
                   {item.title}
                 </Link>
@@ -380,7 +380,7 @@ export function ProfilePage() {
                   <VerdictBadge verdict="accepted" />
                   <Link
                     to={paths.submissionDetail(item.submissionId)}
-                    className="text-xs text-muted hover:text-white"
+                    className="text-xs text-muted hover:text-foreground"
                   >
                     View
                   </Link>
