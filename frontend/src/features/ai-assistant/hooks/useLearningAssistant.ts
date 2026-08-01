@@ -45,7 +45,15 @@ function mapCoachError(err: unknown): string {
     if (err.code === 'AI_UNAVAILABLE' || err.status === 503) {
       const lower = err.message.toLowerCase();
       if (lower.includes('timed out') || lower.includes('timeout')) {
-        return 'The AI coach timed out. Please try again in a moment.';
+        return 'Ollama request timed out.';
+      }
+      // Prefer specific provider messages (model not found, connection refused, …).
+      if (
+        err.message &&
+        !/^ollama request failed\.?$/i.test(err.message) &&
+        !/^the ai provider is unavailable/i.test(err.message)
+      ) {
+        return err.message;
       }
       return 'The local AI model is unavailable right now. Check that Ollama is running, then try again.';
     }

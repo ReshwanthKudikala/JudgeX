@@ -77,7 +77,7 @@ The backend should be started **after** all three are `healthy`. On first run,
 Ollama also needs a model pulled before AI features work:
 
 ```bash
-docker exec -it judgex-ollama ollama pull llama3
+docker exec -it judgex-ollama ollama pull qwen2.5-coder:7b
 ```
 
 Check status at any time:
@@ -104,8 +104,9 @@ docker compose ps
   you ran `docker compose down -v`, the volume was deleted — that's expected.
 
 - **Ollama returns 404 / model not found**
-  Pull the model first: `docker exec -it judgex-ollama ollama pull llama3`.
+  Pull the model first: `docker exec -it judgex-ollama ollama pull qwen2.5-coder:7b`.
   Verify with `curl http://localhost:11434/api/tags`.
+  Ensure `OLLAMA_MODEL` matches an installed model name exactly.
 
 - **Ollama is slow / high memory on first request**
   The model loads into memory on first use; subsequent requests are faster.

@@ -409,7 +409,7 @@ Full guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 | `BCRYPT_SALT_ROUNDS` | Password hashing cost |
 | `AI_PROVIDER` | `ollama` or `openai` |
 | `OLLAMA_BASE_URL` | Ollama API base URL |
-| `OLLAMA_MODEL` | Model name (e.g. `llama3`) |
+| `OLLAMA_MODEL` | Model name (e.g. `qwen2.5-coder:7b`) |
 | `OPENAI_API_KEY` | OpenAI key when `AI_PROVIDER=openai` |
 | `OPENAI_MODEL` | OpenAI model (e.g. `gpt-4o-mini`) |
 | `JUDGE_TIME_LIMIT_MS` | Per-run CPU time cap |

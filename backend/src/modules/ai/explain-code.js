@@ -88,6 +88,7 @@ function mapCoachMarkdownAnswer(raw, opts = {}) {
 
 /**
  * Friendly provider error copy for the coach API.
+ * Preserves specific Ollama diagnostics (model not found, connection refused, timeout).
  * @param {unknown} err
  * @returns {{ message: string, code: string } | null}
  */
@@ -99,16 +100,20 @@ function mapCoachProviderError(err) {
   if (lower.includes('timed out') || lower.includes('timeout')) {
     return {
       code: 'AI_TIMEOUT',
-      message:
-        'The AI coach timed out. Please try again in a moment.',
+      message: 'Ollama request timed out.',
     };
   }
 
+  // Keep provider-crafted diagnostics as-is.
   if (
-    lower.includes('unavailable') ||
-    lower.includes('failed') ||
+    lower.includes('model') && lower.includes('not found') ||
+    lower.includes('connection to ollama refused') ||
     lower.includes('empty completion')
   ) {
+    return null;
+  }
+
+  if (lower.includes('unavailable') || lower.includes('ollama request failed')) {
     return {
       code: 'AI_UNAVAILABLE',
       message:

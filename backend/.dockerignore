@@ -13,3 +13,5 @@ Dockerfile*
 .dockerignore
 README.md
 src/**/*.md
+!src/modules/ai/prompts/
+!src/modules/ai/prompts/**

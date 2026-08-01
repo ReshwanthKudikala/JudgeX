@@ -92,7 +92,7 @@ const envSchema = z
     // --- AI provider (default is free local Ollama) ---
     AI_PROVIDER: z.enum(['ollama', 'openai']).default('ollama'),
     OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
-    OLLAMA_MODEL: z.string().default('llama3'),
+    OLLAMA_MODEL: z.string().default('qwen2.5-coder:7b'),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default('gpt-4o-mini'),
     AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
