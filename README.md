@@ -23,7 +23,7 @@ Securely compile and execute user code in Docker sandboxes with asynchronous wor
 
 ## Project Overview
 
-JudgeX is an online coding judge platform where users browse problems, write solutions in **C++** or **Python**, run code against public samples, submit for full judging, and track progress on a personal dashboard and global leaderboard. It also includes an integrated **AI Coach** powered by local LLMs through Ollama (or optionally OpenAI).
+JudgeX is an online coding judge platform where users browse problems, write solutions in **C++** or **Python**, run code against public samples, submit for full judging, and track progress on a personal dashboard and global leaderboard. It also includes an integrated **AI Coach** powered by local LLMs through Ollama (or OpenAI).
 
 Unlike a simple CRUD demo, JudgeX is engineered around **secure untrusted code execution** and **horizontally scalable judging**:
 
@@ -59,7 +59,7 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 
 - Problem catalog with difficulty, constraints, and public sample test cases
 - Monaco-based code editor with language templates
-- Problem discussions and published editorials (where available)
+- Problem discussions and published editorials
 - Live problem statistics (acceptance rate, solvers, submissions, average runtime)
 
 ### Judge
@@ -102,7 +102,7 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 
 - PostgreSQL 17 · Redis 7 · BullMQ · Docker Compose (dev + prod)
 - Nginx edge proxy in production · health checks · stuck-submission reaper worker
-- Optional Ollama or OpenAI for AI Coach
+- Ollama (default) or OpenAI for AI Coach
 
 ### Testing
 
@@ -121,7 +121,17 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 
 ## Screenshots
 
-Screenshots will be added under [`docs/screenshots/`](docs/screenshots/) (login, problem workspace, AI Coach, dashboard, contests). Until then, run the stack locally to explore the UI.
+| Screen | Preview |
+|--------|---------|
+| Login | ![Login](docs/screenshots/login.png) |
+| Problem List | ![Problem List](docs/screenshots/problem-list.png) |
+| Problem Workspace | ![Problem Workspace](docs/screenshots/problem-workspace.png) |
+| AI Coach | ![AI Coach](docs/screenshots/ai-coach.png) |
+| Submission History | ![Submission History](docs/screenshots/submission-history.png) |
+| Dashboard | ![Dashboard](docs/screenshots/dashboard.png) |
+| Leaderboard | ![Leaderboard](docs/screenshots/leaderboard.png) |
+| Contests | ![Contests](docs/screenshots/contests.png) |
+| Profile | ![Profile](docs/screenshots/profile.png) |
 
 ---
 
@@ -308,7 +318,7 @@ judgex/
 
 ```bash
 git clone https://github.com/ReshwanthKudikala/JudgeX.git
-cd judgex
+cd JudgeX
 ```
 
 ### 2. Start backing services (development)
@@ -317,7 +327,7 @@ cd judgex
 docker compose up -d
 ```
 
-This starts PostgreSQL, Redis, and Ollama (optional AI). See [`docker/README.md`](docker/README.md).
+This starts PostgreSQL, Redis, and Ollama (for AI Coach). See [`docker/README.md`](docker/README.md).
 
 ### 3. Build sandbox images
 
@@ -422,6 +432,8 @@ Full guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 | `OLLAMA_BASE_URL` | Ollama API base URL |
 | `OLLAMA_MODEL` | Model name (e.g. `qwen2.5-coder:7b`) |
 | `AI_TIMEOUT_MS` | AI provider request timeout (raise for local 7B models, e.g. `120000`) |
+| `FEATURE_AI_ADVANCED` | Enable AI Coach actions |
+| `FEATURE_AI_COMPILE_EXPLANATION` | Compile-error coaching related flag (see `.env.example`) |
 | `OPENAI_API_KEY` | OpenAI key when `AI_PROVIDER=openai` |
 | `OPENAI_MODEL` | OpenAI model (e.g. `gpt-4o-mini`) |
 | `JUDGE_TIME_LIMIT_MS` | Per-run CPU time cap |
@@ -430,7 +442,6 @@ Full guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 | `JUDGE_WORKER_CONCURRENCY` | Parallel jobs per worker |
 | `JUDGE_WORKSPACE_DIR` | In-container workspace path |
 | `JUDGE_WORKSPACE_HOST_DIR` | Host path for sandbox bind mounts |
-| `FEATURE_AI_COMPILE_EXPLANATION` | Enable AI compile explanations |
 | `EMAIL_PROVIDER` | `console` or `smtp` |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | SMTP credentials |
 | `LOG_LEVEL` | Logging verbosity |
