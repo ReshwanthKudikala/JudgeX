@@ -23,6 +23,10 @@ const {
   emptyCodeMessageForAction,
 } = require('./review-solution');
 const { parseHintLevel } = require('./progressive-hint');
+const {
+  NO_PUBLIC_FAILURE_MESSAGE,
+  hasPublicFailingTestcase,
+} = require('./wrong-answer-debugger');
 
 class CoachService {
   /**
@@ -68,6 +72,15 @@ class CoachService {
             : 'hintLevel must be an integer between 1 and 3.',
           { field: 'hintLevel', action },
         );
+      }
+    }
+
+    if (action === COACH_ACTIONS.WRONG_ANSWER) {
+      if (!hasPublicFailingTestcase(sanitized)) {
+        throw new ValidationError(NO_PUBLIC_FAILURE_MESSAGE, {
+          field: 'lastRunResult',
+          action,
+        });
       }
     }
 

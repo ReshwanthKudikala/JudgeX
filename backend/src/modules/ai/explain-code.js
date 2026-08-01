@@ -43,6 +43,11 @@ function mapCoachMarkdownAnswer(raw, opts = {}) {
     return mapHintMarkdownAnswer(raw, opts);
   }
 
+  if (opts.action === COACH_ACTIONS.WRONG_ANSWER) {
+    const { mapWrongAnswerMarkdownAnswer } = require('./wrong-answer-debugger');
+    return mapWrongAnswerMarkdownAnswer(raw, opts);
+  }
+
   let text = typeof raw === 'string' ? raw.trim() : '';
 
   // Strip a single outer markdown fence if the model wrapped the whole reply.

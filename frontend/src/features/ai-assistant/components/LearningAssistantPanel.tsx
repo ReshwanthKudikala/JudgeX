@@ -15,6 +15,7 @@ import {
   afterSuccessfulHint,
   showRevealEditorial,
 } from '@/features/ai-assistant/hint-progress';
+import { isLatestWrongAnswer } from '@/features/ai-assistant/wrong-answer-visibility';
 import { cn } from '@/utils/cn';
 
 interface LearningAssistantPanelProps {
@@ -33,6 +34,8 @@ const QUICK_ACTIONS: Array<{
   message: string;
   needsSubmission?: boolean;
   needsRunOrSubmission?: boolean;
+  /** Only show when latest run/submit is Wrong Answer. */
+  requiresWrongAnswer?: boolean;
 }> = [
   {
     label: 'Explain My Code',
@@ -45,10 +48,11 @@ const QUICK_ACTIONS: Array<{
     message: 'Review my solution like an experienced technical interviewer.',
   },
   {
-    label: 'Why wrong answer?',
+    label: 'Debug Wrong Answer',
     action: 'WRONG_ANSWER',
-    message: 'Help me understand why my latest run or submission failed.',
-    needsRunOrSubmission: true,
+    message:
+      'Debug my Wrong Answer using public testcase expected vs actual output. Do not rewrite my solution.',
+    requiresWrongAnswer: true,
   },
   {
     label: 'Compile error help',
@@ -191,6 +195,13 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
 
   const nextHintLevel = (hintUnlockedThrough + 1) as 1 | 2 | 3 | 4;
   const revealUnlocked = showRevealEditorial(hintUnlockedThrough);
+  const showWrongAnswerChip = isLatestWrongAnswer(
+    getLastRunResult?.() ?? null,
+    getLastSubmission?.() ?? null,
+  );
+  const visibleActions = QUICK_ACTIONS.filter(
+    (item) => !item.requiresWrongAnswer || showWrongAnswerChip,
+  );
 
   return (
     <div
@@ -198,7 +209,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
       aria-label="AI learning coach"
     >
       <div className="flex flex-wrap gap-1">
-        {QUICK_ACTIONS.map((item) => (
+        {visibleActions.map((item) => (
           <Button
             key={item.label}
             type="button"
@@ -335,6 +346,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
                 if (last?.startsWith('Hint')) return `Preparing ${last}…`;
                 if (last === 'Review My Solution') return 'Reviewing your solution…';
                 if (last === 'Explain My Code') return 'Explaining your code…';
+                if (last === 'Debug Wrong Answer') return 'Debugging Wrong Answer…';
                 return 'Thinking…';
               })()}
             </span>

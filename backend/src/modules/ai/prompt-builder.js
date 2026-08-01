@@ -136,6 +136,19 @@ function buildCoachPrompt(ctx) {
       );
     }
 
+    if (action === COACH_ACTIONS.WRONG_ANSWER) {
+      const { buildPublicFailureContext } = require('./wrong-answer-debugger');
+      const failures = buildPublicFailureContext(ctx.lastRunResult);
+      if (failures.length > 0) {
+        userParts.push(
+          section(
+            'Public failing test case(s)',
+            JSON.stringify(failures, null, 2),
+          ),
+        );
+      }
+    }
+
     if (ctx.lastSubmission) {
       userParts.push(
         section(

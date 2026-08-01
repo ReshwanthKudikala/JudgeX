@@ -24,7 +24,11 @@ const REVIEW_SECTIONS = Object.freeze([
  * @param {string} action
  */
 function requiresSourceCode(action) {
-  return action === COACH_ACTIONS.EXPLAIN_CODE || action === COACH_ACTIONS.REVIEW;
+  return (
+    action === COACH_ACTIONS.EXPLAIN_CODE ||
+    action === COACH_ACTIONS.REVIEW ||
+    action === COACH_ACTIONS.WRONG_ANSWER
+  );
 }
 
 /**
@@ -33,6 +37,9 @@ function requiresSourceCode(action) {
  */
 function emptyCodeMessageForAction(action) {
   if (action === COACH_ACTIONS.REVIEW) return EMPTY_REVIEW_CODE_MESSAGE;
+  if (action === COACH_ACTIONS.WRONG_ANSWER) {
+    return 'Write some code in the editor first, then click “Debug Wrong Answer”.';
+  }
   return 'Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.';
 }
 
