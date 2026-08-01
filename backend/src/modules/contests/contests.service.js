@@ -251,9 +251,10 @@ class ContestService {
   }
 
   /**
-   * Problem list for contest detail (Sprint 39 demo experience).
-   * Public contests expose problem metadata + links to existing problem pages.
-   * Contest-mode judging / virtual registration remain future work.
+   * Problem list with visibility rules:
+   * - upcoming: hidden (empty / marked hidden) except admin
+   * - running: participants only
+   * - ended: public
    */
   async getContestProblems(id, viewer = null) {
     const row = await this.contestRepository.findByIdOrSlug(id);
@@ -265,6 +266,21 @@ class ContestService {
     }
 
     const status = deriveContestStatus(row);
+    const isAdmin = viewer?.role === 'admin';
+    let isParticipant = false;
+    if (viewer?.id) {
+      const p = await this.contestRepository.findParticipant(row.id, viewer.id);
+      isParticipant = Boolean(p);
+    }
+
+    if (status === 'upcoming' && !isAdmin) {
+      return { contestId: row.id, status, problems: [], hidden: true };
+    }
+
+    if (status === 'running' && !isParticipant && !isAdmin) {
+      throw new ForbiddenError('Join the contest to view problems.');
+    }
+
     const problems = await this.contestRepository.listContestProblems(row.id);
     return {
       contestId: row.id,
