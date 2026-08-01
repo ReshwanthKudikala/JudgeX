@@ -95,6 +95,10 @@ const envSchema = z
     OLLAMA_MODEL: z.string().default('llama3'),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+    AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    AI_MAX_CODE_CHARS: z.coerce.number().int().positive().default(100_000),
+    AI_MAX_MESSAGE_CHARS: z.coerce.number().int().positive().default(2_000),
+    AI_MAX_STATEMENT_CHARS: z.coerce.number().int().positive().default(8_000),
 
     // --- Docker sandbox limits ---
     JUDGE_TIME_LIMIT_MS: z.coerce.number().int().positive().default(2000),

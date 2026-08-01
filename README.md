@@ -307,7 +307,7 @@ judgex/
 ### 1. Clone
 
 ```bash
-git clone https://github.com/your-org/judgex.git
+git clone https://github.com/ReshwanthKudikala/JudgeX.git
 cd judgex
 ```
 
@@ -359,7 +359,7 @@ npm ci
 npm run dev                   # Vite on :5173
 ```
 
-Open **http://localhost:5173**. API defaults to **http://localhost:4000/api/v1**.
+Open **http://localhost**. API defaults to **http://localhost:4000/api/v1**.
 
 ---
 
@@ -500,7 +500,7 @@ CI runs on every push and pull request via [`.github/workflows/ci.yml`](.github/
 
 ---
 
-## Current Status
+## ✅ Implemented Features
 
 ### Complete
 
@@ -524,28 +524,6 @@ CI runs on every push and pull request via [`.github/workflows/ci.yml`](.github/
 - [x] Unit, integration, and E2E tests
 - [x] GitHub Actions CI
 
-### Planned
-
-- [ ] Expanded admin panel & ops tooling
-- [ ] Rich editorial content & authoring workflow
-- [ ] Full AI learning coach
-- [ ] Contest series & rating systems
-- [ ] Daily challenge
-- [ ] Discussion enhancements (voting, moderation UX)
-- [ ] Company / curated problem lists
-- [ ] Achievements & badges
-- [ ] Solve streak tracking
-
----
-
-## Roadmap
-
-| Phase | Focus |
-|-------|--------|
-| **Q1** | Streak tracking, daily challenge, achievement system |
-| **Q2** | Contest ratings, company problem lists, editorial CMS |
-| **Q3** | AI coach expansion, discussion quality tools |
-| **Q4** | Multi-region workers, advanced observability |
 
 ---
 
@@ -571,11 +549,13 @@ This project is licensed under the **MIT License**. See the `LICENSE` file for d
 
 ## Author
 
-**Your Name**
+Reshwanth Kudikala
 
-- GitHub: [@your-github](https://github.com/your-github)
-- LinkedIn: [Your Profile](https://linkedin.com/in/your-profile)
-- Email: you@example.com
+GitHub: https://github.com/ReshwanthKudikala
+
+LinkedIn:https://www.linkedin.com/in/reshwanth-kudikala/
+
+Email: reshwanthkudikala007@gmail.com
 
 ---
 

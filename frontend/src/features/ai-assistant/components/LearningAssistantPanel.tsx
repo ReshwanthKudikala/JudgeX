@@ -4,7 +4,11 @@ import { Button } from '@/components/ui/Button';
 import { MarkdownRenderer } from '@/features/editorials';
 import { useLearningAssistant } from '@/features/ai-assistant/hooks/useLearningAssistant';
 import { useToast } from '@/hooks/useToast';
-import type { AiAssistAction } from '@/types/ai-assistant';
+import type {
+  CoachAction,
+  CoachLastRunResult,
+  CoachLastSubmission,
+} from '@/types/ai-assistant';
 import { cn } from '@/utils/cn';
 
 interface LearningAssistantPanelProps {
@@ -12,24 +16,54 @@ interface LearningAssistantPanelProps {
   language: 'python' | 'cpp';
   getSourceCode: () => string;
   submissionId?: string | null;
+  getLastRunResult?: () => CoachLastRunResult | null | undefined;
+  getLastSubmission?: () => CoachLastSubmission | null | undefined;
   className?: string;
 }
 
 const QUICK_ACTIONS: Array<{
   label: string;
-  action: AiAssistAction;
-  hintLevel?: 1 | 2 | 3 | 4;
+  action: CoachAction;
+  message: string;
   needsSubmission?: boolean;
-  revealSolution?: boolean;
+  needsRunOrSubmission?: boolean;
 }> = [
-  { label: 'Explain my code', action: 'explain_code' },
-  { label: 'Why did my submission fail?', action: 'why_failed', needsSubmission: true },
-  { label: 'How can I optimize this?', action: 'optimize' },
-  { label: 'Complexity analysis', action: 'complexity' },
-  { label: 'Hint 1 — Direction', action: 'hint', hintLevel: 1 },
-  { label: 'Hint 2 — Algorithm', action: 'hint', hintLevel: 2 },
-  { label: 'Hint 3 — Data structure', action: 'hint', hintLevel: 3 },
-  { label: 'Hint 4 — Almost there', action: 'hint', hintLevel: 4 },
+  {
+    label: 'Explain my code',
+    action: 'EXPLAIN_CODE',
+    message: 'Explain my current code in the context of this problem.',
+  },
+  {
+    label: 'Review my code',
+    action: 'REVIEW',
+    message: 'Review my code for correctness risks and edge cases.',
+  },
+  {
+    label: 'Why wrong answer?',
+    action: 'WRONG_ANSWER',
+    message: 'Help me understand why my latest run or submission failed.',
+    needsRunOrSubmission: true,
+  },
+  {
+    label: 'Compile error help',
+    action: 'COMPILE_ERROR',
+    message: 'Help me understand the compile or interpreter error.',
+  },
+  {
+    label: 'How can I optimize?',
+    action: 'OPTIMIZE',
+    message: 'How can I optimize this approach?',
+  },
+  {
+    label: 'Complexity analysis',
+    action: 'COMPLEXITY',
+    message: 'Analyze the time and space complexity of my code.',
+  },
+  {
+    label: 'Give me a hint',
+    action: 'HINT',
+    message: 'Give me a progressive hint without revealing the full solution.',
+  },
 ];
 
 export const LearningAssistantPanel = memo(function LearningAssistantPanel({
@@ -37,6 +71,8 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
   language,
   getSourceCode,
   submissionId,
+  getLastRunResult,
+  getLastSubmission,
   className,
 }: LearningAssistantPanelProps) {
   const { toast, error: errorToast } = useToast();
@@ -46,43 +82,52 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
     language,
     getSourceCode,
     submissionId,
+    getLastRunResult,
+    getLastSubmission,
   });
 
   const runAction = useCallback(
     async (opts: {
-      action: AiAssistAction;
+      action: CoachAction;
       label: string;
-      message?: string;
-      hintLevel?: 1 | 2 | 3 | 4;
+      message: string;
       needsSubmission?: boolean;
-      revealSolution?: boolean;
+      needsRunOrSubmission?: boolean;
     }) => {
       if (opts.needsSubmission && !submissionId) {
         errorToast('No submission yet', 'Submit code first, then ask why it failed.');
         return;
       }
+      if (opts.needsRunOrSubmission) {
+        const run = getLastRunResult?.();
+        const sub = getLastSubmission?.();
+        if (!run && !sub) {
+          errorToast('No result yet', 'Run or submit code first, then ask about the failure.');
+          return;
+        }
+      }
       try {
-        await ask(opts);
+        await ask({
+          action: opts.action,
+          message: opts.message,
+          label: opts.label,
+        });
       } catch {
         /* message already appended */
       }
     },
-    [ask, submissionId, errorToast],
+    [ask, submissionId, errorToast, getLastRunResult, getLastSubmission],
   );
 
   const handleAsk = useCallback(async () => {
     const message = draft.trim();
     if (!message) return;
     setDraft('');
-    const wantsSolution = /\b(full solution|complete solution|give me the solution)\b/i.test(
-      message,
-    );
     try {
       await ask({
-        action: wantsSolution ? 'reveal_solution' : 'ask',
+        action: 'UNKNOWN',
         message,
         label: message,
-        revealSolution: wantsSolution,
       });
     } catch {
       /* surfaced in transcript */
@@ -106,7 +151,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
   return (
     <div
       className={cn('flex min-h-0 flex-col gap-2', className)}
-      aria-label="AI learning assistant"
+      aria-label="AI learning coach"
     >
       <div className="flex flex-wrap gap-1">
         {QUICK_ACTIONS.map((item) => (
@@ -127,8 +172,9 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {messages.length === 0 ? (
           <p className="text-xs text-muted">
-            Ask for hints, complexity, or help diagnosing a failed submission. AI is only
-            called when you request it. Full solutions are withheld unless you explicitly ask.
+            Context-aware coach: uses this problem, your code, language, and public
+            run/submit results. Hidden judge tests are never sent. Conversation stays
+            in this browser tab only.
           </p>
         ) : (
           messages.map((msg) => (
@@ -142,21 +188,12 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
               )}
             >
               <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-                {msg.role === 'user' ? 'You' : 'AI'}
-                {msg.wasBlocked ? ' · guarded' : ''}
-                {msg.hintLevel ? ` · hint ${msg.hintLevel}` : ''}
+                {msg.role === 'user' ? 'You' : 'Coach'}
               </p>
               {msg.role === 'assistant' ? (
                 <MarkdownRenderer markdown={msg.content} className="text-xs [&_p]:my-1.5" />
               ) : (
                 <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-              {(msg.timeComplexity || msg.spaceComplexity) && (
-                <p className="mt-2 text-[11px] text-muted">
-                  {msg.timeComplexity ? `Time: ${msg.timeComplexity}` : null}
-                  {msg.timeComplexity && msg.spaceComplexity ? ' · ' : null}
-                  {msg.spaceComplexity ? `Space: ${msg.spaceComplexity}` : null}
-                </p>
               )}
             </div>
           ))
@@ -177,7 +214,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
               void handleAsk();
             }
           }}
-          placeholder="Ask AI…"
+          placeholder="Ask the coach…"
           disabled={isLoading}
           className="h-7 flex-1 rounded border border-border/70 bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
         />
@@ -188,7 +225,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           disabled={isLoading || !draft.trim()}
           onClick={() => void handleAsk()}
         >
-          Ask AI
+          Ask
         </Button>
       </div>
 

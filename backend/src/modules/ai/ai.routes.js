@@ -15,8 +15,11 @@ const {
   learningAssistSchema,
 } = require('./ai.validators');
 const controller = require('./ai.controller');
+const { coachRoutes } = require('./coach.routes');
 
 const router = Router();
+
+router.use(coachRoutes);
 
 router.post(
   '/explain-compile-error',

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 
 import { LearningAssistantPanel } from '@/features/ai-assistant/components/LearningAssistantPanel';
 import {
@@ -7,6 +7,7 @@ import {
   type WorkspaceMode,
 } from '@/features/submissions/components/ConsoleTabs';
 import type { AiCompileExplanation, Submission } from '@/types/submissions';
+import type { CoachLastRunResult, CoachLastSubmission } from '@/types/ai-assistant';
 import { cn } from '@/utils/cn';
 
 interface EditorBottomPanelProps {
@@ -28,6 +29,44 @@ interface EditorBottomPanelProps {
   aiLoading?: boolean;
   onRequestCompileExplanation?: () => void;
   className?: string;
+}
+
+function toCoachRun(run: RunConsoleResult | null | undefined): CoachLastRunResult | null {
+  if (!run) return null;
+  return {
+    status: run.status ?? null,
+    compileSuccess: run.compileSuccess ?? null,
+    stderr: run.stderr ?? null,
+    results: (run.results ?? []).map((r, index) => ({
+      index: r.index ?? index,
+      status: null,
+      passed: r.passed ?? null,
+      input: r.input ?? null,
+      expectedOutput: r.expectedOutput ?? null,
+      actualOutput: r.actualOutput ?? null,
+      stderr: r.stderr ?? null,
+      runtimeMs: r.runtimeMs ?? null,
+    })),
+    passedCount: run.passedCount ?? null,
+    totalCount: run.totalCount ?? null,
+  };
+}
+
+function toCoachSubmission(sub: Submission | null | undefined): CoachLastSubmission | null {
+  if (!sub) return null;
+  return {
+    id: sub.id,
+    status: sub.status ?? null,
+    verdict: sub.verdict ?? null,
+    compileOutput: sub.compileOutput ?? null,
+    stderr: sub.stderr ?? null,
+    executionError: sub.executionError ?? null,
+    runtimeMs: sub.runtimeMs ?? sub.executionTime ?? null,
+    memoryKb: sub.memoryKb ?? null,
+    passedTests: sub.passedTests ?? null,
+    totalTests: sub.totalTests ?? null,
+    failedTestIndex: sub.failedTestIndex ?? null,
+  };
 }
 
 /**
@@ -52,6 +91,12 @@ export const EditorBottomPanel = memo(function EditorBottomPanel({
   onRequestCompileExplanation,
   className,
 }: EditorBottomPanelProps) {
+  const getLastRunResult = useCallback(() => toCoachRun(runResult), [runResult]);
+  const getLastSubmission = useCallback(
+    () => toCoachSubmission(submission),
+    [submission],
+  );
+
   return (
     <ConsoleTabs
       mode={mode}
@@ -75,6 +120,8 @@ export const EditorBottomPanel = memo(function EditorBottomPanel({
           language={language}
           getSourceCode={getSourceCode}
           submissionId={submission?.id ?? null}
+          getLastRunResult={getLastRunResult}
+          getLastSubmission={getLastSubmission}
           className="min-h-0 gap-2"
         />
       }

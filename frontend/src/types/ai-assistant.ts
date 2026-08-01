@@ -1,3 +1,14 @@
+export type CoachAction =
+  | 'EXPLAIN_CODE'
+  | 'REVIEW'
+  | 'COMPLEXITY'
+  | 'COMPILE_ERROR'
+  | 'WRONG_ANSWER'
+  | 'OPTIMIZE'
+  | 'HINT'
+  | 'UNKNOWN';
+
+/** @deprecated Prefer CoachAction — kept for older learning-assist paths. */
 export type AiAssistAction =
   | 'ask'
   | 'explain_code'
@@ -9,7 +20,8 @@ export type AiAssistAction =
   | 'analyze_complexity'
   | 'hint'
   | 'generate_hint'
-  | 'reveal_solution';
+  | 'reveal_solution'
+  | CoachAction;
 
 export interface AiLearningReply {
   action?: string;
@@ -21,6 +33,62 @@ export interface AiLearningReply {
   spaceComplexity: string | null;
   hintLevel: number | null;
   wasBlocked: boolean;
+}
+
+export interface CoachReply {
+  answer: string;
+  provider: string;
+  model: string;
+  tokensUsed: number | null;
+  durationMs: number;
+  action?: CoachAction | string;
+}
+
+export interface CoachLastRunResult {
+  status?: string | null;
+  compileSuccess?: boolean | null;
+  stderr?: string | null;
+  compile?: {
+    success?: boolean | null;
+    stdout?: string | null;
+    stderr?: string | null;
+  } | null;
+  results?: Array<{
+    index?: number | null;
+    status?: string | null;
+    passed?: boolean | null;
+    input?: string | null;
+    expectedOutput?: string | null;
+    actualOutput?: string | null;
+    stderr?: string | null;
+    runtimeMs?: number | null;
+  }>;
+  passedCount?: number | null;
+  totalCount?: number | null;
+}
+
+export interface CoachLastSubmission {
+  id?: string | null;
+  status?: string | null;
+  verdict?: string | null;
+  compileOutput?: string | null;
+  stderr?: string | null;
+  executionError?: string | null;
+  runtimeMs?: number | null;
+  memoryKb?: number | null;
+  passedTests?: number | null;
+  totalTests?: number | null;
+  failedTestIndex?: number | null;
+}
+
+export interface CoachRequest {
+  problemId: string;
+  language: 'python' | 'cpp';
+  code: string;
+  action: CoachAction | string;
+  message?: string;
+  lastRunResult?: CoachLastRunResult | null;
+  lastSubmission?: CoachLastSubmission | null;
 }
 
 export interface AiLearningAssistInput {

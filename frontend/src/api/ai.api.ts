@@ -4,6 +4,8 @@ import type { AiCompileExplanation } from '@/types/submissions';
 import type {
   AiLearningAssistInput,
   AiLearningReply,
+  CoachRequest,
+  CoachReply,
 } from '@/types/ai-assistant';
 
 /**
@@ -68,5 +70,12 @@ export async function learningAssist(
 ): Promise<AiLearningReply> {
   return unwrapData(
     apiClient.post<ApiEnvelope<AiLearningReply>>('/ai/learning-assist', input),
+  );
+}
+
+/** Sprint 41 — context-aware Learning Coach foundation. */
+export async function askCoach(input: CoachRequest): Promise<CoachReply> {
+  return unwrapData(
+    apiClient.post<ApiEnvelope<CoachReply>>('/ai/coach', input),
   );
 }

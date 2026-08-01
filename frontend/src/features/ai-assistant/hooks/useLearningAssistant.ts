@@ -1,12 +1,14 @@
 import { useCallback, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
-import { learningAssist } from '@/api/ai.api';
+import { askCoach } from '@/api/ai.api';
 import type {
-  AiAssistAction,
   AiConversationMessage,
-  AiLearningAssistInput,
-  AiLearningReply,
+  CoachAction,
+  CoachLastRunResult,
+  CoachLastSubmission,
+  CoachRequest,
+  CoachReply,
 } from '@/types/ai-assistant';
 import { ApiError } from '@/types';
 
@@ -19,22 +21,25 @@ export interface UseLearningAssistantOptions {
   language: 'python' | 'cpp';
   getSourceCode: () => string;
   submissionId?: string | null;
+  getLastRunResult?: () => CoachLastRunResult | null | undefined;
+  getLastSubmission?: () => CoachLastSubmission | null | undefined;
 }
 
 /**
- * Conversation state for the current problem session only.
- * AI is never requested until the user triggers an action.
+ * Conversation state for the current problem session only (frontend memory).
+ * Backend coach is single request / single response — no DB persistence.
  */
 export function useLearningAssistant({
   problemId,
   language,
   getSourceCode,
-  submissionId,
+  getLastRunResult,
+  getLastSubmission,
 }: UseLearningAssistantOptions) {
   const [messages, setMessages] = useState<AiConversationMessage[]>([]);
 
   const mutation = useMutation({
-    mutationFn: (input: AiLearningAssistInput) => learningAssist(input),
+    mutationFn: (input: CoachRequest) => askCoach(input),
   });
 
   const clear = useCallback(() => {
@@ -44,10 +49,8 @@ export function useLearningAssistant({
 
   const ask = useCallback(
     async (params: {
-      action: AiAssistAction;
+      action: CoachAction;
       message?: string;
-      hintLevel?: 1 | 2 | 3 | 4;
-      revealSolution?: boolean;
       label: string;
     }) => {
       const userMsg: AiConversationMessage = {
@@ -59,26 +62,22 @@ export function useLearningAssistant({
       setMessages((prev) => [...prev, userMsg]);
 
       try {
-        const reply: AiLearningReply = await mutation.mutateAsync({
-          action: params.action,
+        const reply: CoachReply = await mutation.mutateAsync({
           problemId,
           language,
-          sourceCode: getSourceCode() || undefined,
-          submissionId: submissionId || undefined,
-          message: params.message,
-          hintLevel: params.hintLevel,
-          revealSolution: params.revealSolution,
+          code: getSourceCode() || '',
+          action: params.action,
+          message: params.message || params.label,
+          lastRunResult: getLastRunResult?.() ?? null,
+          lastSubmission: getLastSubmission?.() ?? null,
         });
 
         const assistantMsg: AiConversationMessage = {
           id: newId(),
           role: 'assistant',
-          content: reply.reply,
-          summary: reply.summary,
-          timeComplexity: reply.timeComplexity,
-          spaceComplexity: reply.spaceComplexity,
-          hintLevel: reply.hintLevel,
-          wasBlocked: reply.wasBlocked,
+          content: reply.answer,
+          summary: undefined,
+          wasBlocked: false,
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
@@ -103,7 +102,7 @@ export function useLearningAssistant({
         throw err;
       }
     },
-    [mutation, problemId, language, getSourceCode, submissionId],
+    [mutation, problemId, language, getSourceCode, getLastRunResult, getLastSubmission],
   );
 
   return {

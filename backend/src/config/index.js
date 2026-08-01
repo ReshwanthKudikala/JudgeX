@@ -126,6 +126,10 @@ const config = Object.freeze({
 
   ai: Object.freeze({
     provider: env.AI_PROVIDER,
+    timeoutMs: env.AI_TIMEOUT_MS,
+    maxCodeChars: env.AI_MAX_CODE_CHARS,
+    maxMessageChars: env.AI_MAX_MESSAGE_CHARS,
+    maxStatementChars: env.AI_MAX_STATEMENT_CHARS,
     ollama: Object.freeze({ baseUrl: env.OLLAMA_BASE_URL, model: env.OLLAMA_MODEL }),
     openai: Object.freeze({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL }),
   }),
