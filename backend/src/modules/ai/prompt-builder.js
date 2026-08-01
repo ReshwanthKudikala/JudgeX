@@ -116,7 +116,10 @@ function buildCoachPrompt(ctx) {
         `\`\`\`${ctx.language || ''}\n${truncate(ctx.code, maxCode)}\n\`\`\``,
       ),
     );
-  } else if (action === COACH_ACTIONS.EXPLAIN_CODE) {
+  } else if (
+    action === COACH_ACTIONS.EXPLAIN_CODE ||
+    action === COACH_ACTIONS.REVIEW
+  ) {
     userParts.push(section('Current source code', '(empty — no code provided)'));
   }
 

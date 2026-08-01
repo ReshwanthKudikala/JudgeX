@@ -33,6 +33,11 @@ function isCoachCodeEmpty(code) {
  * @returns {{ answer: string, format: 'markdown', sectionsFound: string[] }}
  */
 function mapCoachMarkdownAnswer(raw, opts = {}) {
+  if (opts.action === COACH_ACTIONS.REVIEW) {
+    const { mapReviewMarkdownAnswer } = require('./review-solution');
+    return mapReviewMarkdownAnswer(raw, opts);
+  }
+
   let text = typeof raw === 'string' ? raw.trim() : '';
 
   // Strip a single outer markdown fence if the model wrapped the whole reply.
@@ -75,7 +80,7 @@ function mapCoachProviderError(err) {
     return {
       code: 'AI_TIMEOUT',
       message:
-        'The AI coach timed out. Please try “Explain My Code” again in a moment.',
+        'The AI coach timed out. Please try again in a moment.',
     };
   }
 

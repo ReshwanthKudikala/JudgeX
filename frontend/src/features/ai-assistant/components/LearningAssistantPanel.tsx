@@ -35,9 +35,9 @@ const QUICK_ACTIONS: Array<{
     message: 'Explain my current code in the context of this problem.',
   },
   {
-    label: 'Review my code',
+    label: 'Review My Solution',
     action: 'REVIEW',
-    message: 'Review my code for correctness risks and edge cases.',
+    message: 'Review my solution like an experienced technical interviewer.',
   },
   {
     label: 'Why wrong answer?',
@@ -219,7 +219,15 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
             aria-live="polite"
           >
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
-            <span>Explaining your code…</span>
+            <span>
+              {[...messages].reverse().find((m) => m.role === 'user')?.content ===
+              'Review My Solution'
+                ? 'Reviewing your solution…'
+                : [...messages].reverse().find((m) => m.role === 'user')?.content ===
+                    'Explain My Code'
+                  ? 'Explaining your code…'
+                  : 'Thinking…'}
+            </span>
           </div>
         ) : null}
       </div>

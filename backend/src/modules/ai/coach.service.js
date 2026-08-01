@@ -9,16 +9,19 @@ const { AIError } = require('../../shared/errors/domain-errors');
 const { resolveTestCase } = require('../../infrastructure/storage/storage.adapter');
 const { problemRepository } = require('../problems/problems.repository');
 const { testCaseService } = require('../problems/testcase.service');
-const { COACH_ACTIONS, resolveCoachAction } = require('./coach.actions');
+const { resolveCoachAction } = require('./coach.actions');
 const { sanitizeCoachContext, sanitizePublicExamples } = require('./context-sanitizer');
 const { buildCoachPrompt } = require('./prompt-builder');
 const { getCoachProvider } = require('./providers/provider.factory');
 const {
-  EMPTY_CODE_MESSAGE,
   isCoachCodeEmpty,
   mapCoachMarkdownAnswer,
   mapCoachProviderError,
 } = require('./explain-code');
+const {
+  requiresSourceCode,
+  emptyCodeMessageForAction,
+} = require('./review-solution');
 
 class CoachService {
   /**
@@ -44,11 +47,11 @@ class CoachService {
     const sanitized = sanitizeCoachContext(body);
     const action = resolveCoachAction(sanitized.action);
 
-    // Explain My Code (and future code-first actions): validate before provider.
-    if (action === COACH_ACTIONS.EXPLAIN_CODE && isCoachCodeEmpty(sanitized.code)) {
-      throw new ValidationError(EMPTY_CODE_MESSAGE, {
+    // Code-first actions: validate before contacting the provider.
+    if (requiresSourceCode(action) && isCoachCodeEmpty(sanitized.code)) {
+      throw new ValidationError(emptyCodeMessageForAction(action), {
         field: 'code',
-        action: COACH_ACTIONS.EXPLAIN_CODE,
+        action,
       });
     }
 

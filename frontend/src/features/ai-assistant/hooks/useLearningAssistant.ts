@@ -17,7 +17,17 @@ function newId() {
 }
 
 const EMPTY_CODE_HINT =
-  'Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.';
+  'Write some code in the editor first, then ask the coach to explain or review it.';
+
+function emptyCodeHint(action: CoachAction): string {
+  if (action === 'REVIEW') {
+    return 'Write some code in the editor first, then click “Review My Solution” for interviewer-style feedback.';
+  }
+  if (action === 'EXPLAIN_CODE') {
+    return 'Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.';
+  }
+  return EMPTY_CODE_HINT;
+}
 
 function mapCoachError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -76,7 +86,10 @@ export function useLearningAssistant({
     }) => {
       const code = getSourceCode() || '';
 
-      if (params.action === 'EXPLAIN_CODE' && !code.trim()) {
+      if (
+        (params.action === 'EXPLAIN_CODE' || params.action === 'REVIEW') &&
+        !code.trim()
+      ) {
         const userMsg: AiConversationMessage = {
           id: newId(),
           role: 'user',
@@ -86,7 +99,7 @@ export function useLearningAssistant({
         const assistantMsg: AiConversationMessage = {
           id: newId(),
           role: 'assistant',
-          content: EMPTY_CODE_HINT,
+          content: emptyCodeHint(params.action),
           wasBlocked: false,
           createdAt: new Date().toISOString(),
         };
