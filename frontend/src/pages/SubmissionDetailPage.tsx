@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 
 import { Skeleton } from '@/components/common/Skeleton';
 import { Button } from '@/components/ui/Button';
-import { AiExplanation } from '@/features/submissions/components/AiExplanation';
+import { MarkdownRenderer } from '@/features/editorials';
 import { SubmissionsErrorState } from '@/features/submissions/components/SubmissionsErrorState';
 import { VerdictBadge } from '@/features/submissions/components/VerdictBadge';
 import { VerdictPanel } from '@/features/submissions/components/VerdictPanel';
@@ -29,9 +30,9 @@ export function SubmissionDetailPage() {
     isError,
     error,
     refetch,
-    aiExplanation,
-    aiLoading,
-    aiAvailable,
+    coachAnswer,
+    coachLoading,
+    coachError,
     requestCompileExplanation,
   } = useSubmissionDetail(submissionId);
 
@@ -123,24 +124,37 @@ export function SubmissionDetailPage() {
       {submission.verdict === 'compile_error' ? (
         <section className="rounded-lg border border-border bg-card p-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
-            AI explanation
+            AI Coach
           </p>
-          {!aiAvailable && !aiLoading ? (
+          {!coachAnswer && !coachLoading ? (
             <Button
               type="button"
               size="sm"
               variant="secondary"
               onClick={() => requestCompileExplanation()}
             >
-              Explain compile error
+              Explain Compile Error
             </Button>
-          ) : (
-            <AiExplanation
-              explanation={aiExplanation}
-              loading={aiLoading}
-              unavailable={!aiAvailable && !aiLoading}
+          ) : null}
+          {coachLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Explaining the compile error…
+            </div>
+          ) : null}
+          {coachError && !coachLoading ? (
+            <p className="text-sm text-muted">
+              {coachError instanceof ApiError
+                ? coachError.message
+                : 'AI Coach is unavailable right now. Please try again.'}
+            </p>
+          ) : null}
+          {coachAnswer ? (
+            <MarkdownRenderer
+              markdown={coachAnswer}
+              className="text-sm text-foreground"
             />
-          )}
+          ) : null}
         </section>
       ) : null}
 
@@ -172,10 +186,8 @@ export function SubmissionDetailPage() {
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[10px] font-medium uppercase tracking-wide text-muted/80">
-        {label}
-      </dt>
-      <dd className="mt-0.5 text-muted-foreground">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="mt-0.5 font-medium text-foreground">{value}</dd>
     </div>
   );
 }

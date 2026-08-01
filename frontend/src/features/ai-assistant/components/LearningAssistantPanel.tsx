@@ -1,8 +1,27 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import {
+  ChevronDown,
+  Copy,
+  Loader2,
+  RefreshCw,
+  ThumbsDown,
+  ThumbsUp,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { MarkdownRenderer } from '@/features/editorials';
+import {
+  COMPILE_ERROR_ACTION,
+  getFollowUpActions,
+  getVisibleCoachActions,
+  loadingLabelForAction,
+  type CoachQuickAction,
+} from '@/features/ai-assistant/coach-actions';
+import {
+  getCoachFeedback,
+  setCoachFeedback,
+  type CoachFeedbackValue,
+} from '@/features/ai-assistant/coach-feedback';
 import { useLearningAssistant } from '@/features/ai-assistant/hooks/useLearningAssistant';
 import { useToast } from '@/hooks/useToast';
 import type {
@@ -12,11 +31,17 @@ import type {
 } from '@/types/ai-assistant';
 import {
   canRequestHint,
-  afterSuccessfulHint,
   showRevealEditorial,
 } from '@/features/ai-assistant/hint-progress';
-import { isLatestWrongAnswer } from '@/features/ai-assistant/wrong-answer-visibility';
 import { cn } from '@/utils/cn';
+
+export interface CoachPendingIntent {
+  action: CoachAction;
+  label: string;
+  message: string;
+  /** Bumps to re-trigger the same action. */
+  nonce: number;
+}
 
 interface LearningAssistantPanelProps {
   problemId: string;
@@ -25,52 +50,11 @@ interface LearningAssistantPanelProps {
   submissionId?: string | null;
   getLastRunResult?: () => CoachLastRunResult | null | undefined;
   getLastSubmission?: () => CoachLastSubmission | null | undefined;
+  /** External intent (e.g. Result tab → Explain Compile Error). */
+  pendingIntent?: CoachPendingIntent | null;
+  onPendingIntentConsumed?: () => void;
   className?: string;
 }
-
-const QUICK_ACTIONS: Array<{
-  label: string;
-  action: CoachAction;
-  message: string;
-  needsSubmission?: boolean;
-  needsRunOrSubmission?: boolean;
-  /** Only show when latest run/submit is Wrong Answer. */
-  requiresWrongAnswer?: boolean;
-}> = [
-  {
-    label: 'Explain My Code',
-    action: 'EXPLAIN_CODE',
-    message: 'Explain my current code in the context of this problem.',
-  },
-  {
-    label: 'Review My Solution',
-    action: 'REVIEW',
-    message: 'Review my solution like an experienced technical interviewer.',
-  },
-  {
-    label: 'Debug Wrong Answer',
-    action: 'WRONG_ANSWER',
-    message:
-      'Debug my Wrong Answer using public testcase expected vs actual output. Do not rewrite my solution.',
-    requiresWrongAnswer: true,
-  },
-  {
-    label: 'Compile error help',
-    action: 'COMPILE_ERROR',
-    message: 'Help me understand the compile or interpreter error.',
-  },
-  {
-    label: 'Optimize My Solution',
-    action: 'OPTIMIZE',
-    message:
-      'Optimize my solution: analyze complexity, scalability, and alternatives without rewriting my entire code.',
-  },
-  {
-    label: 'Complexity analysis',
-    action: 'COMPLEXITY',
-    message: 'Analyze the time and space complexity of my code.',
-  },
-];
 
 const HINT_LEVELS: Array<{
   level: 1 | 2 | 3;
@@ -96,6 +80,24 @@ const HINT_LEVELS: Array<{
   },
 ];
 
+const COACH_MD_CLASS =
+  'coach-markdown text-xs text-foreground ' +
+  '[&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:border-b [&_h1]:border-border/60 [&_h1]:pb-1 [&_h1]:text-sm [&_h1]:font-semibold ' +
+  '[&_h2]:mb-1.5 [&_h2]:mt-2.5 [&_h2]:text-xs [&_h2]:font-semibold ' +
+  '[&_h3]:mb-1 [&_h3]:mt-2 [&_h3]:text-xs [&_h3]:font-medium ' +
+  '[&_p]:my-1.5 [&_p]:leading-relaxed ' +
+  '[&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-4 ' +
+  '[&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-4 ' +
+  '[&_li]:my-0.5 ' +
+  '[&_blockquote]:my-2 [&_blockquote]:rounded-r [&_blockquote]:border-l-2 [&_blockquote]:border-primary/40 [&_blockquote]:bg-overlay/60 [&_blockquote]:py-1.5 [&_blockquote]:pl-3 [&_blockquote]:italic ' +
+  '[&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-[11px] ' +
+  '[&_th]:border [&_th]:border-border [&_th]:bg-overlay/50 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
+  '[&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 ' +
+  '[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-editor [&_pre]:p-2 ' +
+  '[&_code]:rounded [&_code]:bg-editor [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[11px] ' +
+  '[&_pre_code]:bg-transparent [&_pre_code]:p-0 ' +
+  '[&_hr]:my-3 [&_hr]:border-border/70';
+
 export const LearningAssistantPanel = memo(function LearningAssistantPanel({
   problemId,
   language,
@@ -103,17 +105,25 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
   submissionId,
   getLastRunResult,
   getLastSubmission,
+  pendingIntent = null,
+  onPendingIntentConsumed,
   className,
 }: LearningAssistantPanelProps) {
   const { toast, error: errorToast } = useToast();
   const [draft, setDraft] = useState('');
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, CoachFeedbackValue>>(
+    {},
+  );
   const transcriptRef = useRef<HTMLDivElement>(null);
   const {
     messages,
     clear,
     ask,
+    regenerate,
+    lastRequest,
     revealEditorialPrompt,
     hintUnlockedThrough,
+    activeAction,
     isLoading,
   } = useLearningAssistant({
     problemId,
@@ -131,26 +141,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
   }, [messages, isLoading]);
 
   const runAction = useCallback(
-    async (opts: {
-      action: CoachAction;
-      label: string;
-      message: string;
-      needsSubmission?: boolean;
-      needsRunOrSubmission?: boolean;
-      hintLevel?: 1 | 2 | 3;
-    }) => {
-      if (opts.needsSubmission && !submissionId) {
-        errorToast('No submission yet', 'Submit code first, then ask why it failed.');
-        return;
-      }
-      if (opts.needsRunOrSubmission) {
-        const run = getLastRunResult?.();
-        const sub = getLastSubmission?.();
-        if (!run && !sub) {
-          errorToast('No result yet', 'Run or submit code first, then ask about the failure.');
-          return;
-        }
-      }
+    async (opts: CoachQuickAction & { hintLevel?: 1 | 2 | 3 }) => {
       try {
         await ask({
           action: opts.action,
@@ -162,8 +153,16 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
         /* message already appended */
       }
     },
-    [ask, submissionId, errorToast, getLastRunResult, getLastSubmission],
+    [ask],
   );
+
+  // External intent from Result tab / compile error CTA.
+  useEffect(() => {
+    if (!pendingIntent) return;
+    void runAction(pendingIntent).finally(() => {
+      onPendingIntentConsumed?.();
+    });
+  }, [pendingIntent, runAction, onPendingIntentConsumed]);
 
   const handleAsk = useCallback(async () => {
     const message = draft.trim();
@@ -180,34 +179,52 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
     }
   }, [ask, draft]);
 
-  const copyLast = useCallback(async () => {
-    const last = [...messages].reverse().find((m) => m.role === 'assistant');
-    if (!last) {
-      toast({ title: 'Nothing to copy', variant: 'default' });
-      return;
-    }
+  const copyMessage = useCallback(
+    async (content: string) => {
+      try {
+        await navigator.clipboard.writeText(content);
+        toast({ title: 'Copied response', variant: 'default' });
+      } catch {
+        errorToast('Copy failed', 'Clipboard permission denied.');
+      }
+    },
+    [toast, errorToast],
+  );
+
+  const handleFeedback = useCallback((messageId: string, value: CoachFeedbackValue) => {
+    setCoachFeedback(messageId, value);
+    setFeedbackMap((prev) => ({ ...prev, [messageId]: value }));
+  }, []);
+
+  const handleRegenerate = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(last.content);
-      toast({ title: 'Copied AI response', variant: 'default' });
+      await regenerate();
     } catch {
-      errorToast('Copy failed', 'Clipboard permission denied.');
+      /* already in transcript */
     }
-  }, [messages, toast, errorToast]);
+  }, [regenerate]);
 
   const nextHintLevel = (hintUnlockedThrough + 1) as 1 | 2 | 3 | 4;
   const revealUnlocked = showRevealEditorial(hintUnlockedThrough);
-  const showWrongAnswerChip = isLatestWrongAnswer(
-    getLastRunResult?.() ?? null,
-    getLastSubmission?.() ?? null,
-  );
-  const visibleActions = QUICK_ACTIONS.filter(
-    (item) => !item.requiresWrongAnswer || showWrongAnswerChip,
-  );
+  const run = getLastRunResult?.() ?? null;
+  const sub = getLastSubmission?.() ?? null;
+  const visibleActions = getVisibleCoachActions(run, sub);
+
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const followUps =
+    !isLoading && lastAssistant?.action
+      ? getFollowUpActions(lastAssistant.action)
+      : [];
+
+  const nextAvailableHint = Math.min(nextHintLevel, 3) as 1 | 2 | 3;
+  const canAskNextHint =
+    hintUnlockedThrough < 3 &&
+    canRequestHint(hintUnlockedThrough, nextAvailableHint);
 
   return (
     <div
       className={cn('flex min-h-0 flex-col gap-2', className)}
-      aria-label="AI learning coach"
+      aria-label="AI Coach"
     >
       <div className="flex flex-wrap gap-1">
         {visibleActions.map((item) => (
@@ -223,6 +240,32 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
             {item.label}
           </Button>
         ))}
+        {canAskNextHint || hintUnlockedThrough < 3 ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-6 px-1.5 text-[10px]"
+            disabled={isLoading || !canAskNextHint}
+            title={
+              hintUnlockedThrough >= 3
+                ? 'All hints received — open Reveal Editorial below'
+                : `Request Hint ${nextAvailableHint}`
+            }
+            onClick={() => {
+              const hint = HINT_LEVELS.find((h) => h.level === nextAvailableHint);
+              if (!hint || !canAskNextHint) return;
+              void runAction({
+                action: 'HINT',
+                label: hint.label,
+                message: hint.message,
+                hintLevel: hint.level,
+              });
+            }}
+          >
+            Need a Hint
+          </Button>
+        ) : null}
       </div>
 
       <div
@@ -303,34 +346,98 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
       >
         {messages.length === 0 && !isLoading ? (
           <p className="text-xs text-muted">
-            Use progressive hints to discover the approach yourself — never a full
-            solution. Hidden judge tests are never sent.
+            AI Coach uses only public problem context and your code. Hidden judge
+            tests are never sent.
           </p>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                'rounded-md px-2.5 py-2 text-xs',
-                msg.role === 'user'
-                  ? 'bg-primary/10 text-foreground'
-                  : 'border border-border/60 bg-surface text-muted-foreground',
-              )}
-            >
-              <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-                {msg.role === 'user' ? 'You' : 'Coach'}
-                {msg.hintLevel ? ` · hint ${msg.hintLevel}` : ''}
-              </p>
-              {msg.role === 'assistant' ? (
-                <MarkdownRenderer
-                  markdown={msg.content}
-                  className="text-xs text-foreground [&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-sm [&_h1]:font-semibold [&_h2]:mb-1.5 [&_h2]:mt-2.5 [&_h2]:text-xs [&_h2]:font-semibold [&_li]:my-0.5 [&_p]:my-1.5 [&_pre]:my-2 [&_table]:my-2"
-                />
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-          ))
+          messages.map((msg, index) => {
+            const isLastAssistant =
+              msg.role === 'assistant' && index === messages.length - 1;
+            const feedback =
+              feedbackMap[msg.id] ?? getCoachFeedback(msg.id) ?? null;
+
+            return (
+              <div
+                key={msg.id}
+                className={cn(
+                  'rounded-md px-2.5 py-2 text-xs',
+                  msg.role === 'user'
+                    ? 'bg-primary/10 text-foreground'
+                    : 'border border-border/60 bg-surface text-muted-foreground',
+                )}
+              >
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+                  {msg.role === 'user' ? 'You' : 'Coach'}
+                  {msg.hintLevel ? ` · hint ${msg.hintLevel}` : ''}
+                </p>
+                {msg.role === 'assistant' ? (
+                  <>
+                    <MarkdownRenderer
+                      markdown={msg.content}
+                      className={COACH_MD_CLASS}
+                    />
+                    <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/40 pt-1.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 gap-1 px-1.5 text-[10px]"
+                        onClick={() => void copyMessage(msg.content)}
+                        title="Copy response"
+                      >
+                        <Copy className="h-3 w-3" aria-hidden />
+                        Copy
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          'h-6 gap-1 px-1.5 text-[10px]',
+                          feedback === 'helpful' && 'text-primary',
+                        )}
+                        onClick={() => handleFeedback(msg.id, 'helpful')}
+                        title="Helpful"
+                      >
+                        <ThumbsUp className="h-3 w-3" aria-hidden />
+                        Helpful
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          'h-6 gap-1 px-1.5 text-[10px]',
+                          feedback === 'not_helpful' && 'text-primary',
+                        )}
+                        onClick={() => handleFeedback(msg.id, 'not_helpful')}
+                        title="Not helpful"
+                      >
+                        <ThumbsDown className="h-3 w-3" aria-hidden />
+                        Not Helpful
+                      </Button>
+                      {isLastAssistant && lastRequest ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 gap-1 px-1.5 text-[10px]"
+                          disabled={isLoading}
+                          onClick={() => void handleRegenerate()}
+                          title="Regenerate"
+                        >
+                          <RefreshCw className="h-3 w-3" aria-hidden />
+                          Regenerate
+                        </Button>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
+            );
+          })
         )}
 
         {isLoading ? (
@@ -341,17 +448,56 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           >
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
             <span>
-              {(() => {
-                const last = [...messages].reverse().find((m) => m.role === 'user')
-                  ?.content;
-                if (last?.startsWith('Hint')) return `Preparing ${last}…`;
-                if (last === 'Review My Solution') return 'Reviewing your solution…';
-                if (last === 'Explain My Code') return 'Explaining your code…';
-                if (last === 'Debug Wrong Answer') return 'Debugging Wrong Answer…';
-                if (last === 'Optimize My Solution') return 'Analyzing optimizations…';
-                return 'Thinking…';
-              })()}
+              {loadingLabelForAction(
+                activeAction ?? lastRequest?.action,
+                lastRequest?.hintLevel,
+                lastRequest?.label,
+              )}
             </span>
+          </div>
+        ) : null}
+
+        {followUps.length > 0 ? (
+          <div className="rounded-md border border-dashed border-border/60 bg-overlay/30 px-2.5 py-2">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+              What would you like to do next?
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {followUps.map((item) => (
+                <Button
+                  key={`follow-${item.label}`}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px]"
+                  disabled={isLoading}
+                  onClick={() => void runAction(item)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+              {canAskNextHint ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px]"
+                  disabled={isLoading}
+                  onClick={() => {
+                    const hint = HINT_LEVELS.find((h) => h.level === nextAvailableHint);
+                    if (!hint) return;
+                    void runAction({
+                      action: 'HINT',
+                      label: hint.label,
+                      message: hint.message,
+                      hintLevel: hint.level,
+                    });
+                  }}
+                >
+                  Need a Hint
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
@@ -388,16 +534,6 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           variant="ghost"
           size="sm"
           className="h-6 px-1.5 text-[10px]"
-          disabled={messages.length === 0}
-          onClick={() => void copyLast()}
-        >
-          Copy AI response
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 text-[10px]"
           disabled={messages.length === 0 || isLoading}
           onClick={clear}
         >
@@ -407,3 +543,5 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
     </div>
   );
 });
+
+export { COMPILE_ERROR_ACTION };

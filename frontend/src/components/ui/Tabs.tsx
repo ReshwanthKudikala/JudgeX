@@ -104,12 +104,24 @@ export function TabsContent({
   value,
   className,
   children,
+  forceMount = false,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { value: string }) {
+}: HTMLAttributes<HTMLDivElement> & { value: string; forceMount?: boolean }) {
   const { value: active } = useTabsContext();
-  if (active !== value) return null;
+  const isActive = active === value;
+  if (!forceMount && !isActive) return null;
   return (
-    <div role="tabpanel" className={cn('mt-4 animate-fade-in', className)} {...props}>
+    <div
+      role="tabpanel"
+      hidden={!isActive}
+      data-state={isActive ? 'active' : 'inactive'}
+      className={cn(
+        'mt-4 animate-fade-in',
+        forceMount && !isActive && 'hidden',
+        className,
+      )}
+      {...props}
+    >
       {children}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
 import { askCoach } from '@/api/ai.api';
@@ -9,6 +9,7 @@ import {
 import type {
   AiConversationMessage,
   CoachAction,
+  CoachLastRequest,
   CoachLastRunResult,
   CoachLastSubmission,
   CoachRequest,
@@ -67,7 +68,8 @@ export interface UseLearningAssistantOptions {
 }
 
 /**
- * Conversation + progressive hint unlock for the current problem session only.
+ * Conversation + progressive hint unlock for the current problem session.
+ * Messages persist across Workspace ↔ AI Coach tab switches (panel stays mounted).
  */
 export function useLearningAssistant({
   problemId,
@@ -77,23 +79,30 @@ export function useLearningAssistant({
   getLastSubmission,
 }: UseLearningAssistantOptions) {
   const [messages, setMessages] = useState<AiConversationMessage[]>([]);
-  /** Highest hint level successfully received (0–3). */
   const [hintUnlockedThrough, setHintUnlockedThrough] = useState(0);
+  const [lastRequest, setLastRequest] = useState<CoachLastRequest | null>(null);
+  const [activeAction, setActiveAction] = useState<CoachAction | null>(null);
+  const lastRequestRef = useRef<CoachLastRequest | null>(null);
 
   const mutation = useMutation({
     mutationFn: (input: CoachRequest) => askCoach(input),
   });
 
-  // Reset session state when the problem changes.
   useEffect(() => {
     setMessages([]);
     setHintUnlockedThrough(resetHintProgress());
+    setLastRequest(null);
+    lastRequestRef.current = null;
+    setActiveAction(null);
     mutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on problem change
   }, [problemId]);
 
   const clear = useCallback(() => {
     setMessages([]);
+    setLastRequest(null);
+    lastRequestRef.current = null;
+    setActiveAction(null);
     mutation.reset();
   }, [mutation]);
 
@@ -103,8 +112,16 @@ export function useLearningAssistant({
       message?: string;
       label: string;
       hintLevel?: 1 | 2 | 3;
+      /** When regenerating, replace the last assistant reply instead of appending a new user turn. */
+      regenerate?: boolean;
     }) => {
       const code = getSourceCode() || '';
+      const requestMeta: CoachLastRequest = {
+        action: params.action,
+        message: params.message || params.label,
+        label: params.label,
+        hintLevel: params.hintLevel,
+      };
 
       if (
         (params.action === 'EXPLAIN_CODE' ||
@@ -112,30 +129,67 @@ export function useLearningAssistant({
           params.action === 'OPTIMIZE') &&
         !code.trim()
       ) {
+        if (params.regenerate) {
+          setMessages((prev) => {
+            const next = [...prev];
+            for (let i = next.length - 1; i >= 0; i -= 1) {
+              if (next[i].role === 'assistant') {
+                next[i] = {
+                  ...next[i],
+                  content: emptyCodeHint(params.action),
+                  action: params.action,
+                };
+                break;
+              }
+            }
+            return next;
+          });
+          return null;
+        }
         const userMsg: AiConversationMessage = {
           id: newId(),
           role: 'user',
           content: params.label,
+          action: params.action,
           createdAt: new Date().toISOString(),
         };
         const assistantMsg: AiConversationMessage = {
           id: newId(),
           role: 'assistant',
           content: emptyCodeHint(params.action),
+          action: params.action,
           wasBlocked: false,
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, userMsg, assistantMsg]);
+        lastRequestRef.current = requestMeta;
+        setLastRequest(requestMeta);
         return null;
       }
 
-      const userMsg: AiConversationMessage = {
-        id: newId(),
-        role: 'user',
-        content: params.label,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
+      if (!params.regenerate) {
+        const userMsg: AiConversationMessage = {
+          id: newId(),
+          role: 'user',
+          content: params.label,
+          action: params.action,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+      } else {
+        // Drop trailing assistant message so loading replaces it.
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next.length && next[next.length - 1].role === 'assistant') {
+            next.pop();
+          }
+          return next;
+        });
+      }
+
+      lastRequestRef.current = requestMeta;
+      setLastRequest(requestMeta);
+      setActiveAction(params.action);
 
       try {
         const reply: CoachReply = await mutation.mutateAsync({
@@ -155,6 +209,7 @@ export function useLearningAssistant({
           content: reply.answer,
           summary: undefined,
           hintLevel: reply.hintLevel ?? params.hintLevel ?? null,
+          action: params.action,
           wasBlocked: false,
           createdAt: new Date().toISOString(),
         };
@@ -175,27 +230,38 @@ export function useLearningAssistant({
             id: newId(),
             role: 'assistant',
             content: message,
+            action: params.action,
             wasBlocked: false,
             createdAt: new Date().toISOString(),
           },
         ]);
         throw err;
+      } finally {
+        setActiveAction(null);
       }
     },
     [mutation, problemId, language, getSourceCode, getLastRunResult, getLastSubmission],
   );
+
+  const regenerate = useCallback(async () => {
+    const prev = lastRequestRef.current;
+    if (!prev) return null;
+    return ask({ ...prev, regenerate: true });
+  }, [ask]);
 
   const revealEditorialPrompt = useCallback(() => {
     const userMsg: AiConversationMessage = {
       id: newId(),
       role: 'user',
       content: 'Reveal Editorial',
+      action: 'HINT',
       createdAt: new Date().toISOString(),
     };
     const assistantMsg: AiConversationMessage = {
       id: newId(),
       role: 'assistant',
       content: REVEAL_EDITORIAL_MESSAGE,
+      action: 'HINT',
       wasBlocked: false,
       createdAt: new Date().toISOString(),
     };
@@ -206,8 +272,11 @@ export function useLearningAssistant({
     messages,
     clear,
     ask,
+    regenerate,
+    lastRequest,
     revealEditorialPrompt,
     hintUnlockedThrough,
+    activeAction,
     isLoading: mutation.isPending,
     error: mutation.error,
   };

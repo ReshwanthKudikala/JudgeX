@@ -1,12 +1,16 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 
-import { LearningAssistantPanel } from '@/features/ai-assistant/components/LearningAssistantPanel';
+import {
+  LearningAssistantPanel,
+  type CoachPendingIntent,
+} from '@/features/ai-assistant/components/LearningAssistantPanel';
+import { COMPILE_ERROR_ACTION } from '@/features/ai-assistant/coach-actions';
 import {
   ConsoleTabs,
   type RunConsoleResult,
   type WorkspaceMode,
 } from '@/features/submissions/components/ConsoleTabs';
-import type { AiCompileExplanation, Submission } from '@/types/submissions';
+import type { Submission } from '@/types/submissions';
 import type { CoachLastRunResult, CoachLastSubmission } from '@/types/ai-assistant';
 import { cn } from '@/utils/cn';
 
@@ -24,10 +28,6 @@ interface EditorBottomPanelProps {
   /** Submit-mode submission only. */
   submission: Submission | null;
   timeLimitMs?: number | null;
-  aiExplanation: AiCompileExplanation | null;
-  aiAvailable: boolean;
-  aiLoading?: boolean;
-  onRequestCompileExplanation?: () => void;
   className?: string;
 }
 
@@ -70,7 +70,7 @@ function toCoachSubmission(sub: Submission | null | undefined): CoachLastSubmiss
 }
 
 /**
- * Docked bottom workspace under the editor — Idle / Run / Submission + AI.
+ * Docked bottom workspace under the editor — Idle / Run / Submission + AI Coach.
  */
 export const EditorBottomPanel = memo(function EditorBottomPanel({
   problemId,
@@ -85,17 +85,24 @@ export const EditorBottomPanel = memo(function EditorBottomPanel({
   hasSubmissionResult = false,
   submission,
   timeLimitMs = null,
-  aiExplanation,
-  aiAvailable,
-  aiLoading = false,
-  onRequestCompileExplanation,
   className,
 }: EditorBottomPanelProps) {
+  const [pendingIntent, setPendingIntent] = useState<CoachPendingIntent | null>(null);
+
   const getLastRunResult = useCallback(() => toCoachRun(runResult), [runResult]);
   const getLastSubmission = useCallback(
     () => toCoachSubmission(submission),
     [submission],
   );
+
+  const openCompileErrorCoach = useCallback(() => {
+    setPendingIntent({
+      action: COMPILE_ERROR_ACTION.action,
+      label: COMPILE_ERROR_ACTION.label,
+      message: COMPILE_ERROR_ACTION.message,
+      nonce: Date.now(),
+    });
+  }, []);
 
   return (
     <ConsoleTabs
@@ -108,10 +115,7 @@ export const EditorBottomPanel = memo(function EditorBottomPanel({
       hasSubmissionResult={hasSubmissionResult}
       submission={mode === 'submit' ? submission : null}
       timeLimitMs={timeLimitMs}
-      aiExplanation={aiExplanation}
-      aiAvailable={aiAvailable}
-      aiLoading={aiLoading}
-      onRequestCompileExplanation={onRequestCompileExplanation}
+      onOpenAiCoach={openCompileErrorCoach}
       embedded
       className={cn('min-h-0 flex-1', className)}
       aiPanel={
@@ -122,6 +126,8 @@ export const EditorBottomPanel = memo(function EditorBottomPanel({
           submissionId={submission?.id ?? null}
           getLastRunResult={getLastRunResult}
           getLastSubmission={getLastSubmission}
+          pendingIntent={pendingIntent}
+          onPendingIntentConsumed={() => setPendingIntent(null)}
           className="min-h-0 gap-2"
         />
       }

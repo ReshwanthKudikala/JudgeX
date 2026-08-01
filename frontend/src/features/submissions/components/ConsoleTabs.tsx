@@ -3,9 +3,8 @@ import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { AiExplanation } from '@/features/submissions/components/AiExplanation';
 import { CompileOutput } from '@/features/submissions/components/CompileOutput';
-import type { AiCompileExplanation, Submission } from '@/types/submissions';
+import type { Submission } from '@/types/submissions';
 import { VERDICT_LABELS } from '@/types/submissions';
 import { cn } from '@/utils/cn';
 
@@ -57,10 +56,8 @@ interface ConsoleTabsProps {
   /** True when a prior submission result exists (enables mode chip). */
   hasSubmissionResult?: boolean;
   timeLimitMs?: number | null;
-  aiExplanation: AiCompileExplanation | null;
-  aiAvailable: boolean;
-  aiLoading?: boolean;
-  onRequestCompileExplanation?: () => void;
+  /** Opens AI Coach tab (e.g. Explain Compile Error). */
+  onOpenAiCoach?: () => void;
   aiPanel?: ReactNode;
   embedded?: boolean;
   className?: string;
@@ -83,10 +80,7 @@ export const ConsoleTabs = memo(function ConsoleTabs({
   hasRunResult = false,
   hasSubmissionResult = false,
   timeLimitMs = null,
-  aiExplanation,
-  aiAvailable,
-  aiLoading = false,
-  onRequestCompileExplanation,
+  onOpenAiCoach,
   aiPanel,
   embedded = false,
   className,
@@ -98,6 +92,11 @@ export const ConsoleTabs = memo(function ConsoleTabs({
       setTab('workspace');
     }
   }, [mode, submission?.id, submission?.status, submission?.verdict, runResult?.pending]);
+
+  const openAiCoach = () => {
+    setTab('ai');
+    onOpenAiCoach?.();
+  };
 
   const workspaceLabel = mode === 'submit' ? 'Result' : 'Console';
 
@@ -124,7 +123,7 @@ export const ConsoleTabs = memo(function ConsoleTabs({
             </TabsTrigger>
             {aiPanel ? (
               <TabsTrigger value="ai" className={tabTriggerClass}>
-                AI
+                AI Coach
               </TabsTrigger>
             ) : null}
           </TabsList>
@@ -151,16 +150,17 @@ export const ConsoleTabs = memo(function ConsoleTabs({
               <SubmissionWorkspace
                 submission={submission}
                 timeLimitMs={timeLimitMs}
-                aiExplanation={aiExplanation}
-                aiAvailable={aiAvailable}
-                aiLoading={aiLoading}
-                onRequestCompileExplanation={onRequestCompileExplanation}
+                onOpenAiCoach={aiPanel ? openAiCoach : undefined}
               />
             ) : null}
           </TabsContent>
 
           {aiPanel ? (
-            <TabsContent value="ai" className="mt-0 h-full p-2">
+            <TabsContent
+              value="ai"
+              forceMount
+              className="mt-0 h-full p-2 data-[state=inactive]:hidden"
+            >
               {aiPanel}
             </TabsContent>
           ) : null}
@@ -379,17 +379,11 @@ function SampleCaseCard({ caseResult }: { caseResult: RunCaseResult }) {
 function SubmissionWorkspace({
   submission,
   timeLimitMs,
-  aiExplanation,
-  aiAvailable,
-  aiLoading,
-  onRequestCompileExplanation,
+  onOpenAiCoach,
 }: {
   submission: Submission | null;
   timeLimitMs?: number | null;
-  aiExplanation: AiCompileExplanation | null;
-  aiAvailable: boolean;
-  aiLoading: boolean;
-  onRequestCompileExplanation?: () => void;
+  onOpenAiCoach?: () => void;
 }) {
   if (!submission) {
     return (
@@ -460,12 +454,21 @@ function SubmissionWorkspace({
             <CompileOutput output={submission.compileOutput} />
           </Field>
         ) : null}
-        <CompileExplainSection
-          aiExplanation={aiExplanation}
-          aiAvailable={aiAvailable}
-          aiLoading={aiLoading}
-          onRequestCompileExplanation={onRequestCompileExplanation}
-        />
+        {onOpenAiCoach ? (
+          <div className="space-y-2 border-t border-border/40 pt-2">
+            <p className="text-[11px] text-muted">
+              Need help with this compile error?
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={onOpenAiCoach}
+            >
+              Explain Compile Error
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -525,44 +528,6 @@ function SubmissionWorkspace({
             : null,
       ])}
     />
-  );
-}
-
-function CompileExplainSection({
-  aiExplanation,
-  aiAvailable,
-  aiLoading,
-  onRequestCompileExplanation,
-}: {
-  aiExplanation: AiCompileExplanation | null;
-  aiAvailable: boolean;
-  aiLoading: boolean;
-  onRequestCompileExplanation?: () => void;
-}) {
-  if (aiAvailable || aiLoading) {
-    return (
-      <AiExplanation
-        explanation={aiExplanation}
-        loading={aiLoading}
-        unavailable={!aiAvailable && !aiLoading}
-      />
-    );
-  }
-
-  if (!onRequestCompileExplanation) return null;
-
-  return (
-    <div className="space-y-2 border-t border-border/40 pt-2">
-      <p className="text-[11px] text-muted">Need help with this compile error?</p>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        onClick={() => onRequestCompileExplanation()}
-      >
-        Explain compile error
-      </Button>
-    </div>
   );
 }
 

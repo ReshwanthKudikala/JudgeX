@@ -53,6 +53,11 @@ function mapCoachMarkdownAnswer(raw, opts = {}) {
     return mapOptimizeMarkdownAnswer(raw, opts);
   }
 
+  if (opts.action === COACH_ACTIONS.COMPILE_ERROR) {
+    const { mapCompileErrorMarkdownAnswer } = require('./compile-error-coach');
+    return mapCompileErrorMarkdownAnswer(raw, opts);
+  }
+
   let text = typeof raw === 'string' ? raw.trim() : '';
 
   // Strip a single outer markdown fence if the model wrapped the whole reply.

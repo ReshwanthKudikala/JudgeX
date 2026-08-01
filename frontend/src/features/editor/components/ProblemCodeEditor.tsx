@@ -81,10 +81,6 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
     pollTimedOut,
     submitError,
     pollError,
-    aiExplanation,
-    aiAvailable,
-    aiLoading,
-    requestCompileExplanation,
   } = useSubmission();
 
   const { run, isRunning } = useRunCode();
@@ -284,10 +280,6 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
         hasSubmissionResult={hasSubmissionResult || workspaceMode === 'submit'}
         submission={submission}
         timeLimitMs={timeLimitMs}
-        aiExplanation={aiExplanation}
-        aiAvailable={aiAvailable}
-        aiLoading={aiLoading}
-        onRequestCompileExplanation={requestCompileExplanation}
       />
     </div>
   );

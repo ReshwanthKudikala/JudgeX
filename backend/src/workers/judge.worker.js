@@ -21,7 +21,6 @@ const {
 const { submissionService } = require('../modules/submissions/submissions.service');
 const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
 const { executeCodeRun } = require('../modules/code/code.service');
-const { aiService } = require('../modules/ai/ai.service');
 const { NotFoundError, ValidationError } = require('../shared/errors/http-errors');
 const { metrics } = require('../shared/observability/metrics');
 const {
@@ -161,22 +160,6 @@ async function processSubmissionJob(job) {
 
   try {
     const outcome = await runJudgePipeline(submissionId);
-
-    if (outcome.verdict === 'compile_error') {
-      try {
-        const judged = await submissionService.getSubmissionById(submissionId);
-        await aiService.tryExplainAfterCompileError({
-          submissionId,
-          userId: judged.userId,
-          language: judged.language,
-          compileOutput: judged.compileOutput,
-        });
-      } catch (err) {
-        jobLog.warn('Post-judge AI explanation hook failed; ignoring', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
 
     const durationSeconds = (Date.now() - started) / 1000;
     metrics.recordJudgeDuration(outcome.verdict, durationSeconds);

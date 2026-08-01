@@ -114,5 +114,15 @@ export interface AiConversationMessage {
   spaceComplexity?: string | null;
   hintLevel?: number | null;
   wasBlocked?: boolean;
+  /** Coach action that produced this turn (assistant) or was requested (user). */
+  action?: CoachAction | null;
   createdAt: string;
+}
+
+/** Last successful / attempted coach request — used for Regenerate. */
+export interface CoachLastRequest {
+  action: CoachAction;
+  message: string;
+  label: string;
+  hintLevel?: 1 | 2 | 3;
 }

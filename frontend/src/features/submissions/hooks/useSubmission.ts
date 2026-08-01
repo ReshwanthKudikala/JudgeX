@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { explainCompileError } from '@/api/ai.api';
 import { createSubmission, getSubmissionById } from '@/api/submissions.api';
 import type { EditorLanguage } from '@/features/editor/types';
 import {
   isTerminalSubmission,
-  type AiCompileExplanation,
   type CreateSubmissionInput,
 } from '@/types/submissions';
 import { ApiError } from '@/types';
@@ -84,20 +82,6 @@ export function useSubmission() {
   const isTerminal = submission ? isTerminalSubmission(submission) : false;
   const isPolling = Boolean(submissionId) && !isTerminal && !pollTimedOut;
 
-  const aiQuery = useQuery({
-    queryKey: ['ai-explain', submissionId],
-    queryFn: () => explainCompileError(submissionId as string),
-    // Sprint 29: never auto-request AI — wait for an explicit user action.
-    enabled: false,
-    retry: false,
-    staleTime: Infinity,
-  });
-
-  const requestCompileExplanation = useCallback(() => {
-    if (!submissionId || submission?.verdict !== 'compile_error') return;
-    void aiQuery.refetch();
-  }, [submissionId, submission?.verdict, aiQuery]);
-
   const submit = useCallback(async (input: SubmitCodeInput) => {
     setPollTimedOut(false);
     pollStartedAtRef.current = null;
@@ -116,12 +100,6 @@ export function useSubmission() {
     createMutation.reset();
   }, [createMutation]);
 
-  const aiExplanation: AiCompileExplanation | null = aiQuery.data ?? null;
-  const aiAvailable =
-    submission?.verdict === 'compile_error' &&
-    Boolean(aiExplanation) &&
-    !aiQuery.isError;
-
   return {
     submit,
     reset,
@@ -133,11 +111,6 @@ export function useSubmission() {
     pollTimedOut,
     submitError: createMutation.error,
     pollError: submissionQuery.error,
-    aiExplanation,
-    aiAvailable,
-    aiLoading: aiQuery.isFetching,
-    aiError: aiQuery.error,
-    requestCompileExplanation,
   };
 }
 

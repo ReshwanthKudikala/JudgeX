@@ -56,6 +56,7 @@ export const MarkdownBody = memo(function MarkdownBody({
         '[&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-editor [&_pre]:p-4 [&_pre]:shadow-card',
         '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-6',
         '[&_hr]:my-6 [&_hr]:border-border',
+        '[&_strong]:font-semibold [&_strong]:text-foreground',
         className,
       )}
     >
