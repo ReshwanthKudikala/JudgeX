@@ -6,11 +6,11 @@
 > **Status:** Draft v1.0
 > **Base URL:** `https://api.judgex.app`
 > **Base Path:** `/api/v1`
-> **Last Updated:** 2026-07-08
+> **Last Updated:** 2026-08-01
 
 > **Scope of this document:** the API *contract* only. It contains **no implementation code, no Express routes, no controllers, no SQL, and no database models**. Request/response bodies are illustrative JSON shapes describing the contract, not code.
 
-> **Consistency note:** every endpoint here maps to a module in `BACKEND_STRUCTURE.md` §5, respects the data model in `DATABASE_DESIGN.md`, and honors the flows/invariants in `ARCHITECTURE.md` (persist-before-enqueue, hidden-test protection, guarded AI). MVP scope follows `PRD.md`: languages **Python & C++**, AI = **compile-error explanation only**, leaderboard **in MVP**.
+> **Consistency note:** every endpoint here maps to a module in `BACKEND_STRUCTURE.md` §5, respects the data model in `DATABASE_DESIGN.md`, and honors the flows/invariants in `ARCHITECTURE.md` (persist-before-enqueue, hidden-test protection, AI Coach). MVP scope follows `PRD.md`: languages **Python & C++**, AI = **unified AI Coach** (`POST /ai/coach`), leaderboard **in MVP**.
 
 ---
 
@@ -22,7 +22,7 @@
 4. [Submission APIs](#4-submission-apis)
 5. [Leaderboard APIs](#5-leaderboard-apis)
 6. [Admin APIs](#6-admin-apis)
-7. [AI APIs (MVP vs Future)](#7-ai-apis-mvp-vs-future)
+7. [AI Coach APIs](#7-ai-coach-apis)
 8. [Common Response Format](#8-common-response-format)
 9. [Error Codes](#9-error-codes)
 10. [Pagination, Sorting, Filtering, Searching](#10-pagination-sorting-filtering-searching)
@@ -274,7 +274,7 @@ Base: `/api/v1`. Backed by the **Submission Module** (`BACKEND_STRUCTURE.md` §5
   }, "error": null, "meta": {...} }
 ```
 - **Status codes:** `200`, `401`, `403` (not owner), `404`, `500`.
-- **Note:** `compileOutput` is populated only for `compile_error` verdicts (feeds the AI explanation, §7).
+- **Note:** `compileOutput` is populated only for `compile_error` verdicts (clients may pass it to AI Coach via `lastSubmission`, §7).
 
 ---
 
@@ -364,37 +364,162 @@ Base: `/admin/tags`.
 
 ---
 
-## 7. AI APIs (MVP vs Future)
+## 7. AI Coach APIs
 
-Base: `/api/v1/ai`. Backed by the **AI Module** (`BACKEND_STRUCTURE.md` §5.7). All AI runs through a single **`AIService`** using a **provider pattern** — **Ollama (local, free, no API key) is the default provider; OpenAI is optional and selected via the `AI_PROVIDER` configuration** (`ARCHITECTURE.md` §9.1). The provider choice is a server-side concern and is **not exposed in the API contract** — request/response shapes are identical regardless of provider, so JudgeX runs and demos with no paid services. **Hard guardrail: never returns a full solution** (three-layer guardrails, `ARCHITECTURE.md` §9). All require auth, are rate-limited (§11), and are a **non-critical path** (failure never affects judging). All AI endpoints can return `503 AI_UNAVAILABLE` if the active provider is down.
+Base: `/api/v1/ai`. Backed by the **AI Module** (`BACKEND_STRUCTURE.md` §5.7). JudgeX exposes a **single AI Coach endpoint**. Coaching is handled **independently of the judge execution pipeline** (no queue/sandbox involvement) and **never replaces the judge verdict**.
 
-### 7.1 Compilation Error Explanation — `POST /ai/explain-compile-error` — Auth: Yes `[MVP]`
-- **Purpose:** explain a submission's compiler error in natural language (no solution). Only valid when the submission's verdict is `compile_error`.
-- **Request body:** `{ "submissionId": "uuid" }`
-- **Response body (200):**
+**Provider architecture:** the Coach uses a **provider abstraction**. **Ollama is the default**; **OpenAI is optional** (selected via server-side `AI_PROVIDER` configuration). The active provider is **not a client concern** — request/response shapes are identical regardless of backend, so demos can run without paid services.
+
+**Security:**
+- **Hidden test cases are never included in prompts.**
+- Only **public problem information**, **user code**, and **relevant public execution context** (`lastRunResult` / `lastSubmission` after sanitization) are sent to the provider.
+- AI Coach is a **non-critical path**: provider failure never affects judging, submissions, or verdicts.
+- Auth required; rate-limited (§11). Provider down/timeout → `503 AI_UNAVAILABLE`.
+
+### 7.1 AI Coach — `POST /ai/coach` — Auth: Yes
+
+- **Endpoint:** `POST /api/v1/ai/coach`
+- **Method:** `POST`
+- **Authentication:** required (`Authorization: Bearer <JWT>`)
+- **Purpose:** context-aware coaching for the problem workspace (explain, review, hints, debug public failures, optimize, complexity, compile errors).
+
+#### Supported actions
+
+| `action` value | Product name | Notes |
+|----------------|--------------|--------|
+| `EXPLAIN_CODE` | Explain My Code | Requires non-empty `code` |
+| `REVIEW` | Review My Solution | Requires non-empty `code` |
+| `HINT` | Progressive Hints | `hintLevel` ∈ `{1,2,3}` required |
+| `WRONG_ANSWER` | Wrong Answer Debugger | Requires non-empty `code` and a **public** failing case in `lastRunResult` |
+| `OPTIMIZE` | Optimize My Solution | Requires non-empty `code` |
+| `COMPLEXITY` | Complexity Analysis | Time/space complexity coaching |
+| `COMPILE_ERROR` | Compile Error Coach | Uses public compile/stderr context from run/submission signals |
+
+Unrecognized action strings are normalized server-side (including legacy aliases such as `generate_hint` → `HINT`); unknown values resolve to a generic coach path and do not invent new product actions.
+
+#### Request body
+
 ```json
-{ "success": true, "data": {
-    "submissionId": "uuid",
-    "explanation": "The compiler reports a missing semicolon before line 12 …",
-    "wasBlocked": false
-  }, "error": null, "meta": {...} }
+{
+  "problemId": "uuid",
+  "language": "cpp",
+  "code": "#include <bits/stdc++.h>\n…",
+  "action": "EXPLAIN_CODE",
+  "message": "Explain my current code in the context of this problem.",
+  "hintLevel": null,
+  "lastRunResult": {
+    "status": "completed",
+    "compileSuccess": true,
+    "stderr": null,
+    "results": [
+      {
+        "index": 0,
+        "status": "wrong_answer",
+        "passed": false,
+        "input": "2 7 11 15\n9",
+        "expectedOutput": "0 1",
+        "actualOutput": "1 0",
+        "stderr": null,
+        "runtimeMs": 12
+      }
+    ],
+    "passedCount": 0,
+    "totalCount": 1
+  },
+  "lastSubmission": {
+    "id": "uuid",
+    "status": "completed",
+    "verdict": "wrong_answer",
+    "compileOutput": null,
+    "stderr": null,
+    "runtimeMs": 40,
+    "memoryKb": 15000,
+    "passedTests": 3,
+    "totalTests": 10,
+    "failedTestIndex": 7
+  }
+}
 ```
-- **Status codes:** `200`, `400`, `401`, `403` (not owner), `404`, `409` (`NOT_A_COMPILE_ERROR` — verdict isn't CE), `429`, `503`, `500`.
-- **Possible errors:** `NOT_A_COMPILE_ERROR`, `AI_UNAVAILABLE`, `AI_OUTPUT_BLOCKED` (guardrail redaction), `RATE_LIMITED`.
 
-### 7.2 Bug Detection — `POST /ai/detect-bugs` — Auth: Yes `[Future]`
-- **Purpose:** point at likely faulty region in the user's own code (never rewrite it). `PRD` Future / advanced AI.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `problemId` | Yes | Problem UUID |
+| `language` | Yes | `python` \| `cpp` |
+| `code` | No (default `""`) | Editor source; required for several actions (see table) |
+| `action` | Yes | One of the supported action values above |
+| `message` | No | Optional user/follow-up message |
+| `hintLevel` | For `HINT` | Integer `1`–`3` |
+| `lastRunResult` | No | Latest **public** run-code result (samples only) |
+| `lastSubmission` | No | Latest submission **metadata** (verdict, compile output, failed index — not hidden I/O) |
 
-### 7.3 Complexity Analysis — `POST /ai/analyze-complexity` — Auth: Yes `[Future]`
-- **Purpose:** describe time/space complexity of the user's approach.
+#### Response body (200)
 
-### 7.4 Optimization Suggestions — `POST /ai/suggest-optimizations` — Auth: Yes `[Future]`
-- **Purpose:** suggest optimization *directions*, not implementations.
+```json
+{
+  "success": true,
+  "data": {
+    "answer": "# Overview\n\nYour solution iterates …",
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b",
+    "tokensUsed": null,
+    "durationMs": 8120,
+    "format": "markdown",
+    "hintLevel": null
+  },
+  "error": null,
+  "meta": { "correlationId": "c-ai-1" }
+}
+```
 
-### 7.5 Hint Generation — `POST /ai/generate-hint` — Auth: Yes `[Future]`
-- **Purpose:** progressive hints toward the approach; never the solution.
+| Field | Description |
+|-------|-------------|
+| `answer` | Markdown coaching reply |
+| `provider` | Active provider id (e.g. `ollama`, `openai`) |
+| `model` | Model name used for the completion |
+| `tokensUsed` | Token usage when the provider reports it; otherwise `null` |
+| `durationMs` | Server-side coaching latency |
+| `format` | Currently `markdown` |
+| `hintLevel` | Echoed hint level for `HINT`; otherwise `null` |
 
-> **MVP vs Future:** Only **7.1 (Compilation Error Explanation)** is MVP. 7.2–7.5 are **Future/Advanced**, added behind the same AI provider port + guardrails and gated by feature flags (`BACKEND_STRUCTURE.md` §7.4, §15). All share the `wasBlocked`/guardrail contract and the 0%-leakage requirement (`PRD` §7.3).
+#### Error responses
+
+| HTTP | `error.code` | When |
+|------|--------------|------|
+| `400` | `VALIDATION_ERROR` | Invalid body, empty code when required, missing/invalid `hintLevel`, or `WRONG_ANSWER` without a public failing sample |
+| `401` | `UNAUTHENTICATED` | Missing/invalid JWT (`TOKEN_EXPIRED` when expired) |
+| `404` | `NOT_FOUND` | `problemId` does not exist |
+| `429` | `RATE_LIMITED` | AI rate limit exceeded (`Retry-After`) |
+| `503` | `AI_UNAVAILABLE` | Provider down, unreachable, or timed out |
+| `500` | `INTERNAL_ERROR` | Unexpected server error |
+
+Example failure (`400`):
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.",
+    "details": { "field": "code", "action": "EXPLAIN_CODE" }
+  },
+  "meta": { "correlationId": "c-ai-2" }
+}
+```
+
+Example failure (`503`):
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "AI_UNAVAILABLE",
+    "message": "The local AI model is unavailable right now. Check that Ollama is running, then try again."
+  },
+  "meta": { "correlationId": "c-ai-3" }
+}
+```
 
 ---
 
@@ -497,9 +622,8 @@ Stable, machine-readable codes clients switch on. Grouped by domain; HTTP status
 ### 9.5 AI
 | Code | HTTP | Meaning |
 |------|------|---------|
-| `NOT_A_COMPILE_ERROR` | 409 | Explanation requested on non-CE verdict. |
+| `VALIDATION_ERROR` | 400 | Invalid coach request (action/code/hintLevel/public-failure rules). |
 | `AI_UNAVAILABLE` | 503 | Active AI provider (default Ollama, or optional OpenAI) down/timeout (non-critical path). |
-| `AI_OUTPUT_BLOCKED` | 200/422 | Guardrail redacted a would-be solution leak. |
 
 ---
 
@@ -668,6 +792,36 @@ GET /api/v1/leaderboard?page=1&limit=3
   "error": null, "meta": { "correlationId": "c-9a7", "pagination": { "page": 1, "limit": 3, "total": 5000, "totalPages": 1667 } } }
 ```
 
+### 13.6 AI Coach
+**Request**
+```
+POST /api/v1/ai/coach
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
+
+{
+  "problemId": "uuid",
+  "language": "python",
+  "code": "def twoSum(nums, target):\n    …",
+  "action": "EXPLAIN_CODE",
+  "message": "Explain my current code in the context of this problem."
+}
+```
+**Response `200`**
+```json
+{ "success": true,
+  "data": {
+    "answer": "# Overview\n\nYour function builds a hash map …",
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b",
+    "tokensUsed": null,
+    "durationMs": 7540,
+    "format": "markdown",
+    "hintLevel": null
+  },
+  "error": null, "meta": { "correlationId": "c-9a8" } }
+```
+
 ---
 
 ## 14. Interview Questions
@@ -707,8 +861,8 @@ GET /api/v1/leaderboard?page=1&limit=3
 11. **How do you handle a dependency outage (Redis/AI) at the API layer?**
     Graceful, explicit degradation: Submit returns `503 JUDGING_UNAVAILABLE` if it can't enqueue; AI returns `503 AI_UNAVAILABLE` (non-critical path). Reads still work from Postgres/cache. No false success.
 
-12. **Why is the AI explanation gated to compile-error submissions?**
-    Product + safety: MVP AI only explains compiler errors, and only for the user's own CE submission. Requesting it otherwise returns `409 NOT_A_COMPILE_ERROR`. Guardrails ensure no solution leakage (`AI_OUTPUT_BLOCKED`).
+12. **How does AI Coach stay safe relative to hidden tests and judging?**
+    Coach requests are independent of the judge pipeline and never change verdicts. Prompts include only public problem data, user code, and sanitized public run/submission context — hidden testcase I/O is never sent to the provider. Provider outages return `503 AI_UNAVAILABLE` without affecting submissions.
 
 13. **How do pagination/sorting/filtering avoid becoming a performance or injection risk?**
     Whitelisted sortable/filterable fields mapped to real indexes (`DATABASE_DESIGN.md` §6), capped `limit`, and validated enums. No arbitrary field sorting; no raw client input reaches queries unchecked.
@@ -799,13 +953,9 @@ OpenAPI-style summary of **every** endpoint: method, path, authentication requir
 | 35 | DELETE | `/api/v1/admin/tags/{id}` | Admin | MVP | Delete a tag (cascades associations). |
 | 36 | GET | `/api/v1/admin/stats` | Admin | Future | Platform stats & verdict distribution. |
 | **AI** |
-| 37 | POST | `/api/v1/ai/explain-compile-error` | User | MVP | Explain compiler error (guarded, no solution). |
-| 38 | POST | `/api/v1/ai/detect-bugs` | User | Future | Identify likely bug region (own code). |
-| 39 | POST | `/api/v1/ai/analyze-complexity` | User | Future | Analyze time/space complexity. |
-| 40 | POST | `/api/v1/ai/suggest-optimizations` | User | Future | Suggest optimization directions. |
-| 41 | POST | `/api/v1/ai/generate-hint` | User | Future | Progressive hint (never the solution). |
+| 37 | POST | `/api/v1/ai/coach` | User | MVP | Unified AI Coach (explain, review, hints, WA debug, optimize, complexity, compile-error). |
 | **System** |
-| 42 | GET | `/api/v1/health` | None | MVP | Liveness/health of API + dependencies. |
+| 38 | GET | `/api/v1/health` | None | MVP | Liveness/health of API + dependencies. |
 
 *Auth legend:* **None** = public; **Optional** = works unauthenticated, enriched if authenticated; **User** = valid JWT; **User (owner)** = JWT + resource ownership; **Admin** = JWT + admin role.
 

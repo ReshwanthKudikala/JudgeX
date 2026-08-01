@@ -209,6 +209,52 @@ flowchart TB
 
 ---
 
+## AI Coach Architecture
+
+AI Coach requests are handled **independently** from the judge execution pipeline (no BullMQ, Docker, or sandbox involvement). Hidden test cases are never included in prompts — only public problem data, user code, and relevant public execution context are sent to the provider. A provider factory selects Ollama (default) or OpenAI so coach logic stays unchanged when swapping backends.
+
+```mermaid
+flowchart TD
+  U[User]
+  FE[React Frontend]
+  EP["POST /api/v1/ai/coach"]
+  CC[Coach Controller]
+  CS[Coach Service]
+  SAN[Context Sanitizer]
+  PB[Prompt Builder]
+  PF[Provider Factory]
+  PRV["Ollama (default) / OpenAI"]
+  RES[AI Coach Response]
+
+  U --> FE --> EP --> CC --> CS --> SAN --> PB --> PF --> PRV --> RES
+```
+
+**ASCII overview**
+
+```
+User
+  ↓
+React Frontend
+  ↓
+POST /api/v1/ai/coach
+  ↓
+Coach Controller
+  ↓
+Coach Service
+  ↓
+Context Sanitizer
+  ↓
+Prompt Builder
+  ↓
+Provider Factory
+  ↓
+Ollama (default) / OpenAI
+  ↓
+AI Coach Response
+```
+
+---
+
 ## Judge Pipeline
 
 ### Run Code (public samples only)
