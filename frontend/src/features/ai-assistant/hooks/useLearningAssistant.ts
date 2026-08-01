@@ -16,6 +16,27 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+const EMPTY_CODE_HINT =
+  'Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.';
+
+function mapCoachError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'AI_UNAVAILABLE' || err.status === 503) {
+      const lower = err.message.toLowerCase();
+      if (lower.includes('timed out') || lower.includes('timeout')) {
+        return 'The AI coach timed out. Please try again in a moment.';
+      }
+      return 'The local AI model is unavailable right now. Check that Ollama is running, then try again.';
+    }
+    if (err.code === 'VALIDATION_ERROR' || err.status === 400) {
+      return err.message || EMPTY_CODE_HINT;
+    }
+    return err.message;
+  }
+  if (err instanceof Error) return err.message;
+  return 'AI request failed.';
+}
+
 export interface UseLearningAssistantOptions {
   problemId: string;
   language: 'python' | 'cpp';
@@ -53,6 +74,26 @@ export function useLearningAssistant({
       message?: string;
       label: string;
     }) => {
+      const code = getSourceCode() || '';
+
+      if (params.action === 'EXPLAIN_CODE' && !code.trim()) {
+        const userMsg: AiConversationMessage = {
+          id: newId(),
+          role: 'user',
+          content: params.label,
+          createdAt: new Date().toISOString(),
+        };
+        const assistantMsg: AiConversationMessage = {
+          id: newId(),
+          role: 'assistant',
+          content: EMPTY_CODE_HINT,
+          wasBlocked: false,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+        return null;
+      }
+
       const userMsg: AiConversationMessage = {
         id: newId(),
         role: 'user',
@@ -65,7 +106,7 @@ export function useLearningAssistant({
         const reply: CoachReply = await mutation.mutateAsync({
           problemId,
           language,
-          code: getSourceCode() || '',
+          code,
           action: params.action,
           message: params.message || params.label,
           lastRunResult: getLastRunResult?.() ?? null,
@@ -83,12 +124,7 @@ export function useLearningAssistant({
         setMessages((prev) => [...prev, assistantMsg]);
         return reply;
       } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : 'AI request failed.';
+        const message = mapCoachError(err);
         setMessages((prev) => [
           ...prev,
           {

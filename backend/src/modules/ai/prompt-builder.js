@@ -22,6 +22,9 @@ const ACTION_PROMPT_FILES = Object.freeze({
   [COACH_ACTIONS.UNKNOWN]: null,
 });
 
+/** Actions that explain code itself — omit run/submit noise from the prompt. */
+const CODE_FOCUSED_ACTIONS = new Set([COACH_ACTIONS.EXPLAIN_CODE]);
+
 /** @type {Map<string, string>} */
 const templateCache = new Map();
 
@@ -46,21 +49,7 @@ function section(title, body) {
 }
 
 /**
- * @typedef {object} CoachPromptContext
- * @property {string|CoachAction} action
- * @property {string} [language]
- * @property {string} [code]
- * @property {string} [message]
- * @property {object|null} [problem]
- * @property {object|null} [lastRunResult]
- * @property {object|null} [lastSubmission]
- * @property {number} [maxCodeChars]
- * @property {number} [maxStatementChars]
- * @property {number} [maxMessageChars]
- */
-
-/**
- * @param {CoachPromptContext} ctx
+ * @param {object} ctx
  * @returns {{ action: string, system: string, user: string, meta: object }}
  */
 function buildCoachPrompt(ctx) {
@@ -68,6 +57,7 @@ function buildCoachPrompt(ctx) {
   const maxCode = ctx.maxCodeChars ?? 100_000;
   const maxStatement = ctx.maxStatementChars ?? 8_000;
   const maxMessage = ctx.maxMessageChars ?? 2_000;
+  const codeFocused = CODE_FOCUSED_ACTIONS.has(action);
 
   const systemParts = [loadTemplate('system.prompt.md')];
   const actionFile = ACTION_PROMPT_FILES[action];
@@ -126,41 +116,47 @@ function buildCoachPrompt(ctx) {
         `\`\`\`${ctx.language || ''}\n${truncate(ctx.code, maxCode)}\n\`\`\``,
       ),
     );
+  } else if (action === COACH_ACTIONS.EXPLAIN_CODE) {
+    userParts.push(section('Current source code', '(empty — no code provided)'));
   }
 
-  if (ctx.lastRunResult) {
-    userParts.push(
-      section(
-        'Latest Run result (public samples only)',
-        JSON.stringify(ctx.lastRunResult, null, 2),
-      ),
-    );
-  }
+  if (!codeFocused) {
+    if (ctx.lastRunResult) {
+      userParts.push(
+        section(
+          'Latest Run result (public samples only)',
+          JSON.stringify(ctx.lastRunResult, null, 2),
+        ),
+      );
+    }
 
-  if (ctx.lastSubmission) {
-    userParts.push(
-      section(
-        'Latest Submit summary (no hidden case I/O)',
-        JSON.stringify(ctx.lastSubmission, null, 2),
-      ),
-    );
-  }
+    if (ctx.lastSubmission) {
+      userParts.push(
+        section(
+          'Latest Submit summary (no hidden case I/O)',
+          JSON.stringify(ctx.lastSubmission, null, 2),
+        ),
+      );
+    }
 
-  const compileBits = [];
-  if (ctx.lastRunResult?.compile?.stderr) {
-    compileBits.push(String(ctx.lastRunResult.compile.stderr));
-  }
-  if (ctx.lastRunResult?.stderr) {
-    compileBits.push(String(ctx.lastRunResult.stderr));
-  }
-  if (ctx.lastSubmission?.compileOutput) {
-    compileBits.push(String(ctx.lastSubmission.compileOutput));
-  }
-  if (ctx.lastSubmission?.executionError) {
-    compileBits.push(String(ctx.lastSubmission.executionError));
-  }
-  if (compileBits.length) {
-    userParts.push(section('Compile / runtime information', truncate(compileBits.join('\n'), 4000)));
+    const compileBits = [];
+    if (ctx.lastRunResult?.compile?.stderr) {
+      compileBits.push(String(ctx.lastRunResult.compile.stderr));
+    }
+    if (ctx.lastRunResult?.stderr) {
+      compileBits.push(String(ctx.lastRunResult.stderr));
+    }
+    if (ctx.lastSubmission?.compileOutput) {
+      compileBits.push(String(ctx.lastSubmission.compileOutput));
+    }
+    if (ctx.lastSubmission?.executionError) {
+      compileBits.push(String(ctx.lastSubmission.executionError));
+    }
+    if (compileBits.length) {
+      userParts.push(
+        section('Compile / runtime information', truncate(compileBits.join('\n'), 4000)),
+      );
+    }
   }
 
   userParts.push(section('Selected action', action));
@@ -172,7 +168,7 @@ function buildCoachPrompt(ctx) {
   userParts.push(
     section(
       'Security note',
-      'Hidden judge tests are not included and must not be invented or discussed as known inputs/outputs.',
+      'Hidden judge tests are not included and must not be invented or discussed as known inputs/outputs. Do not use or mention any editorial.',
     ),
   );
 
@@ -183,9 +179,10 @@ function buildCoachPrompt(ctx) {
     meta: {
       hasProblem: Boolean(problem),
       exampleCount: examples.length,
-      hasRun: Boolean(ctx.lastRunResult),
-      hasSubmission: Boolean(ctx.lastSubmission),
+      hasRun: Boolean(ctx.lastRunResult) && !codeFocused,
+      hasSubmission: Boolean(ctx.lastSubmission) && !codeFocused,
       codeChars: typeof ctx.code === 'string' ? ctx.code.length : 0,
+      codeFocused,
     },
   };
 }
@@ -199,4 +196,5 @@ module.exports = {
   buildCoachPrompt,
   clearPromptTemplateCache,
   ACTION_PROMPT_FILES,
+  CODE_FOCUSED_ACTIONS,
 };

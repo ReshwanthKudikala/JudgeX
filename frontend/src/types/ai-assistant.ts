@@ -41,6 +41,7 @@ export interface CoachReply {
   model: string;
   tokensUsed: number | null;
   durationMs: number;
+  format?: 'markdown';
   action?: CoachAction | string;
 }
 

@@ -1,17 +1,24 @@
 /**
- * AI Learning Coach service (Sprint 41 foundation).
- * Single request / single response — no conversation persistence.
+ * AI Learning Coach service.
+ * Sprint 41 foundation + Sprint 42 Explain My Code reference path.
  */
 
 const { config } = require('../../config');
 const { ValidationError, NotFoundError } = require('../../shared/errors/http-errors');
+const { AIError } = require('../../shared/errors/domain-errors');
 const { resolveTestCase } = require('../../infrastructure/storage/storage.adapter');
 const { problemRepository } = require('../problems/problems.repository');
 const { testCaseService } = require('../problems/testcase.service');
-const { resolveCoachAction } = require('./coach.actions');
+const { COACH_ACTIONS, resolveCoachAction } = require('./coach.actions');
 const { sanitizeCoachContext, sanitizePublicExamples } = require('./context-sanitizer');
 const { buildCoachPrompt } = require('./prompt-builder');
 const { getCoachProvider } = require('./providers/provider.factory');
+const {
+  EMPTY_CODE_MESSAGE,
+  isCoachCodeEmpty,
+  mapCoachMarkdownAnswer,
+  mapCoachProviderError,
+} = require('./explain-code');
 
 class CoachService {
   /**
@@ -37,6 +44,14 @@ class CoachService {
     const sanitized = sanitizeCoachContext(body);
     const action = resolveCoachAction(sanitized.action);
 
+    // Explain My Code (and future code-first actions): validate before provider.
+    if (action === COACH_ACTIONS.EXPLAIN_CODE && isCoachCodeEmpty(sanitized.code)) {
+      throw new ValidationError(EMPTY_CODE_MESSAGE, {
+        field: 'code',
+        action: COACH_ACTIONS.EXPLAIN_CODE,
+      });
+    }
+
     const problem = await this.#loadPublicProblem(sanitized.problemId);
     const built = buildCoachPrompt({
       action,
@@ -52,19 +67,32 @@ class CoachService {
     });
 
     const provider = this.provider || getCoachProvider();
-    const completion = await provider.complete({
-      system: built.system,
-      user: built.user,
-      timeoutMs: config.ai.timeoutMs,
-    });
+
+    let completion;
+    try {
+      completion = await provider.complete({
+        system: built.system,
+        user: built.user,
+        timeoutMs: config.ai.timeoutMs,
+      });
+    } catch (err) {
+      const mapped = mapCoachProviderError(err);
+      if (mapped) {
+        throw new AIError(mapped.message, { code: mapped.code });
+      }
+      throw err;
+    }
+
+    const mapped = mapCoachMarkdownAnswer(completion.text, { action: built.action });
 
     return {
-      answer: completion.text,
+      answer: mapped.answer,
       provider: completion.provider || provider.id,
       model: completion.model || provider.model || config.ai.ollama.model,
       tokensUsed:
         typeof completion.tokensUsed === 'number' ? completion.tokensUsed : null,
       durationMs: Date.now() - started,
+      format: mapped.format,
     };
   }
 

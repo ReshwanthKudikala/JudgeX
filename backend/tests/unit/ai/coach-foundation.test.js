@@ -267,14 +267,17 @@ describe('CoachService foundation', () => {
       'user-1',
     );
 
-    assert.equal(result.answer, 'Your code prints a constant.');
+    assert.match(result.answer, /Your code prints a constant/);
+    assert.match(result.answer, /^# Overview/m);
     assert.equal(result.provider, 'mock');
     assert.equal(result.model, 'mock-model');
     assert.equal(result.tokensUsed, 42);
     assert.equal(typeof result.durationMs, 'number');
-    assert.match(seenSystem, /EXPLAIN_CODE|Explain what the learner/i);
+    assert.equal(result.format, 'markdown');
+    assert.match(seenSystem, /EXPLAIN_CODE|Explain the learner/i);
     assert.match(seenUser, /Two Sum/);
     assert.doesNotMatch(seenUser, /secret/);
+    assert.doesNotMatch(seenUser, /Latest Run result/);
   });
 
   it('handles UNKNOWN action via prompt builder', async () => {

@@ -1,4 +1,5 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { MarkdownRenderer } from '@/features/editorials';
@@ -29,7 +30,7 @@ const QUICK_ACTIONS: Array<{
   needsRunOrSubmission?: boolean;
 }> = [
   {
-    label: 'Explain my code',
+    label: 'Explain My Code',
     action: 'EXPLAIN_CODE',
     message: 'Explain my current code in the context of this problem.',
   },
@@ -77,6 +78,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
 }: LearningAssistantPanelProps) {
   const { toast, error: errorToast } = useToast();
   const [draft, setDraft] = useState('');
+  const transcriptRef = useRef<HTMLDivElement>(null);
   const { messages, clear, ask, isLoading } = useLearningAssistant({
     problemId,
     language,
@@ -85,6 +87,12 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
     getLastRunResult,
     getLastSubmission,
   });
+
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, isLoading]);
 
   const runAction = useCallback(
     async (opts: {
@@ -169,37 +177,50 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-        {messages.length === 0 ? (
+      <div
+        ref={transcriptRef}
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto scroll-smooth"
+      >
+        {messages.length === 0 && !isLoading ? (
           <p className="text-xs text-muted">
-            Context-aware coach: uses this problem, your code, language, and public
-            run/submit results. Hidden judge tests are never sent. Conversation stays
-            in this browser tab only.
+            Start with <span className="text-foreground">Explain My Code</span> to get a
+            structured walkthrough of your solution. Hidden judge tests are never sent.
           </p>
         ) : (
           messages.map((msg) => (
             <div
               key={msg.id}
               className={cn(
-                'rounded px-2 py-1.5 text-xs',
+                'rounded-md px-2.5 py-2 text-xs',
                 msg.role === 'user'
                   ? 'bg-primary/10 text-foreground'
-                  : 'bg-white/[0.03] text-muted-foreground',
+                  : 'border border-border/60 bg-surface text-muted-foreground',
               )}
             >
               <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
                 {msg.role === 'user' ? 'You' : 'Coach'}
               </p>
               {msg.role === 'assistant' ? (
-                <MarkdownRenderer markdown={msg.content} className="text-xs [&_p]:my-1.5" />
+                <MarkdownRenderer
+                  markdown={msg.content}
+                  className="text-xs text-foreground [&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-sm [&_h1]:font-semibold [&_h2]:mb-1.5 [&_h2]:mt-2.5 [&_h2]:text-xs [&_h2]:font-semibold [&_li]:my-0.5 [&_p]:my-1.5 [&_pre]:my-2 [&_table]:my-2"
+                />
               ) : (
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               )}
             </div>
           ))
         )}
+
         {isLoading ? (
-          <p className="text-xs text-muted animate-pulse">Thinking…</p>
+          <div
+            className="flex items-center gap-2 rounded-md border border-border/60 bg-surface px-2.5 py-3 text-xs text-muted"
+            role="status"
+            aria-live="polite"
+          >
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
+            <span>Explaining your code…</span>
+          </div>
         ) : null}
       </div>
 
@@ -216,12 +237,12 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           }}
           placeholder="Ask the coach…"
           disabled={isLoading}
-          className="h-7 flex-1 rounded border border-border/70 bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
+          className="h-7 min-w-0 flex-1 rounded border border-border/70 bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         />
         <Button
           type="button"
           size="sm"
-          className="h-7"
+          className="h-7 shrink-0"
           disabled={isLoading || !draft.trim()}
           onClick={() => void handleAsk()}
         >
