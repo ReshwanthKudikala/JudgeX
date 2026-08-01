@@ -33,6 +33,9 @@ function emptyCodeHint(action: CoachAction): string {
   if (action === 'EXPLAIN_CODE') {
     return 'Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.';
   }
+  if (action === 'OPTIMIZE') {
+    return 'Write some code in the editor first, then click “Optimize My Solution”.';
+  }
   return EMPTY_CODE_HINT;
 }
 
@@ -104,7 +107,9 @@ export function useLearningAssistant({
       const code = getSourceCode() || '';
 
       if (
-        (params.action === 'EXPLAIN_CODE' || params.action === 'REVIEW') &&
+        (params.action === 'EXPLAIN_CODE' ||
+          params.action === 'REVIEW' ||
+          params.action === 'OPTIMIZE') &&
         !code.trim()
       ) {
         const userMsg: AiConversationMessage = {

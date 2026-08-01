@@ -27,7 +27,8 @@ function requiresSourceCode(action) {
   return (
     action === COACH_ACTIONS.EXPLAIN_CODE ||
     action === COACH_ACTIONS.REVIEW ||
-    action === COACH_ACTIONS.WRONG_ANSWER
+    action === COACH_ACTIONS.WRONG_ANSWER ||
+    action === COACH_ACTIONS.OPTIMIZE
   );
 }
 
@@ -39,6 +40,10 @@ function emptyCodeMessageForAction(action) {
   if (action === COACH_ACTIONS.REVIEW) return EMPTY_REVIEW_CODE_MESSAGE;
   if (action === COACH_ACTIONS.WRONG_ANSWER) {
     return 'Write some code in the editor first, then click “Debug Wrong Answer”.';
+  }
+  if (action === COACH_ACTIONS.OPTIMIZE) {
+    const { EMPTY_OPTIMIZE_CODE_MESSAGE } = require('./optimize-coach');
+    return EMPTY_OPTIMIZE_CODE_MESSAGE;
   }
   return 'Write some code in the editor first, then click “Explain My Code” and I will walk through your solution.';
 }

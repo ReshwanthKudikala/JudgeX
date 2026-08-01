@@ -60,9 +60,10 @@ const QUICK_ACTIONS: Array<{
     message: 'Help me understand the compile or interpreter error.',
   },
   {
-    label: 'How can I optimize?',
+    label: 'Optimize My Solution',
     action: 'OPTIMIZE',
-    message: 'How can I optimize this approach?',
+    message:
+      'Optimize my solution: analyze complexity, scalability, and alternatives without rewriting my entire code.',
   },
   {
     label: 'Complexity analysis',
@@ -347,6 +348,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
                 if (last === 'Review My Solution') return 'Reviewing your solution…';
                 if (last === 'Explain My Code') return 'Explaining your code…';
                 if (last === 'Debug Wrong Answer') return 'Debugging Wrong Answer…';
+                if (last === 'Optimize My Solution') return 'Analyzing optimizations…';
                 return 'Thinking…';
               })()}
             </span>

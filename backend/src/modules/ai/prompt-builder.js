@@ -121,7 +121,8 @@ function buildCoachPrompt(ctx) {
     );
   } else if (
     action === COACH_ACTIONS.EXPLAIN_CODE ||
-    action === COACH_ACTIONS.REVIEW
+    action === COACH_ACTIONS.REVIEW ||
+    action === COACH_ACTIONS.OPTIMIZE
   ) {
     userParts.push(section('Current source code', '(empty — no code provided)'));
   }
@@ -144,6 +145,22 @@ function buildCoachPrompt(ctx) {
           section(
             'Public failing test case(s)',
             JSON.stringify(failures, null, 2),
+          ),
+        );
+      }
+    }
+
+    if (action === COACH_ACTIONS.OPTIMIZE) {
+      const { buildOptimizePerfContext } = require('./optimize-coach');
+      const perf = buildOptimizePerfContext({
+        lastRunResult: ctx.lastRunResult,
+        lastSubmission: ctx.lastSubmission,
+      });
+      if (perf) {
+        userParts.push(
+          section(
+            'Observed performance (public summary only)',
+            JSON.stringify(perf, null, 2),
           ),
         );
       }
