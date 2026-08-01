@@ -23,7 +23,7 @@ Securely compile and execute user code in Docker sandboxes with asynchronous wor
 
 ## Project Overview
 
-JudgeX is an online coding judge platform where users browse problems, write solutions in **C++** or **Python**, run code against public samples, submit for full judging, and track progress on a personal dashboard and global leaderboard.
+JudgeX is an online coding judge platform where users browse problems, write solutions in **C++** or **Python**, run code against public samples, submit for full judging, and track progress on a personal dashboard and global leaderboard. It also includes an integrated **AI Coach** powered by local LLMs through Ollama (or optionally OpenAI).
 
 Unlike a simple CRUD demo, JudgeX is engineered around **secure untrusted code execution** and **horizontally scalable judging**:
 
@@ -81,6 +81,13 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 - Personal dashboard: solved counts by difficulty, acceptance rate, recent activity
 - Charts: problems solved by difficulty, accepted vs failed submissions
 
+### Contests
+
+- Public contest listing and detail pages
+- Join / participation while a contest is upcoming or running
+- Problem visibility by lifecycle (hidden before start; participants during running; public when ended)
+- Live scoreboard from contest-window submissions
+
 ### Analytics
 
 - Per-problem live SQL aggregates from submission data
@@ -95,33 +102,26 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 
 - PostgreSQL 17 · Redis 7 · BullMQ · Docker Compose (dev + prod)
 - Nginx edge proxy in production · health checks · stuck-submission reaper worker
-- Optional Ollama or OpenAI for AI features
+- Optional Ollama or OpenAI for AI Coach
 
 ### Testing
 
 - Unit tests · integration tests · end-to-end judge verdict tests
 - GitHub Actions CI (lint, build, tests)
 
-### AI
+### AI Coach
 
-- AI compile-error explanation (Ollama or OpenAI)
-- Learning assistant panel for guided help (feature-flagged)
+- Unified endpoint: `POST /api/v1/ai/coach` (Ollama by default, or OpenAI)
+- Explain My Code · Review My Solution · Progressive Hints · Wrong Answer Debugger · Optimize My Solution · Compile Error Coach
+- Prompt Builder + swappable provider abstraction
+- Context-aware coaching from public problem info, user code, and public run/submission signals only
+- Hidden testcase input/output is never sent to the model
 
 ---
 
 ## Screenshots
 
-> Placeholder paths — add real captures under `docs/screenshots/` when available.
-
-| Screen | Preview |
-|--------|---------|
-| Login | ![Login](docs/screenshots/login.png) |
-| Problem page | ![Problem Page](docs/screenshots/problem.png) |
-| Run code | ![Run Code](docs/screenshots/run-code.png) |
-| Submission history | ![Submission History](docs/screenshots/submissions.png) |
-| Submission detail | ![Submission Detail](docs/screenshots/submission-detail.png) |
-| Dashboard | ![Dashboard](docs/screenshots/dashboard.png) |
-| Leaderboard | ![Leaderboard](docs/screenshots/leaderboard.png) |
+Screenshots will be added under [`docs/screenshots/`](docs/screenshots/) (login, problem workspace, AI Coach, dashboard, contests). Until then, run the stack locally to explore the UI.
 
 ---
 
@@ -359,7 +359,18 @@ npm ci
 npm run dev                   # Vite on :5173
 ```
 
-Open **http://localhost**. API defaults to **http://localhost:4000/api/v1**.
+Open **http://localhost:5173**. API defaults to **http://localhost:4000/api/v1**.
+
+(Production Compose serves the built SPA at **http://localhost** via Nginx.)
+
+### AI Coach Setup
+
+1. Start Ollama (included in `docker compose up -d`, or install locally).
+2. Pull the model: `ollama pull qwen2.5-coder:7b` (or `docker exec -it judgex-ollama ollama pull qwen2.5-coder:7b`).
+3. In `backend/.env` (or `.env.production`): set `AI_PROVIDER=ollama`, `OLLAMA_MODEL=qwen2.5-coder:7b`, and `OLLAMA_BASE_URL` to a reachable Ollama URL.
+4. Raise `AI_TIMEOUT_MS` for local inference if needed (e.g. `120000`).
+
+See [`docker/README.md`](docker/README.md) for container details.
 
 ---
 
@@ -407,9 +418,10 @@ Full guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 | `CORS_ORIGIN` | Allowed frontend origin(s) |
 | `FRONTEND_URL` | Base URL for email verification / reset links |
 | `BCRYPT_SALT_ROUNDS` | Password hashing cost |
-| `AI_PROVIDER` | `ollama` or `openai` |
+| `AI_PROVIDER` | `ollama` (default) or `openai` |
 | `OLLAMA_BASE_URL` | Ollama API base URL |
 | `OLLAMA_MODEL` | Model name (e.g. `qwen2.5-coder:7b`) |
+| `AI_TIMEOUT_MS` | AI provider request timeout (raise for local 7B models, e.g. `120000`) |
 | `OPENAI_API_KEY` | OpenAI key when `AI_PROVIDER=openai` |
 | `OPENAI_MODEL` | OpenAI model (e.g. `gpt-4o-mini`) |
 | `JUDGE_TIME_LIMIT_MS` | Per-run CPU time cap |
@@ -442,7 +454,7 @@ Base path: **`/api/v1`**
 | **Leaderboard** | `/leaderboard` | Global rankings, user rank |
 | **Contests** | `/contests` | Contest listing, participation, scoreboard |
 | **Discussions** | `/discussions`, `/comments` | Threads and replies |
-| **AI** | `/ai` | Compile explanations, learning assistant |
+| **AI** | `/ai` | AI Coach (`POST /ai/coach`) — explain, review, hints, wrong-answer debugging, optimization, compile-error coaching |
 | **Admin** | `/admin` | Dashboard, users, moderation, analytics, queue, audit |
 
 Specification: [`docs/API_SPECIFICATION.md`](docs/API_SPECIFICATION.md).
@@ -496,6 +508,8 @@ CI runs on every push and pull request via [`.github/workflows/ci.yml`](.github/
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment guide |
 | [`docs/BACKEND_STRUCTURE.md`](docs/BACKEND_STRUCTURE.md) | Backend module layout |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Security model |
+| [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) | Health, metrics, logging |
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Performance notes |
 | [`docker/README.md`](docker/README.md) | Local Docker infrastructure |
 
 ---
@@ -517,13 +531,15 @@ CI runs on every push and pull request via [`.github/workflows/ci.yml`](.github/
 - [x] Problem statistics (live SQL)
 - [x] User dashboard with charts
 - [x] Global leaderboard
-- [x] AI compile-error explanation
+- [x] Contests (join, problem visibility, scoreboard)
+- [x] Discussions
+- [x] Editorials
+- [x] AI Coach (Explain, Review, Hints, Wrong Answer Debugger, Optimize, Compile Error)
 - [x] PostgreSQL & Redis
 - [x] Docker Compose dev & prod stacks
 - [x] Health checks
 - [x] Unit, integration, and E2E tests
 - [x] GitHub Actions CI
-
 
 ---
 
@@ -553,7 +569,7 @@ Reshwanth Kudikala
 
 GitHub: https://github.com/ReshwanthKudikala
 
-LinkedIn:https://www.linkedin.com/in/reshwanth-kudikala/
+LinkedIn: https://www.linkedin.com/in/reshwanth-kudikala/
 
 Email: reshwanthkudikala007@gmail.com
 
