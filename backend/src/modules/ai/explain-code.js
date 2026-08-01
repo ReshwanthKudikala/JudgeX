@@ -38,6 +38,11 @@ function mapCoachMarkdownAnswer(raw, opts = {}) {
     return mapReviewMarkdownAnswer(raw, opts);
   }
 
+  if (opts.action === COACH_ACTIONS.HINT) {
+    const { mapHintMarkdownAnswer } = require('./progressive-hint');
+    return mapHintMarkdownAnswer(raw, opts);
+  }
+
   let text = typeof raw === 'string' ? raw.trim() : '';
 
   // Strip a single outer markdown fence if the model wrapped the whole reply.

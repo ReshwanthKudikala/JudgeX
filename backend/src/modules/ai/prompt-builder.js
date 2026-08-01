@@ -22,8 +22,11 @@ const ACTION_PROMPT_FILES = Object.freeze({
   [COACH_ACTIONS.UNKNOWN]: null,
 });
 
-/** Actions that explain code itself — omit run/submit noise from the prompt. */
-const CODE_FOCUSED_ACTIONS = new Set([COACH_ACTIONS.EXPLAIN_CODE]);
+/** Actions that focus on code/problem text — omit run/submit noise. */
+const CODE_FOCUSED_ACTIONS = new Set([
+  COACH_ACTIONS.EXPLAIN_CODE,
+  COACH_ACTIONS.HINT,
+]);
 
 /** @type {Map<string, string>} */
 const templateCache = new Map();
@@ -164,6 +167,17 @@ function buildCoachPrompt(ctx) {
 
   userParts.push(section('Selected action', action));
 
+  if (action === COACH_ACTIONS.HINT && ctx.hintLevel != null) {
+    const { hintLevelGuidance } = require('./progressive-hint');
+    const level = Number(ctx.hintLevel);
+    userParts.push(
+      section(
+        'Hint level',
+        `Level ${level}\n${hintLevelGuidance(level)}`,
+      ),
+    );
+  }
+
   if (ctx.message) {
     userParts.push(section('User question', truncate(ctx.message, maxMessage)));
   }
@@ -186,6 +200,7 @@ function buildCoachPrompt(ctx) {
       hasSubmission: Boolean(ctx.lastSubmission) && !codeFocused,
       codeChars: typeof ctx.code === 'string' ? ctx.code.length : 0,
       codeFocused,
+      hintLevel: action === COACH_ACTIONS.HINT ? Number(ctx.hintLevel) || null : null,
     },
   };
 }

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { MarkdownRenderer } from '@/features/editorials';
@@ -10,6 +10,11 @@ import type {
   CoachLastRunResult,
   CoachLastSubmission,
 } from '@/types/ai-assistant';
+import {
+  canRequestHint,
+  afterSuccessfulHint,
+  showRevealEditorial,
+} from '@/features/ai-assistant/hint-progress';
 import { cn } from '@/utils/cn';
 
 interface LearningAssistantPanelProps {
@@ -60,10 +65,29 @@ const QUICK_ACTIONS: Array<{
     action: 'COMPLEXITY',
     message: 'Analyze the time and space complexity of my code.',
   },
+];
+
+const HINT_LEVELS: Array<{
+  level: 1 | 2 | 3;
+  label: string;
+  message: string;
+}> = [
   {
-    label: 'Give me a hint',
-    action: 'HINT',
-    message: 'Give me a progressive hint without revealing the full solution.',
+    level: 1,
+    label: 'Hint 1',
+    message: 'Give me a subtle Hint 1 — guide my thinking without naming an algorithm.',
+  },
+  {
+    level: 2,
+    label: 'Hint 2',
+    message:
+      'Give me Hint 2 — a more concrete nudge toward a data structure or technique, still without code.',
+  },
+  {
+    level: 3,
+    label: 'Hint 3',
+    message:
+      'Give me Hint 3 — explain the approach clearly in words, but do not generate code.',
   },
 ];
 
@@ -79,7 +103,14 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
   const { toast, error: errorToast } = useToast();
   const [draft, setDraft] = useState('');
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const { messages, clear, ask, isLoading } = useLearningAssistant({
+  const {
+    messages,
+    clear,
+    ask,
+    revealEditorialPrompt,
+    hintUnlockedThrough,
+    isLoading,
+  } = useLearningAssistant({
     problemId,
     language,
     getSourceCode,
@@ -101,6 +132,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
       message: string;
       needsSubmission?: boolean;
       needsRunOrSubmission?: boolean;
+      hintLevel?: 1 | 2 | 3;
     }) => {
       if (opts.needsSubmission && !submissionId) {
         errorToast('No submission yet', 'Submit code first, then ask why it failed.');
@@ -119,6 +151,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           action: opts.action,
           message: opts.message,
           label: opts.label,
+          hintLevel: opts.hintLevel,
         });
       } catch {
         /* message already appended */
@@ -156,6 +189,9 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
     }
   }, [messages, toast, errorToast]);
 
+  const nextHintLevel = (hintUnlockedThrough + 1) as 1 | 2 | 3 | 4;
+  const revealUnlocked = showRevealEditorial(hintUnlockedThrough);
+
   return (
     <div
       className={cn('flex min-h-0 flex-col gap-2', className)}
@@ -178,13 +214,85 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
       </div>
 
       <div
+        className="flex flex-col gap-1 rounded-md border border-border/50 bg-overlay/40 px-2 py-1.5"
+        aria-label="Progressive hints"
+      >
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted">
+          Progressive hints
+        </p>
+        <div className="flex flex-wrap items-center gap-1">
+          {HINT_LEVELS.map((hint, index) => {
+            const unlocked = canRequestHint(hintUnlockedThrough, hint.level);
+            const alreadyDone = hintUnlockedThrough >= hint.level;
+            const isNext = nextHintLevel === hint.level;
+            return (
+              <div key={hint.level} className="flex items-center gap-1">
+                {index > 0 ? (
+                  <ChevronDown
+                    className="h-3 w-3 shrink-0 rotate-[-90deg] text-muted/70"
+                    aria-hidden
+                  />
+                ) : null}
+                <Button
+                  type="button"
+                  variant={isNext ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    'h-6 px-1.5 text-[10px]',
+                    alreadyDone && 'text-primary',
+                  )}
+                  disabled={isLoading || !unlocked || alreadyDone}
+                  title={
+                    !unlocked
+                      ? `Receive Hint ${hint.level - 1} first`
+                      : alreadyDone
+                        ? `Hint ${hint.level} already received`
+                        : `Request Hint ${hint.level}`
+                  }
+                  onClick={() =>
+                    void runAction({
+                      action: 'HINT',
+                      label: hint.label,
+                      message: hint.message,
+                      hintLevel: hint.level,
+                    })
+                  }
+                >
+                  {hint.label}
+                  {alreadyDone ? ' ✓' : null}
+                </Button>
+              </div>
+            );
+          })}
+          {revealUnlocked ? (
+            <>
+              <ChevronDown
+                className="h-3 w-3 shrink-0 rotate-[-90deg] text-muted/70"
+                aria-hidden
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-6 px-1.5 text-[10px]"
+                disabled={isLoading}
+                onClick={revealEditorialPrompt}
+              >
+                Reveal Editorial
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div
         ref={transcriptRef}
         className="min-h-0 flex-1 space-y-2 overflow-y-auto scroll-smooth"
       >
         {messages.length === 0 && !isLoading ? (
           <p className="text-xs text-muted">
-            Start with <span className="text-foreground">Explain My Code</span> to get a
-            structured walkthrough of your solution. Hidden judge tests are never sent.
+            Use progressive hints to discover the approach yourself — never a full
+            solution. Hidden judge tests are never sent.
           </p>
         ) : (
           messages.map((msg) => (
@@ -199,6 +307,7 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
             >
               <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
                 {msg.role === 'user' ? 'You' : 'Coach'}
+                {msg.hintLevel ? ` · hint ${msg.hintLevel}` : ''}
               </p>
               {msg.role === 'assistant' ? (
                 <MarkdownRenderer
@@ -220,13 +329,14 @@ export const LearningAssistantPanel = memo(function LearningAssistantPanel({
           >
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
             <span>
-              {[...messages].reverse().find((m) => m.role === 'user')?.content ===
-              'Review My Solution'
-                ? 'Reviewing your solution…'
-                : [...messages].reverse().find((m) => m.role === 'user')?.content ===
-                    'Explain My Code'
-                  ? 'Explaining your code…'
-                  : 'Thinking…'}
+              {(() => {
+                const last = [...messages].reverse().find((m) => m.role === 'user')
+                  ?.content;
+                if (last?.startsWith('Hint')) return `Preparing ${last}…`;
+                if (last === 'Review My Solution') return 'Reviewing your solution…';
+                if (last === 'Explain My Code') return 'Explaining your code…';
+                return 'Thinking…';
+              })()}
             </span>
           </div>
         ) : null}

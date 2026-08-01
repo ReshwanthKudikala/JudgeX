@@ -1,7 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
 import { askCoach } from '@/api/ai.api';
+import {
+  afterSuccessfulHint,
+  resetHintProgress,
+} from '@/features/ai-assistant/hint-progress';
 import type {
   AiConversationMessage,
   CoachAction,
@@ -18,6 +22,9 @@ function newId() {
 
 const EMPTY_CODE_HINT =
   'Write some code in the editor first, then ask the coach to explain or review it.';
+
+const REVEAL_EDITORIAL_MESSAGE =
+  'Would you like to open the Editorial instead?';
 
 function emptyCodeHint(action: CoachAction): string {
   if (action === 'REVIEW') {
@@ -57,8 +64,7 @@ export interface UseLearningAssistantOptions {
 }
 
 /**
- * Conversation state for the current problem session only (frontend memory).
- * Backend coach is single request / single response — no DB persistence.
+ * Conversation + progressive hint unlock for the current problem session only.
  */
 export function useLearningAssistant({
   problemId,
@@ -68,10 +74,20 @@ export function useLearningAssistant({
   getLastSubmission,
 }: UseLearningAssistantOptions) {
   const [messages, setMessages] = useState<AiConversationMessage[]>([]);
+  /** Highest hint level successfully received (0–3). */
+  const [hintUnlockedThrough, setHintUnlockedThrough] = useState(0);
 
   const mutation = useMutation({
     mutationFn: (input: CoachRequest) => askCoach(input),
   });
+
+  // Reset session state when the problem changes.
+  useEffect(() => {
+    setMessages([]);
+    setHintUnlockedThrough(resetHintProgress());
+    mutation.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on problem change
+  }, [problemId]);
 
   const clear = useCallback(() => {
     setMessages([]);
@@ -83,6 +99,7 @@ export function useLearningAssistant({
       action: CoachAction;
       message?: string;
       label: string;
+      hintLevel?: 1 | 2 | 3;
     }) => {
       const code = getSourceCode() || '';
 
@@ -122,6 +139,7 @@ export function useLearningAssistant({
           code,
           action: params.action,
           message: params.message || params.label,
+          hintLevel: params.hintLevel ?? null,
           lastRunResult: getLastRunResult?.() ?? null,
           lastSubmission: getLastSubmission?.() ?? null,
         });
@@ -131,10 +149,18 @@ export function useLearningAssistant({
           role: 'assistant',
           content: reply.answer,
           summary: undefined,
+          hintLevel: reply.hintLevel ?? params.hintLevel ?? null,
           wasBlocked: false,
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
+
+        if (params.action === 'HINT' && params.hintLevel) {
+          setHintUnlockedThrough((prev) =>
+            afterSuccessfulHint(prev, params.hintLevel!),
+          );
+        }
+
         return reply;
       } catch (err) {
         const message = mapCoachError(err);
@@ -154,11 +180,32 @@ export function useLearningAssistant({
     [mutation, problemId, language, getSourceCode, getLastRunResult, getLastSubmission],
   );
 
+  const revealEditorialPrompt = useCallback(() => {
+    const userMsg: AiConversationMessage = {
+      id: newId(),
+      role: 'user',
+      content: 'Reveal Editorial',
+      createdAt: new Date().toISOString(),
+    };
+    const assistantMsg: AiConversationMessage = {
+      id: newId(),
+      role: 'assistant',
+      content: REVEAL_EDITORIAL_MESSAGE,
+      wasBlocked: false,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+  }, []);
+
   return {
     messages,
     clear,
     ask,
+    revealEditorialPrompt,
+    hintUnlockedThrough,
     isLoading: mutation.isPending,
     error: mutation.error,
   };
 }
+
+export { REVEAL_EDITORIAL_MESSAGE };

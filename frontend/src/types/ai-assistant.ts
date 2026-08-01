@@ -42,6 +42,7 @@ export interface CoachReply {
   tokensUsed: number | null;
   durationMs: number;
   format?: 'markdown';
+  hintLevel?: number | null;
   action?: CoachAction | string;
 }
 
@@ -88,6 +89,7 @@ export interface CoachRequest {
   code: string;
   action: CoachAction | string;
   message?: string;
+  hintLevel?: 1 | 2 | 3 | null;
   lastRunResult?: CoachLastRunResult | null;
   lastSubmission?: CoachLastSubmission | null;
 }

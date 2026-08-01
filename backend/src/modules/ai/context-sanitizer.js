@@ -186,6 +186,10 @@ function sanitizeCoachContext(input) {
     code: typeof src.code === 'string' ? src.code : '',
     action: typeof src.action === 'string' ? src.action : 'UNKNOWN',
     message: typeof src.message === 'string' ? src.message : '',
+    hintLevel:
+      src.hintLevel == null || src.hintLevel === ''
+        ? null
+        : Number(src.hintLevel),
     lastRunResult,
     lastSubmission,
   };

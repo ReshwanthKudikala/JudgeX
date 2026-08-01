@@ -1,6 +1,6 @@
 /**
  * AI Learning Coach service.
- * Sprint 41 foundation + Sprint 42 Explain My Code reference path.
+ * Sprint 41–44: foundation, explain, review, progressive hints.
  */
 
 const { config } = require('../../config');
@@ -9,7 +9,7 @@ const { AIError } = require('../../shared/errors/domain-errors');
 const { resolveTestCase } = require('../../infrastructure/storage/storage.adapter');
 const { problemRepository } = require('../problems/problems.repository');
 const { testCaseService } = require('../problems/testcase.service');
-const { resolveCoachAction } = require('./coach.actions');
+const { COACH_ACTIONS, resolveCoachAction } = require('./coach.actions');
 const { sanitizeCoachContext, sanitizePublicExamples } = require('./context-sanitizer');
 const { buildCoachPrompt } = require('./prompt-builder');
 const { getCoachProvider } = require('./providers/provider.factory');
@@ -22,6 +22,7 @@ const {
   requiresSourceCode,
   emptyCodeMessageForAction,
 } = require('./review-solution');
+const { parseHintLevel } = require('./progressive-hint');
 
 class CoachService {
   /**
@@ -47,12 +48,27 @@ class CoachService {
     const sanitized = sanitizeCoachContext(body);
     const action = resolveCoachAction(sanitized.action);
 
-    // Code-first actions: validate before contacting the provider.
     if (requiresSourceCode(action) && isCoachCodeEmpty(sanitized.code)) {
       throw new ValidationError(emptyCodeMessageForAction(action), {
         field: 'code',
         action,
       });
+    }
+
+    let hintLevel = null;
+    if (action === COACH_ACTIONS.HINT) {
+      try {
+        hintLevel = parseHintLevel(
+          sanitized.hintLevel != null ? sanitized.hintLevel : body.hintLevel,
+        );
+      } catch (err) {
+        throw new ValidationError(
+          err instanceof Error
+            ? err.message
+            : 'hintLevel must be an integer between 1 and 3.',
+          { field: 'hintLevel', action },
+        );
+      }
     }
 
     const problem = await this.#loadPublicProblem(sanitized.problemId);
@@ -61,6 +77,7 @@ class CoachService {
       language: sanitized.language,
       code: sanitized.code,
       message: sanitized.message,
+      hintLevel,
       problem,
       lastRunResult: sanitized.lastRunResult,
       lastSubmission: sanitized.lastSubmission,
@@ -86,7 +103,10 @@ class CoachService {
       throw err;
     }
 
-    const mapped = mapCoachMarkdownAnswer(completion.text, { action: built.action });
+    const mapped = mapCoachMarkdownAnswer(completion.text, {
+      action: built.action,
+      hintLevel,
+    });
 
     return {
       answer: mapped.answer,
@@ -96,6 +116,7 @@ class CoachService {
         typeof completion.tokensUsed === 'number' ? completion.tokensUsed : null,
       durationMs: Date.now() - started,
       format: mapped.format,
+      hintLevel: hintLevel ?? mapped.hintLevel ?? null,
     };
   }
 
