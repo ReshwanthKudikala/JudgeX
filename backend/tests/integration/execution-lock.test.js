@@ -6,6 +6,7 @@ require('./helpers/bootstrap');
 const { registerSuiteHooks } = require('./helpers/hooks');
 const { createAdmin, createUser, createPublishedProblem, unique } = require('./helpers/fixtures');
 const { query } = require('./helpers/setup');
+const { assertConnectedDatabaseIsTest } = require('./helpers/safe-target');
 const { SubmissionService } = require('../../src/modules/submissions/submissions.service');
 const { acquireSubmissionExecutionLock } = require('../../src/modules/judge/execution-lock');
 const { processSubmissionJob } = require('../../src/workers/judge.worker');
@@ -14,9 +15,7 @@ const { requireInfra } = registerSuiteHooks();
 
 async function assertIsolatedDatabase() {
   const { rows } = await query('SELECT current_database() AS db');
-  if (rows[0].db === 'judgex' && process.env.GITHUB_ACTIONS !== 'true') {
-    throw new Error('Refusing execution-lock test against database judgex outside GitHub Actions.');
-  }
+  assertConnectedDatabaseIsTest(rows[0] && rows[0].db);
   return rows[0].db;
 }
 

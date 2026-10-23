@@ -105,11 +105,11 @@ jobs:
         env:
           POSTGRES_USER: judgex
           POSTGRES_PASSWORD: judgex
-          POSTGRES_DB: judgex
+          POSTGRES_DB: judgex_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U judgex -d judgex"
+          --health-cmd "pg_isready -U judgex -d judgex_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -140,8 +140,8 @@ jobs:
           NODE_ENV: test
           JWT_SECRET: ci-integration-secret-change-me-32chars
           LOG_LEVEL: error
-          DATABASE_URL: postgres://judgex:judgex@localhost:5432/judgex
-          REDIS_URL: redis://localhost:6379
+          DATABASE_URL: postgres://judgex:judgex@localhost:5432/judgex_test
+          REDIS_URL: redis://127.0.0.1:6379/15
           DB_REQUIRED: "true"
           REDIS_REQUIRED: "false"
           BCRYPT_SALT_ROUNDS: "4"

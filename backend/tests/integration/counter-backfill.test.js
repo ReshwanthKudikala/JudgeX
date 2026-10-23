@@ -8,6 +8,7 @@ require('./helpers/bootstrap');
 const { registerSuiteHooks } = require('./helpers/hooks');
 const { createAdmin, createUser, createPublishedProblem, unique } = require('./helpers/fixtures');
 const { query } = require('./helpers/setup');
+const { assertConnectedDatabaseIsTest } = require('./helpers/safe-target');
 
 const { requireInfra } = registerSuiteHooks();
 
@@ -42,9 +43,7 @@ describe('Submission counter backfill', () => {
 
     const { rows: dbRows } = await query('SELECT current_database() AS db');
     const databaseName = dbRows[0].db;
-    if (databaseName === 'judgex' && process.env.GITHUB_ACTIONS !== 'true') {
-      throw new Error('Refusing counter backfill test against database judgex outside GitHub Actions.');
-    }
+    assertConnectedDatabaseIsTest(databaseName);
 
     const admin = await createAdmin();
     const user = await createUser();

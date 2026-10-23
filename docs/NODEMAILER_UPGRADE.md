@@ -27,10 +27,8 @@ The SMTP tests assert the recipient, subject, text link, `text/plain`, and the a
 
 Production (`npm audit --omit=dev --audit-level=high`) reports no vulnerabilities.
 
-Full `npm audit` still reports development-only findings that are not safe to clear in this tree:
+Full `npm audit` reports no backend vulnerabilities. Nodemon stays on 3.
 
-- **Backend, high:** `nodemon` 3.x depends on `chokidar` 3, which depends on `braces`. The only audit fix is `nodemon@1.14.10`, a major downgrade. Every `nodemon` 3 release, including 3.1.14, still depends on `chokidar@^3.5.2`. Left on nodemon 3.
-- **Frontend, high:** `tailwindcss` 3.4 depends on `chokidar`, `micromatch`, `braces`, and `fast-glob`. The audit fix is `tailwindcss@4`, a major upgrade. Left on Tailwind 3.
-- **Frontend, moderate:** `postcss-selector-parser` below 7 and `postcss-nested`, pulled in by Tailwind 3. The non-breaking update does not reach parser 7. Left in place.
+The frontend full audit reports three moderate development findings, all through Tailwind 3: `postcss-selector-parser` below 7.1.6 and `postcss-nested`. The published fix is `tailwindcss@4`. Left on Tailwind 3. The non-breaking update does not reach parser 7.
 
 Other frontend development advisories that have same-major fixes (Vite 6, PostCSS 8, Playwright 1, and their lockfile transitives such as `js-yaml`, `nanoid`, `browserslist`, `brace-expansion`, and `source-map-js`) are updated in the lockfile without `npm audit fix --force`.

@@ -182,12 +182,38 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
  * @param {object} sandbox - handle from createSandbox.
  * @param {Array<{path:string, content:string|Buffer, mode?:number}>} files
  */
+/**
+ * Reject absolute paths and `..` segments, then resolve inside the workspace.
+ * @param {string} hostDir
+ * @param {string} relativePath
+ * @returns {string}
+ */
+function resolveSandboxFile(hostDir, relativePath) {
+  if (
+    typeof relativePath !== 'string'
+    || relativePath.length === 0
+    || relativePath.includes('\0')
+    || path.win32.isAbsolute(relativePath)
+    || path.posix.isAbsolute(relativePath)
+    || relativePath.split(/[\\/]/).includes('..')
+  ) {
+    throw new DockerError('Sandbox file path must stay inside the workspace.');
+  }
+  const root = path.resolve(hostDir);
+  const dest = path.resolve(root, relativePath);
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (!dest.startsWith(prefix)) {
+    throw new DockerError('Sandbox file path must stay inside the workspace.');
+  }
+  return dest;
+}
+
 async function copyFiles(sandbox, files = []) {
   if (!sandbox || !sandbox.hostDir) {
     throw new DockerError('copyFiles requires a sandbox with a workspace.');
   }
   for (const file of files) {
-    const dest = path.join(sandbox.hostDir, file.path);
+    const dest = resolveSandboxFile(sandbox.hostDir, file.path);
     // eslint-disable-next-line no-await-in-loop -- small, sequential file writes.
     await fs.mkdir(path.dirname(dest), { recursive: true });
     // eslint-disable-next-line no-await-in-loop
@@ -208,9 +234,7 @@ async function assertWorkspaceFile(sandbox, relativePath) {
   if (!sandbox || !sandbox.container) {
     throw new DockerError('assertWorkspaceFile requires a running sandbox.');
   }
-  if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes('..')) {
-    throw new DockerError('assertWorkspaceFile requires a safe relative path.');
-  }
+  resolveSandboxFile(sandbox.hostDir || path.join(os.tmpdir(), 'judgex-unused'), relativePath);
   const containerPath = path.posix.join(sandbox.workdir || DEFAULT_WORKDIR, relativePath);
   const result = await executeCommand(sandbox, {
     cmd: ['test', '-f', containerPath],
@@ -502,4 +526,5 @@ module.exports = {
   isInsideWorkspaceRoot,
   removeWorkspaceDir,
   restrictWorkspacePermissions,
+  resolveSandboxFile,
 };

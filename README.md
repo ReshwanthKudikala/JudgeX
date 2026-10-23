@@ -838,7 +838,59 @@ npm ci
 npm run dev                   # Vite on :5173
 ```
 
-Open **http://localhost:5173**. API defaults to **http://localhost:4000/api/v1**.
+Open **http://localhost:5173**. API defaults to **http://localhost:4000/api/v1**. The frontend uses that URL when `VITE_API_BASE_URL` is unset. Copy `frontend/.env.example` to `frontend/.env` only to override it.
+
+### Windows PowerShell
+
+From the repository root, the same local stack is:
+
+```powershell
+docker compose -f docker-compose.yml up -d
+docker build -t judgex-python .\docker\images\python
+docker build -t judgex-cpp .\docker\images\cpp
+Set-Location backend
+Copy-Item .env.example .env
+npm ci
+npm run db:migrate
+npm run dev
+```
+
+In two more terminals, from `backend`:
+
+```powershell
+npm run worker:judge:dev
+npm run worker:cleanup
+```
+
+From `frontend`: `npm ci` then `npm run dev`.
+
+Stop the host processes with Ctrl+C in each terminal. From the repository root, stop the backing containers without deleting their data:
+
+```powershell
+docker compose -f docker-compose.yml stop
+```
+
+`docker compose -f docker-compose.yml down` also keeps the named volumes. `docker compose -f docker-compose.yml down -v` deletes PostgreSQL, Redis, and Ollama data. Development data lives in the `judgex` database on the `pgdata` volume. Redis AOF lives in `redisdata`. A logical backup of that development database is:
+
+```powershell
+docker exec judgex-postgres pg_dump -U judgex -d judgex
+```
+
+Restore a plain SQL dump with `docker exec -i judgex-postgres psql -U judgex -d judgex`. Do not run either command against a different Postgres container.
+
+The development Compose file creates the database `judgex` only. Integration and E2E tests refuse every other database name before they migrate or truncate. Create the test database once:
+
+```powershell
+docker exec judgex-postgres psql -U judgex -d postgres -c "CREATE DATABASE judgex_test OWNER judgex"
+```
+
+That command fails if `judgex_test` already exists; leave the existing database in place. Do not point `npm test` at `judgex`.
+
+### Optional services
+
+- **Email.** `EMAIL_PROVIDER=console` (the example default) prints verification and reset links in the API log. SMTP is used only when `EMAIL_PROVIDER=smtp` and `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS` are set. No external mailbox is required for local use.
+- **AI Coach.** The rest of the app starts without Ollama. A coach request returns an unavailable error until Ollama is running and `ollama pull qwen2.5-coder:7b` has completed. OpenAI is not required.
+- **Object storage.** `STORAGE_*` can stay empty in local development.
 
 (Production Compose serves the built SPA at **http://localhost** via Nginx.)
 
@@ -1100,8 +1152,8 @@ How confidence is built for JudgeX: **what runs where**, what each layer actuall
 ```bash
 # Backend — from backend/
 npm run test:unit            # no Docker/Postgres required
-npm run test:integration     # alias: npm test — Postgres required; Redis optional (REDIS_REQUIRED=false by default)
-npm run test:e2e             # Postgres + Redis + Docker daemon + sandbox images
+npm run test:integration     # alias: npm test — Postgres judgex_test required; Redis DB 15 when a suite touches the queue
+npm run test:e2e             # Postgres judgex_test + Redis DB 15 + Docker daemon + sandbox images
 
 # Frontend — from frontend/
 npm run lint
@@ -1143,7 +1195,7 @@ Supertest against `createApp()` with real Postgres (`tests/integration/helpers/`
 - Persist-before-enqueue and enqueue-failure leaving `queued` (`queue-enqueue`, often with mocked queue)
 - Contests visibility/join/scoreboard; discussions; editorials; leaderboard; admin dashboard/moderation/queue; health/ready/metrics; basic Helmet/UUID validation (`security`)
 
-**Prerequisites:** Postgres (required). Redis defaults to **not** required for integration bootstrap; CI still provides Redis 7. Rate limiting is typically **disabled** in CI (`RATE_LIMIT_ENABLED=false`).
+**Prerequisites:** Postgres database **`judgex_test`** (required). The harness checks the URL and `current_database()` before migrate or `TRUNCATE`, and a development database named `judgex` fails the run instead of being wiped. When `DATABASE_URL` is unset, the integration bootstrap uses `judgex_test` and Redis DB 15. Redis is still optional for most HTTP suites (`REDIS_REQUIRED=false`); suites that drain or obliterate a queue require Redis DB 15. CI provides Postgres 17 as `judgex_test` and Redis 7. Rate limiting is typically **disabled** in CI (`RATE_LIMIT_ENABLED=false`).
 
 **Does not prove:** Docker judging, Run Code HTTP→worker path, live AI `/ai/coach`, or rate-limit behavior under load.
 
@@ -1164,7 +1216,7 @@ Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (co
 | Frontend | `lint`, `build` | Any UI/browser tests |
 | Backend lint | `npm run lint` (syntax) | dependency-cruiser / full ESLint ecosystem |
 | Backend unit | `npm run test:unit` | — |
-| Backend integration | `npm test` + Postgres 17 + Redis 7 services | E2E, SMTP, benchmarks |
+| Backend integration | `npm test` + Postgres 17 database `judgex_test` + Redis 7 DB 15 | E2E, SMTP, benchmarks |
 | Backend e2e | `npm run test:e2e` on the host Docker daemon, with `judgex_test`, Redis DB 15, and images `judgex-python` / `judgex-cpp` | Benchmarks, cleanup-worker process, production Compose |
 | Backend smtp | `npm run test:smtp` in its own process against a localhost SMTP catcher | External mail providers, production credentials, the console-mode integration suite |
 | Backend / Frontend audit | `npm audit --omit=dev --audit-level=high` (`continue-on-error`) | Does not fail the workflow, and does not configure branch protection |

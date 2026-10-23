@@ -10,5 +10,8 @@ process.env.DB_REQUIRED = process.env.DB_REQUIRED || 'true';
 process.env.REDIS_REQUIRED = process.env.REDIS_REQUIRED || 'false';
 process.env.INFRA_STARTUP_RETRIES = process.env.INFRA_STARTUP_RETRIES || '1';
 process.env.INFRA_STARTUP_RETRY_DELAY_MS = process.env.INFRA_STARTUP_RETRY_DELAY_MS || '200';
+// Destructive suites must not inherit the development database. An explicit
+// DATABASE_URL is still checked before any migrate or truncate.
 process.env.DATABASE_URL =
-  process.env.DATABASE_URL || 'postgres://judgex:judgex@localhost:5432/judgex';
+  process.env.DATABASE_URL || 'postgres://judgex:judgex@localhost:5432/judgex_test';
+process.env.REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379/15';

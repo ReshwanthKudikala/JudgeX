@@ -5,6 +5,11 @@ require('./bootstrap');
 const { initInfrastructure, shutdownInfrastructure, getPool } = require('../../../src/infrastructure');
 const { migrate } = require('../../../src/infrastructure/database/migrator');
 const { createApp } = require('../../../src/app');
+const {
+  UnsafeTestTargetError,
+  assertDatabaseUrlIsTest,
+  assertConnectedDatabaseIsTest,
+} = require('./safe-target');
 
 const TRUNCATE_SQL = `
   TRUNCATE TABLE
@@ -38,18 +43,27 @@ let unavailableReason = null;
  * Safe to call once per process. If Postgres is unreachable, records the reason
  * so suites can skip instead of failing noisily.
  */
+async function assertConnectedTestDatabase() {
+  const { rows } = await getPool().query('SELECT current_database() AS name');
+  assertConnectedDatabaseIsTest(rows[0] && rows[0].name);
+}
+
 async function setupIntegration() {
+  // Wrong database names fail the suite. Connection failures may still skip.
+  assertDatabaseUrlIsTest();
   if (ready) return { app, available: true };
   if (unavailableReason) return { app: null, available: false, reason: unavailableReason };
 
   try {
     await initInfrastructure();
     const pool = getPool();
+    await assertConnectedTestDatabase();
     await migrate(pool);
     app = createApp();
     ready = true;
     return { app, available: true };
   } catch (err) {
+    if (err instanceof UnsafeTestTargetError) throw err;
     unavailableReason = err.message;
     try {
       await shutdownInfrastructure();
@@ -62,6 +76,7 @@ async function setupIntegration() {
 
 async function resetDatabase() {
   if (!ready) return;
+  await assertConnectedTestDatabase();
   await getPool().query(TRUNCATE_SQL);
 }
 

@@ -6,6 +6,7 @@ require('./helpers/bootstrap');
 const { registerSuiteHooks } = require('./helpers/hooks');
 const { createAdmin, createUser, createPublishedProblem, unique } = require('./helpers/fixtures');
 const { query } = require('./helpers/setup');
+const { assertConnectedDatabaseIsTest, assertRedisUrlIsDb15 } = require('./helpers/safe-target');
 const { getRedis } = require('../../src/infrastructure');
 const { SUBMISSIONS_QUEUE_NAME, getSubmissionsQueue } = require('../../src/infrastructure/queue/queues');
 const { JOB_NAME } = require('../../src/infrastructure/queue/queue.service');
@@ -20,19 +21,8 @@ function sleep(ms) {
 
 async function assertIsolated() {
   const { rows } = await query('SELECT current_database() AS db');
-  if (rows[0].db === 'judgex' && process.env.GITHUB_ACTIONS !== 'true') {
-    throw new Error('Refusing reaper integration test against database judgex outside GitHub Actions.');
-  }
-  const redisUrl = process.env.REDIS_URL || '';
-  let redisDb = '';
-  try {
-    redisDb = new URL(redisUrl).pathname;
-  } catch {
-    redisDb = '';
-  }
-  if (redisDb !== '/15' && process.env.GITHUB_ACTIONS !== 'true') {
-    throw new Error('Refusing reaper integration test unless REDIS_URL selects database 15.');
-  }
+  assertConnectedDatabaseIsTest(rows[0] && rows[0].db);
+  assertRedisUrlIsDb15();
 }
 
 async function seedUserAndProblem() {

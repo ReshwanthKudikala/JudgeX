@@ -7,6 +7,7 @@ require('./helpers/bootstrap');
 const { registerSuiteHooks } = require('./helpers/hooks');
 const { createAdmin, createUser, createPublishedProblem, unique } = require('./helpers/fixtures');
 const { query } = require('./helpers/setup');
+const { assertConnectedDatabaseIsTest, assertRedisUrlIsDb15 } = require('./helpers/safe-target');
 const { SubmissionService } = require('../../src/modules/submissions/submissions.service');
 const { acquireSubmissionExecutionLock } = require('../../src/modules/judge/execution-lock');
 const { processSubmissionJob } = require('../../src/workers/judge.worker');
@@ -25,19 +26,8 @@ function createRedis() {
 
 async function assertIsolated() {
   const { rows } = await query('SELECT current_database() AS db');
-  if (rows[0].db === 'judgex' && process.env.GITHUB_ACTIONS !== 'true') {
-    throw new Error('Refusing BullMQ lock test against database judgex outside GitHub Actions.');
-  }
-  const redisUrl = process.env.REDIS_URL || '';
-  let redisDb = '';
-  try {
-    redisDb = new URL(redisUrl).pathname;
-  } catch {
-    redisDb = '';
-  }
-  if (redisDb !== '/15' && process.env.GITHUB_ACTIONS !== 'true') {
-    throw new Error('Refusing BullMQ lock test unless REDIS_URL selects database 15.');
-  }
+  assertConnectedDatabaseIsTest(rows[0] && rows[0].db);
+  assertRedisUrlIsDb15();
 }
 
 describe('BullMQ worker execution lock', () => {
