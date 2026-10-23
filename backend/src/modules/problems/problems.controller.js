@@ -47,16 +47,6 @@ async function getProblemById(req, res, next) {
   }
 }
 
-// POST /problems → 201 { ...problem }
-async function createProblem(req, res, next) {
-  try {
-    const problem = await problemService.createProblem(req.body);
-    sendSuccess(req, res, 201, problem);
-  } catch (err) {
-    next(err);
-  }
-}
-
 // PATCH /admin/problems/:id → 200 { ...problem }
 async function updateProblem(req, res, next) {
   try {
@@ -82,7 +72,6 @@ module.exports = {
   getProblemBySlug,
   getProblemStatistics,
   getProblemById,
-  createProblem,
   updateProblem,
   deleteProblem,
 };

@@ -1,8 +1,8 @@
-// Declares public problem browsing/detail/creation HTTP endpoints.
+// Declares public problem browsing and detail endpoints.
 // Mounted under /api/v1/problems by the module registry.
 //
-// All endpoints are public for now. Admin authorization on POST (and future
-// admin routes) is deliberately deferred to a later sprint.
+// Catalog writes are not on this router. Admins create problems at
+// POST /api/v1/admin/problems.
 
 const { Router } = require('express');
 
@@ -14,7 +14,6 @@ const editorialController = require('../editorials/editorials.controller');
 const discussionController = require('../discussions/discussions.controller');
 const {
   listProblemsQuerySchema,
-  createProblemSchema,
   problemIdParamsSchema,
   problemSlugRouteParamsSchema,
 } = require('./problems.validators');
@@ -33,7 +32,6 @@ router.get(
   validate(listProblemsQuerySchema, 'query'),
   controller.listProblems,
 );
-router.post('/', problemsRateLimit, validate(createProblemSchema), controller.createProblem);
 router.get(
   '/id/:id',
   problemsRateLimit,

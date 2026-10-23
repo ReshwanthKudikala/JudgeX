@@ -3,9 +3,28 @@ const assert = require('node:assert/strict');
 
 require('./helpers/bootstrap');
 const { registerSuiteHooks } = require('./helpers/hooks');
-const { api, createAdmin, createPublishedProblem, unique } = require('./helpers/fixtures');
+const { api, createAdmin, createUser, createPublishedProblem, unique } = require('./helpers/fixtures');
+const { query } = require('./helpers/setup');
 
 const { requireInfra } = registerSuiteHooks();
+
+function createBody(slug, isPublished) {
+  return {
+    slug,
+    title: 'Must not persist',
+    statement: 'Unauthorized catalog write.',
+    difficulty: 'easy',
+    isPublished,
+  };
+}
+
+async function problemCount(slug) {
+  const { rows } = await query(
+    'SELECT COUNT(*)::int AS n FROM problems WHERE slug = $1',
+    [slug],
+  );
+  return rows[0].n;
+}
 
 describe('Problems API', () => {
   it('lists problems', async (t) => {
@@ -90,7 +109,7 @@ describe('Problems API', () => {
     assert.equal(res.body.error.code, 'NOT_FOUND');
   });
 
-  it('creates a problem (admin)', async (t) => {
+  it('creates a published problem through the admin endpoint', async (t) => {
     if (!requireInfra(t)) return;
 
     const admin = await createAdmin();
@@ -109,6 +128,51 @@ describe('Problems API', () => {
     assert.equal(res.status, 201);
     assert.equal(res.body.data.slug, slug);
     assert.equal(res.body.data.difficulty, 'medium');
+    assert.equal(res.body.data.isPublished, true);
+    assert.equal(await problemCount(slug), 1);
+  });
+
+  it('does not create a published problem from the public problems route', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const slug = unique('public-create');
+    const anonymous = await api().post('/api/v1/problems').send(createBody(slug, true));
+    assert.equal(anonymous.status, 404);
+    assert.equal(anonymous.body.error.code, 'NOT_FOUND');
+    assert.equal(await problemCount(slug), 0);
+
+    const user = await createUser();
+    const member = await api()
+      .post('/api/v1/problems')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send(createBody(slug, true));
+    assert.equal(member.status, 404);
+    assert.equal(member.body.error.code, 'NOT_FOUND');
+    assert.equal(await problemCount(slug), 0);
+  });
+
+  it('does not create a problem for anonymous or non-admin callers on either route', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const publicSlug = unique('public-draft');
+    const anonymous = await api().post('/api/v1/problems').send(createBody(publicSlug, false));
+    assert.equal(anonymous.status, 404);
+    assert.equal(await problemCount(publicSlug), 0);
+
+    const adminSlug = unique('admin-draft');
+    const user = await createUser();
+    const member = await api()
+      .post('/api/v1/admin/problems')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send(createBody(adminSlug, true));
+    assert.equal(member.status, 403);
+    assert.equal(member.body.error.code, 'FORBIDDEN');
+    assert.equal(await problemCount(adminSlug), 0);
+
+    const anonAdmin = await api().post('/api/v1/admin/problems').send(createBody(adminSlug, true));
+    assert.equal(anonAdmin.status, 401);
+    assert.equal(anonAdmin.body.error.code, 'UNAUTHENTICATED');
+    assert.equal(await problemCount(adminSlug), 0);
   });
 
   it('updates a problem (admin)', async (t) => {

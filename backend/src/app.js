@@ -64,7 +64,8 @@ function createApp() {
   // API_SPECIFICATION.md § summary: GET /api/v1/health → dependency readiness.
   app.get('/api/v1/health', sendReadiness);
 
-  // Prometheus scrape endpoint (text exposition format).
+  // Prometheus text for a private scrape of this process. The public Nginx
+  // listener does not proxy this path (docker/nginx/nginx.conf).
   app.get('/metrics', async (_req, res) => {
     try {
       res.setHeader('Content-Type', metrics.contentType);

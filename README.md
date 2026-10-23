@@ -1082,7 +1082,7 @@ Prerequisite: sandbox lifecycle and hidden-test viewer rules are detailed in [Ju
 
 **Implementation.** `admin.routes.js`: `authenticate` + `authorize('admin')` (+ `adminRateLimit`). `authorize` reads `req.user.role` from the DB-backed public user attached by `authenticate`, not from the JWT alone.
 
-**Residual.** `authorize` is not applied on every mutating route outside `/admin`. Ownership checks for submissions/discussions live in services. **`POST /api/v1/problems` has no auth** (explicit deferral in `problems.routes.js`) while admin problem CRUD under `/admin/problems` is gated—catalog writes on the public router are an open control gap.
+**Residual.** `authorize` is not applied on every mutating route outside `/admin`. Ownership checks for submissions/discussions live in services. Problem creation is only `POST /api/v1/admin/problems`, which requires an admin. The public problems router does not create problems.
 
 ### Cross-user submission / source leakage
 
@@ -1136,13 +1136,13 @@ Prerequisite: sandbox lifecycle and hidden-test viewer rules are detailed in [Ju
 
 ### Observability endpoints
 
-**Threat.** Unauthenticated scrapers read process metrics.
+**Threat.** Unauthenticated scrapers read process metrics through the public edge.
 
-**Mitigation.** None beyond network placement today.
+**Mitigation.** The public Nginx listener does not proxy `/metrics`.
 
-**Implementation.** `GET /metrics` is registered on the API without `authenticate` (`app.js`). Health/ready probes are also public by design for orchestrators.
+**Implementation.** `docker/nginx/nginx.conf` answers `location = /metrics` with `404` and no `proxy_pass`. The API still serves `GET /metrics` without `authenticate` (`app.js`) so a scraper on the Compose network can use `http://api:4000/metrics`. Production Compose does not publish the API port. Health and readiness probes stay public for orchestrators.
 
-**Residual.** Treat metrics as sensitive operational data; protect at the network/edge if exposure matters in your deployment.
+**Residual.** Publishing the API port, or copying a `/metrics` proxy into the commented TLS server, would expose metrics again. This repository has no Prometheus service or separate monitoring network.
 
 ---
 

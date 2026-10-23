@@ -130,7 +130,7 @@ Probes:
 
 - Liveness: `GET /health` or `/health/live`
 - Readiness: `GET /ready` or `/health/ready`
-- Metrics: `GET /metrics`
+- Metrics: not on the public edge. Nginx returns `404` for `GET /metrics`. Scrape `http://api:4000/metrics` from the Compose network. The `api` service does not publish that port.
 - Edge: `GET /nginx-health`
 
 ---
@@ -200,7 +200,7 @@ See `scripts/backup/REDIS.md`. AOF is enabled (`appendonly yes`). Postgres is au
 
 ## 7. Monitoring
 
-- Prometheus scrape: `/metrics` (restrict network exposure in real deployments).
+- Prometheus scrape: `http://api:4000/metrics` from the Compose network only. The public Nginx listener returns `404` for `/metrics` and does not proxy it. There is no Prometheus service in this repository.
 - Admin Overview → **Platform monitoring** (15s refresh): DB/Redis/BullMQ/worker/Docker, queue depth, recent failures, release version.
 - Structured logs: JSON in production (`LOG_FORMAT=json`); request IDs via `X-Request-ID`.
 

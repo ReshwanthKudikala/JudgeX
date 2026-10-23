@@ -150,7 +150,7 @@ Review bundles with `npm run build` in `frontend/` and inspect chunk sizes (admi
 | `judgex_db_query_duration_seconds` | DB query latency at shared `query()` helper |
 | `judgex_queue_depth` | Waiting/active/etc. (existing) |
 
-Scraped at `GET /metrics`.
+Scraped at `GET /metrics` on the API (`http://api:4000/metrics` from the Compose network). The public Nginx listener returns `404` and does not proxy `/metrics`.
 
 ---
 

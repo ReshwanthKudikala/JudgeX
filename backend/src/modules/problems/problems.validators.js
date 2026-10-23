@@ -1,4 +1,4 @@
-// Request validation schemas for problem list queries and creation.
+// Request validation schemas for public problem reads.
 // Structural/format validation only — business rules live in the service.
 
 const { z } = require('zod');
@@ -37,24 +37,6 @@ const listProblemsQuerySchema = z.object({
   createdBy: z.string().uuid().optional(),
 });
 
-// POST /problems — create body. Required: slug, title, statement, difficulty.
-const createProblemSchema = z.object({
-  slug: z
-    .string()
-    .trim()
-    .min(1)
-    .max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase alphanumeric words separated by hyphens.'),
-  title: z.string().trim().min(1).max(200),
-  statement: z.string().min(1).max(200_000),
-  difficulty: DIFFICULTY,
-  constraintsText: z.string().max(50_000).optional(),
-  timeLimitMs: z.coerce.number().int().positive().optional(),
-  memoryLimitMb: z.coerce.number().int().positive().optional(),
-  isPublished: z.boolean().optional(),
-  createdBy: z.string().uuid().optional(),
-});
-
 const problemIdParamsSchema = z.object({
   id: z.string().uuid(),
 });
@@ -70,7 +52,6 @@ const problemSlugRouteParamsSchema = z.object({
 
 module.exports = {
   listProblemsQuerySchema,
-  createProblemSchema,
   problemIdParamsSchema,
   problemSlugRouteParamsSchema,
 };

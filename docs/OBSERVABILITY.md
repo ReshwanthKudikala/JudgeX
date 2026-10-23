@@ -30,7 +30,9 @@ Readiness checks Postgres, Redis, BullMQ. Worker heartbeat + Docker ping are rep
 
 ## Metrics
 
-`GET /metrics` — Prometheus text format (`prom-client`), prefix `judgex_`.
+`GET /metrics` on the API process — Prometheus text format (`prom-client`), prefix `judgex_`.
+
+The public Nginx listener does not proxy this path (`location = /metrics` returns `404`). Scrape `http://api:4000/metrics` from the Compose network. Production Compose does not publish the API port, and this repository has no Prometheus service.
 
 Includes HTTP request counts/latency, submissions, judge duration, queue depth, AI requests, contest joins, and process defaults.
 
