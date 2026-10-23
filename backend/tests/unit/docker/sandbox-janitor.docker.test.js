@@ -29,6 +29,22 @@ async function dockerReady() {
   }
 }
 
+function isMissingImage(error) {
+  const status = error && (error.statusCode || error.status);
+  const message = String((error && error.message) || error || '');
+  return status === 404 || /no such image/i.test(message);
+}
+
+async function requiredImagePresent(docker, name) {
+  try {
+    await docker.getImage(name).inspect();
+    return true;
+  } catch (error) {
+    if (isMissingImage(error)) return false;
+    throw error;
+  }
+}
+
 async function createProbe(docker, { name, owner, cmd, startedAt }) {
   const container = await docker.createContainer({
     name,
@@ -55,6 +71,10 @@ describe('sandbox janitor against disposable containers', () => {
     const docker = await dockerReady();
     if (!docker) {
       t.skip('Docker daemon unreachable');
+      return;
+    }
+    if (!(await requiredImagePresent(docker, IMAGE))) {
+      t.skip(`Sandbox image ${IMAGE} is not present`);
       return;
     }
 
