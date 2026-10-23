@@ -179,10 +179,13 @@ async function assertJobCompleted(submissionId, { timeoutMs = 15000, intervalMs 
     }
     const state = await job.getState();
     if (state === 'completed') {
-      if (!job.finishedOn) {
-        throw new Error(`Job ${submissionId} has no finishedOn timestamp`);
+      // getState() can observe "completed" before the job hash has finishedOn.
+      const current = job.finishedOn ? job : await queue.getJob(submissionId);
+      if (current && current.finishedOn) {
+        return { job: current, state, returnvalue: current.returnvalue };
       }
-      return { job, state, returnvalue: job.returnvalue };
+      await sleep(intervalMs);
+      continue;
     }
     if (state === 'failed') {
       throw new Error(`Job ${submissionId} failed: ${job.failedReason || 'unknown'}`);
