@@ -52,6 +52,9 @@ const SORT_COLUMNS = Object.freeze({
 
 const DEFAULT_SORT = 'submitted_at DESC';
 
+/** Statuses a worker may still transition. Terminal rows are immutable. */
+const NON_TERMINAL_STATUSES = Object.freeze(['queued', 'running']);
+
 // Optional result columns -> the field that supplies them (updateSubmissionResult).
 const RESULT_METRIC_COLUMNS = Object.freeze({
   compile_output: 'compileOutput',
@@ -252,12 +255,29 @@ class SubmissionRepository extends BaseRepository {
    * Move a submission to a new lifecycle status (e.g. queued -> running).
    * Persists status only; verdict/metrics are written by updateSubmissionResult.
    *
+   * When `fromStatuses` is set, this is a compare-and-set: zero rows means the
+   * row is missing or already terminal (or otherwise not in the allowed set).
+   *
    * @param {string} id - UUID.
    * @param {string} status - one of queued|running|completed|error.
    * @param {import('pg').PoolClient} [client]
-   * @returns {Promise<Object|null>} the updated row, or null if id not found.
+   * @param {{ fromStatuses?: string[] }} [options]
+   * @returns {Promise<Object|null>} the updated row, or null if no row matched.
    */
-  updateSubmissionStatus(id, status, client) {
+  updateSubmissionStatus(id, status, client, options = {}) {
+    const fromStatuses = options.fromStatuses;
+    if (Array.isArray(fromStatuses) && fromStatuses.length > 0) {
+      return this.queryOne(
+        `UPDATE submissions
+            SET status = $1,
+                updated_at = now()
+          WHERE id = $2
+            AND status = ANY($3::submission_status[])
+         RETURNING ${DETAIL_COLUMNS}`,
+        [status, id, fromStatuses],
+        client,
+      );
+    }
     return this.queryOne(
       `UPDATE submissions
           SET status = $1,
@@ -284,7 +304,7 @@ class SubmissionRepository extends BaseRepository {
    * @param {import('pg').PoolClient} [client]
    * @returns {Promise<Object|null>} the updated row, or null if id not found.
    */
-  updateSubmissionResult(id, result, client) {
+  updateSubmissionResult(id, result, client, options = {}) {
     const assignments = ['status = $1', 'verdict = $2', 'judged_at = now()', 'updated_at = now()'];
     const params = [result.status, result.verdict];
     let index = 3;
@@ -298,13 +318,122 @@ class SubmissionRepository extends BaseRepository {
     }
 
     params.push(id);
+    let whereSql = `WHERE id = $${index}`;
+    index += 1;
+
+    const fromStatuses = options.fromStatuses;
+    if (Array.isArray(fromStatuses) && fromStatuses.length > 0) {
+      whereSql += ` AND status = ANY($${index}::submission_status[])`;
+      params.push(fromStatuses);
+    }
 
     return this.queryOne(
       `UPDATE submissions
           SET ${assignments.join(', ')}
-        WHERE id = $${index}
+        ${whereSql}
        RETURNING ${DETAIL_COLUMNS}`,
       params,
+      client,
+    );
+  }
+
+  /**
+   * Replace per-case result rows for a submission (idempotent for a CAS winner).
+   *
+   * @param {string} submissionId
+   * @param {Array<{ testCaseId?: string|null, testIndex: number, status: string,
+   *                 runtimeMs?: number|null, memoryKb?: number|null }>} results
+   * @param {import('pg').PoolClient} [client]
+   */
+  async replaceTestResults(submissionId, results, client) {
+    await this.query(
+      `DELETE FROM submission_test_results WHERE submission_id = $1`,
+      [submissionId],
+      client,
+    );
+    if (!Array.isArray(results) || results.length === 0) return;
+
+    for (const row of results) {
+      // eslint-disable-next-line no-await-in-loop -- small bounded case list
+      await this.query(
+        `INSERT INTO submission_test_results
+           (id, submission_id, test_case_id, test_index, status, runtime_ms, memory_kb)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          this.newId(),
+          submissionId,
+          row.testCaseId || null,
+          row.testIndex,
+          row.status,
+          row.runtimeMs ?? null,
+          row.memoryKb ?? null,
+        ],
+        client,
+      );
+    }
+  }
+
+  /**
+   * Recompute and upsert the denormalized user_statistics row from submissions.
+   * Must run in the same transaction as the submission finalization that it
+   * reflects.
+   *
+   * @param {string} userId
+   * @param {import('pg').PoolClient} [client]
+   */
+  refreshUserStatistics(userId, client) {
+    return this.query(
+      `INSERT INTO user_statistics (
+          user_id, problems_solved, total_submissions, total_accepted,
+          acceptance_rate, last_solved_at, updated_at
+        )
+        SELECT
+          $1,
+          COUNT(DISTINCT problem_id) FILTER (WHERE verdict = 'accepted')::int,
+          COUNT(*)::int,
+          COUNT(*) FILTER (WHERE verdict = 'accepted')::int,
+          CASE
+            WHEN COUNT(*) > 0 THEN
+              ROUND(
+                (COUNT(*) FILTER (WHERE verdict = 'accepted')::numeric
+                  / COUNT(*)::numeric) * 100,
+                2
+              )
+            ELSE 0
+          END,
+          MAX(submitted_at) FILTER (WHERE verdict = 'accepted'),
+          now()
+          FROM submissions
+         WHERE user_id = $1
+        ON CONFLICT (user_id) DO UPDATE SET
+          problems_solved = EXCLUDED.problems_solved,
+          total_submissions = EXCLUDED.total_submissions,
+          total_accepted = EXCLUDED.total_accepted,
+          acceptance_rate = EXCLUDED.acceptance_rate,
+          last_solved_at = EXCLUDED.last_solved_at,
+          updated_at = now()`,
+      [userId],
+      client,
+    );
+  }
+
+  /**
+   * Return a running submission to queued so the reaper can re-enqueue it.
+   * No-op (null) if the row is already terminal or not running.
+   *
+   * @param {string} id
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object|null>}
+   */
+  releaseRunningToQueued(id, client) {
+    return this.queryOne(
+      `UPDATE submissions
+          SET status = 'queued',
+              updated_at = now()
+        WHERE id = $1
+          AND status = 'running'
+       RETURNING ${DETAIL_COLUMNS}`,
+      [id],
       client,
     );
   }
@@ -330,6 +459,32 @@ class SubmissionRepository extends BaseRepository {
       client,
     );
   }
+
+  /**
+   * Find submissions stuck in `running` (worker crash without a lock renew).
+   * Uses updated_at so a recently picked-up job is not reaped.
+   *
+   * @param {{ olderThan: Date|string, limit?: number }} opts
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<Object[]>}
+   */
+  findStuckRunning({ olderThan, limit = 100 }, client) {
+    const batchLimit = Math.max(1, Math.min(Number(limit) || 100, 1000));
+    return this.queryMany(
+      `SELECT id, status, submitted_at, created_at, updated_at
+         FROM submissions
+        WHERE status = 'running'
+          AND updated_at < $1
+        ORDER BY updated_at ASC
+        LIMIT $2`,
+      [olderThan, batchLimit],
+      client,
+    );
+  }
 }
 
-module.exports = { SubmissionRepository, submissionRepository: new SubmissionRepository() };
+module.exports = {
+  SubmissionRepository,
+  submissionRepository: new SubmissionRepository(),
+  NON_TERMINAL_STATUSES,
+};

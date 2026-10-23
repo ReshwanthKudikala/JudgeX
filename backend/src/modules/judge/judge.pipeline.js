@@ -96,6 +96,7 @@ async function runJudgePipeline(submissionId, deps = {}) {
           totalTests: 0,
           stdout: compileResult.stdout || null,
           stderr: compileResult.stderr || null,
+          testResults: [],
         });
         return outcome;
       }
@@ -115,6 +116,7 @@ async function runJudgePipeline(submissionId, deps = {}) {
       let passedTests = 0;
       let lastStdout = null;
       let lastStderr = null;
+      const testResults = [];
 
       for (let i = 0; i < testCases.length; i += 1) {
         const testCase = testCases[i];
@@ -128,6 +130,14 @@ async function runJudgePipeline(submissionId, deps = {}) {
 
         const comparisonResult = compare(runResult.stdout, testCase.expectedOutput);
         const caseOutcome = verdict({ compileResult, runResult, comparisonResult });
+
+        testResults.push({
+          testCaseId: testCase.id || null,
+          testIndex: i,
+          status: caseOutcome.verdict,
+          runtimeMs: runResult.durationMs ?? null,
+          memoryKb: runResult.memoryKb ?? null,
+        });
 
         if (caseOutcome.passed) {
           passedTests += 1;
@@ -174,6 +184,7 @@ async function runJudgePipeline(submissionId, deps = {}) {
         totalTests,
         stdout: lastStdout,
         stderr: lastStderr,
+        testResults,
       });
       return {
         ...outcome,

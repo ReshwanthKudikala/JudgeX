@@ -21,6 +21,7 @@ const {
 } = require('../integration/helpers/fixtures');
 
 const { requireE2e } = registerE2eHooks();
+const { query } = require('../integration/helpers/setup');
 
 const ECHO_PLUS = String.raw`a, b = map(int, input().split())
 print(a + b)
@@ -96,6 +97,17 @@ describe('Judge end-to-end (Docker + queue + worker)', () => {
     assert.ok(row.runtime_ms >= 0);
     assert.ok(row.judged_at);
     assert.equal(queue.returnvalue.verdict, 'accepted');
+
+    const { rows: caseRows } = await query(
+      `SELECT test_index, status
+         FROM submission_test_results
+        WHERE submission_id = $1
+        ORDER BY test_index`,
+      [row.id],
+    );
+    assert.equal(caseRows.length, 2);
+    assert.equal(caseRows[0].status, 'accepted');
+    assert.equal(caseRows[1].status, 'accepted');
   });
 
   it('Wrong Answer: incorrect output persists wrong_answer and failed_test_index', async (t) => {
@@ -204,5 +216,32 @@ print(a - b)
       `expected runtime_ms >= ${timeLimitMs}, got ${row.runtime_ms}`,
     );
     assert.equal(queue.returnvalue.verdict, 'tle');
+  });
+
+  it('Run: public sample passes and does not create a submission', async (t) => {
+    if (!requireE2e(t)) return;
+
+    const admin = await createAdmin();
+    const user = await createUser();
+    const problemId = await seedProblemWithCases(admin.accessToken, {
+      slug: unique('e2e-run'),
+      cases: [{ input: '1 2\n', expectedOutput: '3\n', isHidden: false }],
+    });
+
+    const before = await query('SELECT COUNT(*)::int AS n FROM submissions');
+    const res = await api()
+      .post('/api/v1/code/run')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({
+        problemId,
+        language: 'python',
+        sourceCode: ECHO_PLUS,
+      });
+
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.status, 'ok');
+    assert.equal(res.body.data.passedCount, 1);
+    const after = await query('SELECT COUNT(*)::int AS n FROM submissions');
+    assert.equal(after.rows[0].n, before.rows[0].n);
   });
 });

@@ -275,6 +275,26 @@ class ProblemRepository extends BaseRepository {
    * @param {import('pg').PoolClient} [client]
    * @returns {Promise<Object>}
    */
+  /**
+   * Atomically bump denormalized catalog counters. Called from the same
+   * transaction that finalizes a submission so a lost race cannot double-count.
+   *
+   * @param {string} problemId
+   * @param {{ accepted: boolean }} opts
+   * @param {import('pg').PoolClient} [client]
+   */
+  incrementSubmissionCounters(problemId, { accepted } = {}, client) {
+    return this.query(
+      `UPDATE problems
+          SET total_submissions = total_submissions + 1,
+              total_accepted = total_accepted + CASE WHEN $2::boolean THEN 1 ELSE 0 END,
+              updated_at = now()
+        WHERE id = $1`,
+      [problemId, Boolean(accepted)],
+      client,
+    );
+  }
+
   getLiveStatistics(problemId, client) {
     return this.queryOne(
       `SELECT

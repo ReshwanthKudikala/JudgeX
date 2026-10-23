@@ -13,9 +13,13 @@ const {
   NotFoundError,
   ValidationError,
   ForbiddenError,
+  ConflictError,
 } = require('../../shared/errors/http-errors');
 const { QueueError } = require('../../shared/errors/domain-errors');
-const { submissionRepository } = require('./submissions.repository');
+const {
+  submissionRepository,
+  NON_TERMINAL_STATUSES,
+} = require('./submissions.repository');
 const { userRepository } = require('../auth/auth.repository');
 const { problemRepository } = require('../problems/problems.repository');
 
@@ -141,11 +145,13 @@ class SubmissionService {
     userRepository: usrRepo,
     problemRepository: probRepo,
     enqueueSubmission: enqueueFn,
+    withTransaction: withTx,
   } = {}) {
     this.submissionRepository = subRepo || submissionRepository;
     this.userRepository = usrRepo || userRepository;
     this.problemRepository = probRepo || problemRepository;
     this.enqueueSubmission = enqueueFn || enqueueSubmission;
+    this.withTransaction = withTx || withTransaction;
   }
 
   /**
@@ -156,7 +162,7 @@ class SubmissionService {
    * @returns {Promise<Object>} the created submission domain object (status 'queued').
    */
   async createSubmission({ userId, problemId, language, sourceCode, requestId }) {
-    const submission = await withTransaction(async (client) => {
+    const submission = await this.withTransaction(async (client) => {
       const user = await this.userRepository.findById(userId, client);
       if (!user) {
         throw new NotFoundError('User not found.');
@@ -280,11 +286,13 @@ class SubmissionService {
   }
 
   async markSubmissionRunning(id) {
-    const row = await this.submissionRepository.updateSubmissionStatus(id, 'running');
-    if (!row) {
-      throw new NotFoundError('Submission not found.');
+    const row = await this.submissionRepository.updateSubmissionStatus(id, 'running', undefined, {
+      fromStatuses: NON_TERMINAL_STATUSES,
+    });
+    if (row) {
+      return toSubmissionDetail(row);
     }
-    return toSubmissionDetail(row);
+    return this.#rejectStaleTransition(id);
   }
 
   /**
@@ -306,6 +314,7 @@ class SubmissionService {
       totalTests,
       stdout,
       stderr,
+      testResults,
       status = 'completed',
     } = result;
 
@@ -315,20 +324,45 @@ class SubmissionService {
       ]);
     }
 
-    const row = await this.submissionRepository.updateSubmissionResult(id, {
-      status,
-      verdict,
-      compileOutput,
-      runtimeMs,
-      memoryKb,
-      failedTestIndex,
-      passedTests,
-      totalTests,
-      stdout,
-      stderr,
+    // One transaction: CAS the terminal write, per-case rows, problem counters,
+    // user_statistics. A losing racer sees zero rows and must not increment.
+    const row = await this.withTransaction(async (client) => {
+      const updated = await this.submissionRepository.updateSubmissionResult(
+        id,
+        {
+          status,
+          verdict,
+          compileOutput,
+          runtimeMs,
+          memoryKb,
+          failedTestIndex,
+          passedTests,
+          totalTests,
+          stdout,
+          stderr,
+        },
+        client,
+        { fromStatuses: NON_TERMINAL_STATUSES },
+      );
+      if (!updated) {
+        return null;
+      }
+
+      if (Array.isArray(testResults)) {
+        await this.submissionRepository.replaceTestResults(id, testResults, client);
+      }
+
+      await this.problemRepository.incrementSubmissionCounters(
+        updated.problem_id,
+        { accepted: verdict === 'accepted' },
+        client,
+      );
+      await this.submissionRepository.refreshUserStatistics(updated.user_id, client);
+      return updated;
     });
+
     if (!row) {
-      throw new NotFoundError('Submission not found.');
+      return this.#rejectStaleTransition(id);
     }
     return toSubmissionDetail(row);
   }
@@ -340,22 +374,43 @@ class SubmissionService {
    * @param {{ message?: string }} [opts]
    */
   async failSubmissionInternal(id, opts = {}) {
-    const row = await this.submissionRepository.updateSubmissionResult(id, {
-      status: 'error',
-      verdict: 'internal_error',
-      compileOutput: opts.message || null,
-      runtimeMs: null,
-      memoryKb: null,
-      failedTestIndex: null,
-      passedTests: null,
-      totalTests: null,
-      stdout: null,
-      stderr: opts.message || null,
-    });
+    const row = await this.submissionRepository.updateSubmissionResult(
+      id,
+      {
+        status: 'error',
+        verdict: 'internal_error',
+        compileOutput: opts.message || null,
+        runtimeMs: null,
+        memoryKb: null,
+        failedTestIndex: null,
+        passedTests: null,
+        totalTests: null,
+        stdout: null,
+        stderr: opts.message || null,
+      },
+      undefined,
+      { fromStatuses: NON_TERMINAL_STATUSES },
+    );
     if (!row) {
-      throw new NotFoundError('Submission not found.');
+      return this.#rejectStaleTransition(id);
     }
     return toSubmissionDetail(row);
+  }
+
+  /**
+   * Distinguish "row gone" from "already terminal" after a CAS miss.
+   * @param {string} id
+   */
+  async #rejectStaleTransition(id) {
+    const existing = await this.submissionRepository.findById(id);
+    if (!existing) {
+      throw new NotFoundError('Submission not found.');
+    }
+    throw new ConflictError('Submission is already in a terminal state.', {
+      submissionId: id,
+      status: existing.status,
+      verdict: existing.verdict,
+    });
   }
 }
 
@@ -363,6 +418,7 @@ module.exports = {
   SubmissionService,
   submissionService: new SubmissionService(),
   TERMINAL_VERDICTS,
+  NON_TERMINAL_STATUSES,
   toSubmissionDetail,
   toSubmissionDetailForViewer,
   toSubmissionSummary,

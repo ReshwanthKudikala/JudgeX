@@ -73,6 +73,9 @@ describe('runJudgePipeline fail-fast', () => {
     assert.equal(completed[0].totalTests, 2);
     assert.equal(completed[0].failedTestIndex, 0);
     assert.equal(completed[0].stdout, 'wrong');
+    assert.equal(completed[0].testResults.length, 1);
+    assert.equal(completed[0].testResults[0].status, 'wrong_answer');
+    assert.equal(completed[0].testResults[0].testIndex, 0);
   });
 
   it('continues after WA when failFast is false', async () => {
@@ -102,6 +105,7 @@ describe('runJudgePipeline fail-fast', () => {
     assert.equal(completed[0].passedTests, 1);
     assert.equal(completed[0].totalTests, 2);
     assert.equal(completed[0].failedTestIndex, 0);
+    assert.equal(completed[0].testResults.length, 2);
   });
 
   it('stops early on compile error without running tests', async () => {
@@ -121,5 +125,6 @@ describe('runJudgePipeline fail-fast', () => {
     assert.equal(runs, 0);
     assert.equal(completed[0].compileOutput, 'syntax error');
     assert.equal(completed[0].totalTests, 0);
+    assert.deepEqual(completed[0].testResults, []);
   });
 });
