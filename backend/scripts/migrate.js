@@ -16,6 +16,7 @@ async function main() {
   configureLogger({ level: config.logging.level });
   logger.info('Database migrate starting', { env: config.env });
 
+  let failed = false;
   try {
     await connectPostgres({
       retries: config.infra.startupRetries,
@@ -31,14 +32,18 @@ async function main() {
       tracked: applied,
     });
   } catch (err) {
+    failed = true;
     logger.error('Database migrate failed', {
       error: err.message,
       stack: err.stack,
     });
-    process.exitCode = 1;
   } finally {
     await closePostgres();
   }
+
+  // Exit after the pool is closed so Compose sees a definite non-zero status
+  // and does not start the API. A lingering handle must not turn this into 0.
+  if (failed) process.exit(1);
 }
 
 main();

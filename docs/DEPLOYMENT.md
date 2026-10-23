@@ -14,9 +14,10 @@ Companion docs: `docs/SECURITY.md`, `docs/OBSERVABILITY.md`, `backend/.env.produ
 |---------|------|
 | `nginx` | Edge reverse proxy (compression, security headers, soft rate limits) |
 | `frontend` | Static SPA (Vite build → nginx alpine) |
-| `api` | Express API (+ migrations on start) |
-| `worker` | BullMQ judge worker (Docker socket for sandboxes) |
-| `cleanup-worker` | Stuck-queue reaper |
+| `migrate` | One-shot `node scripts/migrate.js`. Exits when pending SQL migrations are applied. Not an API replica |
+| `api` | Express API. Starts only after `migrate` exits 0. Does not run migrations itself |
+| `worker` | BullMQ judge worker (Docker socket for sandboxes). Starts only after `migrate` exits 0 |
+| `cleanup-worker` | Stuck-queue reaper. Starts only after `migrate` exits 0 |
 | `postgres` | Source of truth |
 | `redis` | BullMQ + cache + rate limits (AOF) |
 
@@ -95,12 +96,35 @@ API-only secrets are also documented in `backend/.env.production.example`.
 docker build -t judgex-python:latest docker/images/python
 docker build -t judgex-cpp:latest docker/images/cpp
 
-# Bring up the stack
+# Build images, apply migrations, then start the stack.
+# `up` waits until Postgres is healthy, runs the one-shot `migrate` service
+# to completion, and only then starts api, worker, and cleanup-worker.
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
 # Tail API logs
 docker compose -f docker-compose.prod.yml logs -f api worker
 ```
+
+`migrate` uses the API image and runs `node scripts/migrate.js` once. The runner applies `backend/src/infrastructure/database/migrations/*.sql` in filename order and records each id in `schema_migrations`. A file that is already recorded is skipped, so a later deploy can run the same service again.
+
+If `migrate` exits non-zero, Compose does not start the API. The API healthcheck (`GET /ready`) therefore never passes, and nginx does not become ready. API replicas do not apply migrations themselves, including when the API is scaled.
+
+### Later deploys
+
+`docker compose up -d --build` recreates `migrate` when the API image changes, then waits for that one-shot container to exit 0 before replacing the API. Do not roll the API forward with `--no-deps`. That flag skips the `migrate` dependency and can start the new API before new SQL has been applied.
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build migrate api worker cleanup-worker
+```
+
+To re-run migrations against an unchanged image (still idempotent):
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --force-recreate --no-deps migrate
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+The second command waits for the recreated `migrate` container to exit 0 before it treats the API as ready.
 
 Probes:
 
@@ -142,7 +166,7 @@ Notes:
 Rolling update example:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-deps --build api worker
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build migrate api worker
 ```
 
 API uses `tini` + `SIGTERM`; compose `stop_grace_period` allows in-flight drains.
@@ -206,7 +230,7 @@ CI (`.github/workflows/ci.yml`) builds frontend with commit SHA metadata.
 
 | Symptom | Check |
 |---------|--------|
-| API unhealthy | `docker compose ... logs api`; `/ready` checks; migrations |
+| API never becomes healthy | `docker compose ... logs migrate`; a non-zero migrate exit blocks API startup. Then `/ready` |
 | Jobs stuck queued | Worker logs + Docker socket; cleanup-worker reaper |
 | CORS errors | `CORS_ORIGIN` must match browser origin exactly; for local Vite + prod compose set `ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true` |
 | 413 / large body | nginx `client_max_body_size` + `JSON_BODY_LIMIT` |

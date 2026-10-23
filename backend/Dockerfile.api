@@ -1,6 +1,8 @@
 # =========================================================================
 # JudgeX Backend — Production image (API)
-# Multi-stage: install production deps, copy app source, migrate-then-serve.
+# Multi-stage: install production deps, copy app source, serve HTTP.
+# Migrations are a separate one-shot process (`node scripts/migrate.js`),
+# not part of this container's start command.
 # =========================================================================
 
 FROM node:20-alpine AS deps

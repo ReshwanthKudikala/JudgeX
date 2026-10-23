@@ -1,10 +1,11 @@
 # =========================================================================
 # JudgeX — Production Compose Stack
-# Services: nginx, frontend, api (backend), worker, cleanup, postgres, redis
+# Services: nginx, frontend, migrate, api (backend), worker, cleanup, postgres, redis
 #
 # Usage:
 #   cp .env.production.example .env.production   # edit secrets
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# The one-shot `migrate` service must exit 0 before api, workers, or nginx start.
 #
 # Dev-only infra remains in docker-compose.yml.
 # =========================================================================
@@ -64,6 +65,37 @@ services:
       retries: 10
       start_period: 10s
 
+  # One-shot schema update. Same image as the API, different command.
+  # `restart: "no"` so a failed migration stays failed instead of looping.
+  # API replicas do not run this themselves.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
+      args:
+        <<: *build_args
+    image: judgex-api:${APP_VERSION:-latest}
+    container_name: judgex-prod-migrate
+    restart: "no"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-judgex}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-judgex}
+      REDIS_URL: redis://redis:6379
+      DB_REQUIRED: "true"
+      REDIS_REQUIRED: "true"
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN to your public site origin}
+    command: ["node", "scripts/migrate.js"]
+    networks:
+      - judgex
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: ./backend
@@ -91,6 +123,8 @@ services:
     networks:
       - judgex
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -141,6 +175,8 @@ services:
     networks:
       - judgex
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -172,6 +208,8 @@ services:
     networks:
       - judgex
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

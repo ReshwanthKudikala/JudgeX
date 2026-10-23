@@ -867,7 +867,8 @@ Bring up the full app with Compose. The stack consists of:
 |---------|----------------|
 | `nginx` | Edge reverse proxy: SPA + `/api` upstream. Publishes host ports `80` (and optionally `443`). |
 | `frontend` | Multi-stage Vite production build served as static assets (consumed via nginx). |
-| `api` | Express API (`Dockerfile.api`). **No Docker socket.** On start: run SQL migrations, then serve HTTP (`scripts/docker-entrypoint-api.sh`). |
+| `migrate` | One-shot schema update (`node scripts/migrate.js` on the API image). Must exit 0 before the API starts |
+| `api` | Express API (`Dockerfile.api`). **No Docker socket.** Serves HTTP only after `migrate` succeeds (`scripts/docker-entrypoint-api.sh`). |
 | `worker` | Judge worker (`Dockerfile.judge`). Consumes the BullMQ `judge` queue; **only** this service mounts `/var/run/docker.sock` and the sandbox workspace bind. |
 | `cleanup-worker` | Separate process: reaps stuck **`queued`** submissions (re-enqueue safety net). No Docker socket. |
 | `postgres` | Durable source of truth (`judgex_pgdata` volume). |
@@ -894,14 +895,14 @@ cp .env.production.example .env.production   # set secrets
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Compose wires `DATABASE_URL` / `REDIS_URL` to the `postgres` and `redis` services, waits on healthchecks where defined, and starts `api` → workers after dependencies are healthy. Point browsers at the nginx-published HTTP port (default host **80**).
+Compose wires `DATABASE_URL` / `REDIS_URL` to the `postgres` and `redis` services, waits until Postgres is healthy, runs the one-shot `migrate` service to completion, and only then starts `api` and the workers. Point browsers at the nginx-published HTTP port (default host **80**).
 
 ### Operational assumptions (implemented)
 
 What this Compose file actually encodes:
 
 - **API ≠ Docker** — only `worker` mounts the socket and workspace volume.
-- **Migrations before serve** — API container entrypoint runs `node scripts/migrate.js` then `node src/server.js`.
+- **Migrations before serve** — the `migrate` service runs `node scripts/migrate.js` once and must exit 0 before any API replica starts. The API entrypoint does not migrate.
 - **Redis required in this mode** — `REDIS_REQUIRED=true` for API and workers in the prod compose env.
 - **Persistence** — Postgres and Redis data volumes survive container recreation.
 - **Healthchecks** — service-level health probes for postgres, redis, api, frontend, and nginx (as defined in the compose file).

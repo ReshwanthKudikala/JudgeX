@@ -88,4 +88,40 @@ describe('Migration runner against an in-memory-like pg stub', () => {
     const tracked = await listAppliedMigrations(db);
     assert.deepEqual(tracked, ['001_a', '002_b']);
   });
+
+  it('does not record a migration whose SQL fails, and stops the run', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'judgex-mig-fail-'));
+    fs.writeFileSync(path.join(dir, '001_ok.sql'), 'SELECT 1;');
+    fs.writeFileSync(path.join(dir, '002_bad.sql'), 'FAIL;');
+    fs.writeFileSync(path.join(dir, '003_later.sql'), 'SELECT 1;');
+
+    const store = new Set();
+    const calls = [];
+    const db = {
+      async query(text, params) {
+        calls.push(text.trim());
+        if (text.includes('schema_migrations') && text.includes('CREATE TABLE')) {
+          return { rows: [] };
+        }
+        if (text.includes('SELECT id FROM schema_migrations')) {
+          return { rows: [...store].sort().map((id) => ({ id })) };
+        }
+        if (text.startsWith('INSERT INTO schema_migrations')) {
+          store.add(params[0]);
+          return { rows: [] };
+        }
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+          return { rows: [] };
+        }
+        if (text.includes('FAIL')) throw new Error('bad sql');
+        return { rows: [] };
+      },
+    };
+
+    await assert.rejects(() => migrate(db, { migrationsDir: dir }), /bad sql/);
+    assert.deepEqual([...store], ['001_ok']);
+    assert.ok(calls.includes('ROLLBACK'));
+    assert.equal(calls.filter((sql) => sql.includes('003_later')).length, 0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

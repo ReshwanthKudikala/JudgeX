@@ -1,11 +1,8 @@
 #!/bin/sh
-# API container entrypoint: apply SQL migrations, then start the HTTP server.
-# Failures abort the container so orchestrators never route traffic to an
-# un-migrated schema.
+# API container entrypoint: serve HTTP only.
+# Schema changes run once in the Compose `migrate` service. Replicas must not
+# each apply migrations. That service has to exit 0 before this process starts.
 set -eu
-
-echo "[entrypoint] Running database migrations..."
-node scripts/migrate.js
 
 echo "[entrypoint] Starting JudgeX API..."
 exec node src/server.js
