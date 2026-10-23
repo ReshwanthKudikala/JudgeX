@@ -193,24 +193,32 @@ async function assertJobCompleted(submissionId, { timeoutMs = 15000, intervalMs 
   throw new Error(`Timed out waiting for BullMQ job ${submissionId} to complete`);
 }
 
+function e2eRequired() {
+  return process.env.E2E_REQUIRED === 'true' || process.env.E2E_REQUIRED === '1';
+}
+
+function unavailable(reason) {
+  skipReason = reason;
+  available = false;
+  if (e2eRequired()) {
+    throw new Error(`E2E prerequisites unavailable: ${reason}`);
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`[e2e] Skipping — ${skipReason}`);
+}
+
 function registerE2eHooks() {
   before(async () => {
     assertSafeE2eTarget();
 
     if (!(await dockerAvailable())) {
-      skipReason = 'Docker daemon unreachable';
-      available = false;
-      // eslint-disable-next-line no-console
-      console.warn(`[e2e] Skipping — ${skipReason}`);
+      unavailable('Docker daemon unreachable');
       return;
     }
 
     const result = await setupIntegration();
     if (!result.available) {
-      skipReason = result.reason || 'infrastructure unavailable';
-      available = false;
-      // eslint-disable-next-line no-console
-      console.warn(`[e2e] Skipping — ${skipReason}`);
+      unavailable(result.reason || 'infrastructure unavailable');
       return;
     }
 
@@ -224,10 +232,6 @@ function registerE2eHooks() {
       if (err && typeof err.message === 'string' && err.message.startsWith('Refusing e2e')) {
         throw err;
       }
-      skipReason = err.message;
-      available = false;
-      // eslint-disable-next-line no-console
-      console.warn(`[e2e] Skipping — ${skipReason}`);
       try {
         await stopJudgeWorker();
         await closeSubmissionsQueue();
@@ -235,6 +239,7 @@ function registerE2eHooks() {
       } catch {
         /* ignore */
       }
+      unavailable(err.message);
     }
   });
 
@@ -257,7 +262,11 @@ function registerE2eHooks() {
 
   function requireE2e(t) {
     if (!available) {
-      t.skip(`E2E prerequisites unavailable: ${skipReason}`);
+      const message = `E2E prerequisites unavailable: ${skipReason}`;
+      if (e2eRequired()) {
+        throw new Error(message);
+      }
+      t.skip(message);
       return false;
     }
     return true;

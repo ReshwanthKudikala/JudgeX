@@ -149,9 +149,121 @@ jobs:
           INFRA_STARTUP_RETRY_DELAY_MS: "500"
           RATE_LIMIT_ENABLED: "false"
 
-  # Docker sandbox e2e (`npm run test:e2e`) is not run here: it needs a Docker
-  # daemon, prebuilt judgex-cpp / judgex-python images, and a bind-visible
-  # workspace. Run it locally before a release.
+  backend-e2e:
+    name: Backend (e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: judgex
+          POSTGRES_PASSWORD: judgex
+          POSTGRES_DB: judgex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U judgex -d judgex_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        working-directory: backend
+        run: npm ci
+
+      # Host Docker on the GitHub runner. The job does not use production
+      # Compose, production env files, or a privileged sidecar.
+      - name: Check Docker daemon
+        run: docker info
+
+      - name: Build sandbox images
+        run: |
+          docker build -t judgex-python:latest docker/images/python
+          docker build -t judgex-cpp:latest docker/images/cpp
+
+      - name: Verify isolated test database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://judgex:judgex@localhost:5432/judgex_test
+          REDIS_URL: redis://127.0.0.1:6379/15
+        run: |
+          node <<'EOF'
+          const { Client } = require('pg');
+          const Redis = require('ioredis');
+
+          async function main() {
+            const client = new Client({ connectionString: process.env.DATABASE_URL });
+            await client.connect();
+            const result = await client.query('SELECT current_database() AS name');
+            const name = result.rows[0] && result.rows[0].name;
+            await client.end();
+            if (name !== 'judgex_test') {
+              throw new Error(`Refusing e2e: connected database is ${name}`);
+            }
+
+            const redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1 });
+            const pong = await redis.ping();
+            const db = Number(redis.options.db);
+            await redis.quit();
+            if (pong !== 'PONG' || db !== 15) {
+              throw new Error(`Refusing e2e: Redis ping=${pong} db=${db}`);
+            }
+            console.log('current_database=judgex_test redis_db=15');
+          }
+
+          main().catch((err) => {
+            console.error(err && err.message ? err.message : err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: End-to-end judge tests
+        working-directory: backend
+        run: npm run test:e2e
+        env:
+          E2E_REQUIRED: "true"
+          E2E_TEST_TIMEOUT_MS: "120000"
+          NODE_ENV: test
+          JWT_SECRET: ci-e2e-secret-change-me-32chars!!
+          LOG_LEVEL: error
+          DATABASE_URL: postgres://judgex:judgex@localhost:5432/judgex_test
+          REDIS_URL: redis://127.0.0.1:6379/15
+          DB_REQUIRED: "true"
+          REDIS_REQUIRED: "true"
+          BCRYPT_SALT_ROUNDS: "4"
+          INFRA_STARTUP_RETRIES: "10"
+          INFRA_STARTUP_RETRY_DELAY_MS: "500"
+          RATE_LIMIT_ENABLED: "false"
+
+      - name: Remove leftover sandboxes
+        if: always()
+        run: |
+          set -euo pipefail
+          mapfile -t ids < <(docker ps -aq --filter label=judgex.sandbox=true)
+          if ((${#ids[@]})); then
+            docker rm -f "${ids[@]}"
+          fi
+          find "${TMPDIR:-/tmp}" /tmp -maxdepth 1 -name 'judgex-*' -exec rm -rf {} +
 
   backend-audit:
     name: Backend (npm audit)

@@ -1153,7 +1153,7 @@ Supertest against `createApp()` with real Postgres (`tests/integration/helpers/`
 
 Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (compile output), **RE**, **TLE**, **MLE** (`memory_limit_exceeded` when a run is OOM-killed under the problem memory cap). **C++** verdicts: **AC** and **CE**. **Run** asserts a public sample succeeds and does not create a submission.
 
-**Prerequisites:** Docker daemon; ability to use/build `judgex-python` / `judgex-cpp` images (`e2e/helpers/harness.js` can build missing images). Redis **required** (`e2e/bootstrap.js`). If Docker/infra is unavailable, the harness **skips** rather than failing the suite as a hard red locally without Docker.
+**Prerequisites:** Docker daemon; ability to use/build `judgex-python` / `judgex-cpp` images (`e2e/helpers/harness.js` can build missing images). Redis **required** (`e2e/bootstrap.js`). Database must be `judgex_test` and Redis must be DB 15; the harness refuses anything else before it truncates. If Docker or infra is unavailable, a local run **skips**. CI sets `E2E_REQUIRED=true`, so the same gap fails the Backend (e2e) job.
 
 **Does not prove:** the cleanup-worker process, or sandbox flag proofs (network-off etc. are config/adapter concerns, not asserted by exec probes in this suite).
 
@@ -1165,9 +1165,10 @@ Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (co
 | Backend lint | `npm run lint` (syntax) | dependency-cruiser / full ESLint ecosystem |
 | Backend unit | `npm run test:unit` | — |
 | Backend integration | `npm test` + Postgres 17 + Redis 7 services | E2E, benchmarks |
+| Backend e2e | `npm run test:e2e` on the host Docker daemon, with `judgex_test`, Redis DB 15, and images `judgex-python` / `judgex-cpp` | Benchmarks, cleanup-worker process, production Compose |
 | Backend / Frontend audit | `npm audit --omit=dev --audit-level=high` (`continue-on-error`) | Does not fail merge until dependency upgrades are verified |
 
-**Merge-green does not mean the Docker judge still works**—e2e is local/optional relative to CI.
+The Backend (e2e) job is a required check. A skipped suite does not count as success there. Audit jobs still use `continue-on-error`.
 
 ### Frontend / Playwright
 
@@ -1179,7 +1180,7 @@ Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (co
 |------|--------|
 | Auth, RBAC, problem/hidden API boundary, contests, queue persist-before-enqueue | **Strong** via integration |
 | Verdict policy, fail-fast, AI sanitize/prompt routing, reaper edges | **Strong** via unit |
-| Real judge (Python AC/WA/CE/RE/TLE) | **Good locally** when Docker e2e runs; **absent from CI** |
+| Real judge (Python AC/WA/CE/RE/TLE/MLE, C++ AC/CE) | **Covered** by the Backend (e2e) CI job and by local `npm run test:e2e` |
 | UI regressions | **Weak** (build/lint only) |
 | Production sandbox escape properties | **Not proven by tests** |
 
@@ -1210,7 +1211,7 @@ For contributors: run **unit + integration** before a typical PR; run **e2e** wh
 - Core online-judge loop shipped: auth, problems, **Run Code**, **Submit**, contests, discussions, editorials, dashboard, leaderboard, admin.
 - Judge path: **judge worker** + shared **ExecutionService** + Docker sandboxes (`judgex-cpp` / `judgex-python`); **cleanup worker** reaps stuck `queued` and `running` submissions.
 - AI Coach actions available over `POST /api/v1/ai/coach` with **Ollama**; provider port is abstracted for future backends (OpenAI is not on the coach path today).
-- Self-hosted Compose stacks for development and deployment; CI runs lint, build, unit, and integration (judge **e2e** is local/Docker).
+- Self-hosted Compose stacks for development and deployment. CI runs lint, build, unit, integration, and judge e2e on a GitHub-hosted Docker daemon.
 
 ---
 

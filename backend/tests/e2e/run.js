@@ -17,10 +17,17 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const result = spawnSync(
-  process.execPath,
-  ['--test', '--test-concurrency=1', ...files],
-  { stdio: 'inherit' },
-);
+const args = ['--test', '--test-concurrency=1'];
+const timeoutMs = process.env.E2E_TEST_TIMEOUT_MS;
+if (timeoutMs) {
+  if (!/^[1-9]\d*$/.test(timeoutMs)) {
+    console.error('E2E_TEST_TIMEOUT_MS must be a positive integer');
+    process.exit(1);
+  }
+  args.push(`--test-timeout=${timeoutMs}`);
+}
+args.push(...files);
+
+const result = spawnSync(process.execPath, args, { stdio: 'inherit' });
 
 process.exit(result.status ?? 1);
