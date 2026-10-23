@@ -135,6 +135,69 @@ describe('Queued-submission reaper', () => {
     ), true);
   });
 
+  it('releases a stuck running row with no job and re-enqueues it', async () => {
+    const released = [];
+    const enqueued = [];
+    const svc = new ReaperService({
+      stuckThresholdMs: 60_000,
+      runningStuckThresholdMs: 60_000,
+      batchSize: 50,
+      submissionRepository: {
+        findStuckQueued: async () => [],
+        findStuckRunning: async () => [{ id: ID_A, status: 'running' }],
+        releaseRunningToQueued: async (id) => {
+          released.push(id);
+          return { id, status: 'queued' };
+        },
+      },
+      getJob: async () => null,
+      enqueueSubmission: async (id) => {
+        enqueued.push(id);
+        return { id };
+      },
+      releaseRunningToQueued: async (id) => {
+        released.push(id);
+      },
+    });
+
+    const summary = await svc.sweep();
+    assert.equal(summary.requeued, 1);
+    assert.deepEqual(released, [ID_A]);
+    assert.deepEqual(enqueued, [ID_A]);
+  });
+
+  it('finalizes a non-terminal row whose BullMQ job has already exhausted retries', async () => {
+    const finalized = [];
+    const enqueued = [];
+    const svc = new ReaperService({
+      stuckThresholdMs: 60_000,
+      runningStuckThresholdMs: 60_000,
+      batchSize: 50,
+      submissionRepository: {
+        findStuckQueued: async () => [],
+        findStuckRunning: async () => [{ id: ID_A, status: 'running' }],
+      },
+      getJob: async () => ({
+        id: ID_A,
+        getState: async () => 'failed',
+      }),
+      enqueueSubmission: async (id) => {
+        enqueued.push(id);
+        return { id };
+      },
+      failSubmissionInternal: async (id, opts) => {
+        finalized.push({ id, opts });
+        return { id, status: 'error' };
+      },
+    });
+
+    const summary = await svc.sweep();
+    assert.equal(summary.finalizedError, 1);
+    assert.equal(summary.requeued, 0);
+    assert.equal(enqueued.length, 0);
+    assert.equal(finalized[0].id, ID_A);
+  });
+
   it('never enqueues the same stuck id twice in one sweep when a job appears', async () => {
     const enqueued = [];
     const jobs = new Map();
@@ -166,7 +229,108 @@ describe('Queued-submission reaper', () => {
     const summary = await svc.sweep();
 
     assert.equal(enqueued.length, 1);
+    assert.equal(summary.scanned, 1);
     assert.equal(summary.requeued, 1);
+    assert.equal(summary.alreadyEnqueued, 0);
+  });
+
+  it('requeues a completed BullMQ job once when the row is still running', async () => {
+    const enqueued = [];
+    const removed = [];
+    const released = [];
+    const svc = new ReaperService({
+      stuckThresholdMs: 60_000,
+      runningStuckThresholdMs: 60_000,
+      batchSize: 50,
+      submissionRepository: {
+        findStuckQueued: async () => [],
+        findStuckRunning: async () => [{ id: ID_A, status: 'running' }],
+      },
+      getJob: async () => ({
+        id: ID_A,
+        getState: async () => 'completed',
+        remove: async () => {
+          removed.push(ID_A);
+        },
+      }),
+      enqueueSubmission: async (id) => {
+        enqueued.push(id);
+        return { id };
+      },
+      releaseRunningToQueued: async (id) => {
+        released.push(id);
+      },
+      noteCompletedRecovery: async () => 1,
+    });
+
+    const summary = await svc.sweep();
+    assert.equal(summary.requeued, 1);
+    assert.equal(summary.finalizedError, 0);
+    assert.deepEqual(removed, [ID_A]);
+    assert.deepEqual(released, [ID_A]);
+    assert.deepEqual(enqueued, [ID_A]);
+  });
+
+  it('does not requeue a completed job a second time and does not enqueue', async () => {
+    const enqueued = [];
+    const finalized = [];
+    const svc = new ReaperService({
+      stuckThresholdMs: 60_000,
+      runningStuckThresholdMs: 60_000,
+      batchSize: 50,
+      submissionRepository: {
+        findStuckQueued: async () => [],
+        findStuckRunning: async () => [{ id: ID_A, status: 'running' }],
+      },
+      getJob: async () => ({
+        id: ID_A,
+        getState: async () => 'completed',
+        remove: async () => {
+          throw new Error('remove must not run after the recovery cap');
+        },
+      }),
+      enqueueSubmission: async (id) => {
+        enqueued.push(id);
+      },
+      noteCompletedRecovery: async () => 2,
+      failSubmissionInternal: async (id) => {
+        finalized.push(id);
+      },
+    });
+
+    const summary = await svc.sweep();
+    assert.equal(summary.finalizedError, 1);
+    assert.equal(summary.requeued, 0);
+    assert.equal(enqueued.length, 0);
+    assert.deepEqual(finalized, [ID_A]);
+  });
+
+  it('leaves a completed job alone when the row status is unknown', async () => {
+    const enqueued = [];
+    const svc = new ReaperService({
+      stuckThresholdMs: 60_000,
+      batchSize: 50,
+      submissionRepository: {
+        findStuckQueued: async () => [{ id: ID_A, status: 'completed' }],
+        findStuckRunning: async () => [],
+      },
+      getJob: async () => ({
+        id: ID_A,
+        getState: async () => 'completed',
+        remove: async () => {
+          throw new Error('remove must not run');
+        },
+      }),
+      enqueueSubmission: async (id) => {
+        enqueued.push(id);
+      },
+      noteCompletedRecovery: async () => {
+        throw new Error('counter must not run');
+      },
+    });
+
+    const summary = await svc.sweep();
     assert.equal(summary.alreadyEnqueued, 1);
+    assert.equal(enqueued.length, 0);
   });
 });

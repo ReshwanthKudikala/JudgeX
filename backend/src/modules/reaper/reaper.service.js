@@ -12,7 +12,13 @@ const { logger } = require('../../shared/logger/logger');
 const { QueueError } = require('../../shared/errors/domain-errors');
 const { enqueueSubmission } = require('../../infrastructure/queue/queue.service');
 const { getSubmissionsQueue } = require('../../infrastructure/queue/queues');
+const { getRedis } = require('../../infrastructure/cache/redis.cache');
 const { submissionRepository } = require('../submissions/submissions.repository');
+const { submissionService } = require('../submissions/submissions.service');
+
+/** One automatic requeue of a completed-but-unfinalized job, then a terminal error. */
+const COMPLETED_RECOVERY_MAX = 1;
+const COMPLETED_RECOVERY_TTL_SEC = 24 * 60 * 60;
 
 /** BullMQ states that mean a job for this submission is already in flight. */
 const ACTIVE_JOB_STATES = new Set([
@@ -53,7 +59,11 @@ class ReaperService {
     submissionRepository: repo,
     enqueueSubmission: enqueueFn,
     getJob,
+    failSubmissionInternal,
+    releaseRunningToQueued,
+    noteCompletedRecovery,
     stuckThresholdMs,
+    runningStuckThresholdMs,
     batchSize,
   } = {}) {
     this.submissionRepository = repo || submissionRepository;
@@ -64,7 +74,18 @@ class ReaperService {
         const queue = getSubmissionsQueue();
         return queue.getJob(submissionId);
       });
+    this.failSubmissionInternal =
+      failSubmissionInternal ||
+      ((id, opts) => submissionService.failSubmissionInternal(id, opts));
+    this.releaseRunningToQueued =
+      releaseRunningToQueued ||
+      ((id) => this.submissionRepository.releaseRunningToQueued(id));
+    this.noteCompletedRecovery = noteCompletedRecovery || noteCompletedRecoveryDefault;
     this.stuckThresholdMs = stuckThresholdMs ?? config.reaper.stuckThresholdMs;
+    this.runningStuckThresholdMs =
+      runningStuckThresholdMs ??
+      config.reaper.runningStuckThresholdMs ??
+      this.stuckThresholdMs;
     this.batchSize = batchSize ?? config.reaper.batchSize;
   }
 
@@ -80,25 +101,45 @@ class ReaperService {
    * }>}
    */
   async sweep() {
-    const olderThan = new Date(Date.now() - this.stuckThresholdMs);
-    const rows = await this.submissionRepository.findStuckQueued({
-      olderThan,
+    const queuedOlderThan = new Date(Date.now() - this.stuckThresholdMs);
+    const runningOlderThan = new Date(Date.now() - this.runningStuckThresholdMs);
+
+    const queued = await this.submissionRepository.findStuckQueued({
+      olderThan: queuedOlderThan,
       limit: this.batchSize,
     });
+    const findRunning = this.submissionRepository.findStuckRunning;
+    const running =
+      typeof findRunning === 'function'
+        ? await findRunning.call(this.submissionRepository, {
+            olderThan: runningOlderThan,
+            limit: this.batchSize,
+          })
+        : [];
+
+    const seen = new Set();
+    const rows = [];
+    for (const row of [...queued, ...running]) {
+      if (!row || seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
+    }
 
     const summary = {
       scanned: rows.length,
       requeued: 0,
       alreadyEnqueued: 0,
+      finalizedError: 0,
       failed: 0,
       redisUnavailable: false,
     };
 
     for (const row of rows) {
       // eslint-disable-next-line no-await-in-loop -- sequential to avoid stampeding Redis
-      const outcome = await this.#reenqueueOne(row.id);
+      const outcome = await this.#reenqueueOne(row);
       if (outcome === 'requeued') summary.requeued += 1;
       else if (outcome === 'already_enqueued') summary.alreadyEnqueued += 1;
+      else if (outcome === 'finalized_error') summary.finalizedError += 1;
       else if (outcome === 'redis_unavailable') {
         summary.failed += 1;
         summary.redisUnavailable = true;
@@ -118,18 +159,44 @@ class ReaperService {
   }
 
   /**
-   * @param {string} submissionId
-   * @returns {Promise<'requeued'|'already_enqueued'|'redis_unavailable'|'failed'>}
+   * @param {{ id: string, status?: string }} row
+   * @returns {Promise<'requeued'|'already_enqueued'|'finalized_error'|'redis_unavailable'|'failed'>}
    */
-  async #reenqueueOne(submissionId) {
+  async #reenqueueOne(row) {
+    const submissionId = typeof row === 'string' ? row : row.id;
+    const status = typeof row === 'string' ? undefined : row.status;
+
     try {
       const existing = await this.getJob(submissionId);
       if (existing) {
         const state = await existing.getState();
-        if (ACTIVE_JOB_STATES.has(state) || state === 'completed' || state === 'failed') {
-          // Job id is reserved — do not add again (JUDGE_PIPELINE.md §7).
+        if (ACTIVE_JOB_STATES.has(state)) {
           return 'already_enqueued';
         }
+        if (state === 'completed') {
+          return await this.#recoverCompletedWithoutVerdict(submissionId, status, existing);
+        }
+        if (state === 'failed') {
+          // Retries exhausted in Redis; the row may still be non-terminal if
+          // the worker died after the last throw. Persist a final error rather
+          // than looping forever.
+          try {
+            await this.failSubmissionInternal(submissionId, {
+              message: 'Judge job exhausted retries.',
+            });
+          } catch (err) {
+            logger.warn('Reaper could not finalize exhausted job', {
+              submissionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return 'failed';
+          }
+          return 'finalized_error';
+        }
+      }
+
+      if (status === 'running' && typeof this.releaseRunningToQueued === 'function') {
+        await this.releaseRunningToQueued(submissionId);
       }
 
       await this.enqueueSubmission(submissionId);
@@ -153,6 +220,53 @@ class ReaperService {
       return 'failed';
     }
   }
+
+  /**
+   * BullMQ acked the job but Postgres is still queued/running.
+   * Requeue at most once. A second observation writes internal_error via CAS,
+   * which cannot overwrite a real terminal verdict. Unknown status is left alone.
+   *
+   * @param {string} submissionId
+   * @param {string|undefined} status
+   * @param {{ remove?: () => Promise<unknown> }} job
+   */
+  async #recoverCompletedWithoutVerdict(submissionId, status, job) {
+    if (status !== 'queued' && status !== 'running') {
+      return 'already_enqueued';
+    }
+
+    const seen = await this.noteCompletedRecovery(submissionId);
+    if (seen > COMPLETED_RECOVERY_MAX) {
+      await this.failSubmissionInternal(submissionId, {
+        message: 'Judge job completed without a terminal verdict.',
+      });
+      return 'finalized_error';
+    }
+
+    if (job && typeof job.remove === 'function') {
+      await job.remove();
+    }
+    if (status === 'running' && typeof this.releaseRunningToQueued === 'function') {
+      await this.releaseRunningToQueued(submissionId);
+    }
+    await this.enqueueSubmission(submissionId);
+    return 'requeued';
+  }
+}
+
+/**
+ * Count how many times this submission has been recovered from a completed job.
+ * @param {string} submissionId
+ * @returns {Promise<number>}
+ */
+async function noteCompletedRecoveryDefault(submissionId) {
+  const redis = getRedis();
+  const key = `judgex:reaper:completed-recovery:${submissionId}`;
+  const count = await redis.incr(key);
+  if (count === 1) {
+    await redis.expire(key, COMPLETED_RECOVERY_TTL_SEC);
+  }
+  return count;
 }
 
 module.exports = {
@@ -160,5 +274,6 @@ module.exports = {
   reaperService: new ReaperService(),
   isDuplicateJobError,
   ACTIVE_JOB_STATES,
+  COMPLETED_RECOVERY_MAX,
   getLastReaperSweep,
 };
