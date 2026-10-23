@@ -1178,7 +1178,7 @@ Benchmarks (`npm run benchmark:security|load|queue|explain`) are **manual script
 
 Anchors under `backend/tests/unit/` (non-exhaustive but representative of intent):
 
-- **Judge:** `verdict-engine` precedence; `pipeline` fail-fast / continue / compile short-circuit (**mocked** Docker).
+- **Judge:** `comparator` output normalization; `verdict-engine` precedence; `pipeline` fail-fast / continue / compile short-circuit (**mocked** Docker). `sandbox-config` asserts the locked-down `createContainer` options with a mocked Docker client.
 - **Run orchestration:** `code.service` DTO mapping and enqueue-and-wait behavior with **mocked** execution/queue edges.
 - **AI Coach:** action routing, sanitizer (strips hidden-shaped context), PromptBuilder shapes, provider factory, per-action suites (explain/review/hint/WA/optimize/CE) with **mocked** providers—no live Ollama. `npm run eval:coach` is a separate local model check and is not part of `npm test`.
 - **Reaper:** stuck `queued` re-enqueue, duplicate `jobId`, Redis-down stop.
@@ -1210,7 +1210,7 @@ Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (co
 
 **Prerequisites:** Docker daemon; ability to use/build `judgex-python` / `judgex-cpp` images (`e2e/helpers/harness.js` can build missing images). Redis **required** (`e2e/bootstrap.js`). Database must be `judgex_test` and Redis must be DB 15; the harness refuses anything else before it truncates. If Docker or infra is unavailable, a local run **skips**. CI sets `E2E_REQUIRED=true`, so the same gap fails the Backend (e2e) job.
 
-**Does not prove:** the cleanup-worker process, or sandbox flag proofs (network-off etc. are config/adapter concerns, not asserted by exec probes in this suite).
+**Does not prove:** the cleanup-worker process. This suite does include an outbound TCP case that expects the sandbox network to be blocked. HostConfig flags such as capability drops are asserted by the unit sandbox test, not by a second exec probe here.
 
 ### CI matrix (source of truth: `.github/workflows/ci.yml`)
 
