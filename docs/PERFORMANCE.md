@@ -13,7 +13,7 @@ Judge execution logic, security policies, core observability wiring, and deploym
 | Script | npm | Measures |
 |--------|-----|----------|
 | `scripts/benchmark-load.js` | `npm run benchmark:load` | Read API throughput (health, problems, leaderboard, contests) under concurrency |
-| `scripts/benchmark-queue.js` | `npm run benchmark:queue` | Submission **enqueue** rate / latency (requires `AUTH_TOKEN` + problem id/slug) |
+| `scripts/benchmark-queue.js` | `npm run benchmark:queue` | Submission **enqueue** rate / latency (requires `AUTH_TOKEN` + problem id/slug). Body field is `sourceCode` (not `code`). |
 | `scripts/benchmark-security.js` | `npm run benchmark:security` | Auth/health latency smoke |
 | `scripts/explain-hot-queries.js` | `npm run benchmark:explain` | `EXPLAIN` / `EXPLAIN ANALYZE` for hot SQL |
 

@@ -68,7 +68,7 @@ async function main() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${AUTH_TOKEN}`,
           },
-          body: JSON.stringify({ problemId, language: LANGUAGE, code }),
+          body: JSON.stringify({ problemId, language: LANGUAGE, sourceCode: code }),
         });
         latencies.push(performance.now() - t0);
         if (res.status === 201 || res.status === 202) ok += 1;
