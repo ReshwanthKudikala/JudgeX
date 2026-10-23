@@ -20,6 +20,8 @@ const {
   missingRequestedInputs,
   challengesPriorClaim,
 } = require('../../../src/modules/ai/coach-instruction');
+const { selectVerificationCases } = require('../../../src/modules/ai/coach-verify');
+const { numPredictForAction } = require('../../../src/modules/ai/generation-budget');
 const {
   PALINDROME_CPP,
   BROKEN_PALINDROME_CPP,
@@ -300,6 +302,7 @@ describe('Incomplete and failed coach replies', () => {
       numCtx: 8192,
       numPredict: 2048,
       temperature: 0.2,
+      keepAlive: '30m',
       fetchImpl: async (_url, init) => {
         body = JSON.parse(init.body);
         return {
@@ -317,6 +320,7 @@ describe('Incomplete and failed coach replies', () => {
     assert.equal(body.options.num_ctx, 8192);
     assert.equal(body.options.num_predict, 2048);
     assert.equal(body.options.temperature, 0.2);
+    assert.equal(body.keep_alive, '30m');
     assert.equal(body.stream, false);
     assert.equal(completion.truncated, true);
     assert.equal(completion.text, 'partial');
@@ -496,6 +500,155 @@ describe('Coach history wiring', () => {
     assert.match(source, /const code = getSourceCode\(\)/);
     assert.match(source, /prior\.slice\(-4\)/);
     assert.match(source, /history,/);
+    assert.match(source, /askCoachStream/);
+  });
+});
+
+describe('Generation budget and streaming', () => {
+  it('caps review output below the old 2048-token default', () => {
+    assert.equal(numPredictForAction('REVIEW', 2048), 480);
+    assert.equal(numPredictForAction('EXPLAIN_CODE', 2048), 1024);
+    assert.equal(numPredictForAction('HINT', 512), 200);
+    assert.equal(numPredictForAction('REVIEW', 128), 128);
+  });
+
+  it('keeps at most eight verification inputs', () => {
+    const examples = Array.from({ length: 6 }, (_, index) => ({
+      input: String(index),
+      output: 'true',
+    }));
+    const cases = selectVerificationCases({
+      examples,
+      message: 'Check input 10, 121, 12321, and 1221.',
+    });
+    assert.equal(cases.length, 8);
+    assert.deepEqual(
+      cases.map((item) => item.label),
+      ['0', '1', '2', '3', '4', '5', '10', '121'],
+    );
+  });
+
+  it('passes the action cap and keep-alive on a streamed chat', async () => {
+    let body = null;
+    const encoder = new TextEncoder();
+    const provider = createOllamaProvider({
+      baseUrl: 'http://127.0.0.1:9',
+      model: 'qwen2.5-coder:7b',
+      keepAlive: '30m',
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(init.body);
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(`${JSON.stringify({ message: { content: 'Hello' }, done: false })}\n`),
+            );
+            controller.enqueue(
+              encoder.encode(
+                `${JSON.stringify({
+                  message: { content: ' there' },
+                  done: true,
+                  done_reason: 'stop',
+                  prompt_eval_count: 12,
+                  eval_count: 3,
+                  prompt_eval_duration: 2_000_000,
+                  eval_duration: 9_000_000,
+                  load_duration: 0,
+                })}\n`,
+              ),
+            );
+            controller.close();
+          },
+        });
+        return { ok: true, body: stream };
+      },
+    });
+    const events = [];
+    for await (const event of provider.completeStream({
+      system: 's',
+      user: 'u',
+      numPredict: 480,
+    })) {
+      events.push(event);
+    }
+    assert.equal(body.stream, true);
+    assert.equal(body.keep_alive, '30m');
+    assert.equal(body.options.num_predict, 480);
+    assert.equal(events[0].text, 'Hello');
+    assert.equal(events[1].text, ' there');
+    const end = events.at(-1);
+    assert.equal(end.type, 'end');
+    assert.equal(end.text, 'Hello there');
+    assert.equal(end.outputTokens, 3);
+    assert.equal(end.promptEvalMs, 2);
+  });
+
+  it('marks a cancelled stream incomplete and keeps sandbox evidence', async () => {
+    const events = [];
+    const service = new CoachService({
+      provider: {
+        id: 'ollama',
+        model: 'qwen2.5-coder:7b',
+        async *completeStream() {
+          yield { type: 'token', text: 'The code prints true.' };
+          throw new AIError('The coach request was cancelled.');
+        },
+      },
+      problems: {
+        findById: async () => ({
+          id: PROBLEM_ID,
+          title: PALINDROME_PROBLEM.title,
+          statement: PALINDROME_PROBLEM.statement,
+          constraints_text: PALINDROME_PROBLEM.constraints,
+        }),
+      },
+      testCases: {
+        getPublicExamples: async () => [
+          { is_inline: true, input_ref: '10', expected_output_ref: 'false' },
+        ],
+      },
+      verifyExecution: async () => ({
+        status: 'verified',
+        results: [{ label: '10', printed: 'false', expected: 'false' }],
+      }),
+    });
+    await service.coachStream(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: PALINDROME_CPP,
+        action: 'REVIEW',
+        message: 'Review this.',
+      },
+      'user-1',
+      {
+        write(event, data) {
+          events.push({ event, data });
+        },
+      },
+    );
+    assert.equal(events[0].event, 'token');
+    assert.equal(events.at(-1).event, 'done');
+    assert.equal(events.at(-1).data.incomplete, true);
+    assert.match(events.at(-1).data.answer, /cancelled/i);
+    assert.match(events.at(-1).data.answer, /Verified: `10` printed `false`/);
+  });
+
+  it('reports a caller abort before any token as cancelled', async () => {
+    const provider = createOllamaProvider({
+      baseUrl: 'http://127.0.0.1:9',
+      model: 'qwen2.5-coder:7b',
+      fetchImpl: async () => {
+        throw new Error('fetch should not run');
+      },
+    });
+    const signal = AbortSignal.abort();
+    await assert.rejects(
+      () => provider.complete({ system: 's', user: 'u', signal }),
+      (err) => {
+        assert.match(err.message, /cancelled/i);
+        return true;
+      },
+    );
   });
 });
 

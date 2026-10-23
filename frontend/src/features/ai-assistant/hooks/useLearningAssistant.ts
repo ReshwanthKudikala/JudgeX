@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 
-import { askCoach } from '@/api/ai.api';
+import { askCoachStream } from '@/api/ai.api';
 import {
   afterSuccessfulHint,
   resetHintProgress,
@@ -12,7 +11,6 @@ import type {
   CoachLastRequest,
   CoachLastRunResult,
   CoachLastSubmission,
-  CoachRequest,
   CoachReply,
 } from '@/types/ai-assistant';
 import { ApiError } from '@/types';
@@ -94,9 +92,8 @@ export function useLearningAssistant({
   const [activeAction, setActiveAction] = useState<CoachAction | null>(null);
   const lastRequestRef = useRef<CoachLastRequest | null>(null);
 
-  const mutation = useMutation({
-    mutationFn: (input: CoachRequest) => askCoach(input),
-  });
+  const [streaming, setStreaming] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setMessages([]);
@@ -104,17 +101,17 @@ export function useLearningAssistant({
     setLastRequest(null);
     lastRequestRef.current = null;
     setActiveAction(null);
-    mutation.reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on problem change
+    streamAbortRef.current?.abort();
   }, [problemId]);
 
   const clear = useCallback(() => {
+    streamAbortRef.current?.abort();
     setMessages([]);
     setLastRequest(null);
     lastRequestRef.current = null;
     setActiveAction(null);
-    mutation.reset();
-  }, [mutation]);
+    setStreaming(false);
+  }, []);
 
   const ask = useCallback(
     async (params: {
@@ -210,30 +207,83 @@ export function useLearningAssistant({
         content: turn.content.slice(0, 1500),
       }));
 
+      const assistantId = newId();
+      let sawToken = false;
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
+      setStreaming(true);
       try {
-        const reply: CoachReply = await mutation.mutateAsync({
-          problemId,
-          language,
-          code,
-          action: params.action,
-          message: params.message || params.label,
-          history,
-          hintLevel: params.hintLevel ?? null,
-          lastRunResult: getLastRunResult?.() ?? null,
-          lastSubmission: getLastSubmission?.() ?? null,
-        });
+        const done = await askCoachStream(
+          {
+            problemId,
+            language,
+            code,
+            action: params.action,
+            message: params.message || params.label,
+            history,
+            hintLevel: params.hintLevel ?? null,
+            lastRunResult: getLastRunResult?.() ?? null,
+            lastSubmission: getLastSubmission?.() ?? null,
+          },
+          {
+            onToken(text) {
+              if (!sawToken) {
+                sawToken = true;
+                const assistantMsg: AiConversationMessage = {
+                  id: assistantId,
+                  role: 'assistant',
+                  content: text,
+                  hintLevel: params.hintLevel ?? null,
+                  action: params.action,
+                  wasBlocked: false,
+                  createdAt: new Date().toISOString(),
+                };
+                setMessages((prev) => [...prev, assistantMsg]);
+                return;
+              }
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantId ? { ...msg, content: msg.content + text } : msg,
+                ),
+              );
+            },
+            onDone(payload) {
+              setMessages((prev) => {
+                const next = prev.some((msg) => msg.id === assistantId)
+                  ? prev.map((msg) =>
+                      msg.id === assistantId ? { ...msg, content: payload.answer } : msg,
+                    )
+                  : [
+                      ...prev,
+                      {
+                        id: assistantId,
+                        role: 'assistant' as const,
+                        content: payload.answer,
+                        hintLevel: params.hintLevel ?? null,
+                        action: params.action,
+                        wasBlocked: false,
+                        createdAt: new Date().toISOString(),
+                      },
+                    ];
+                return next;
+              });
+            },
+          },
+          controller.signal,
+        );
 
-        const assistantMsg: AiConversationMessage = {
-          id: newId(),
-          role: 'assistant',
-          content: reply.answer,
-          summary: undefined,
-          hintLevel: reply.hintLevel ?? params.hintLevel ?? null,
-          action: params.action,
-          wasBlocked: false,
-          createdAt: new Date().toISOString(),
+        const reply: CoachReply = {
+          answer: done.answer,
+          provider: done.provider || 'ollama',
+          model: done.model || '',
+          tokensUsed:
+            typeof done.outputTokens === 'number' && typeof done.promptTokens === 'number'
+              ? done.outputTokens + done.promptTokens
+              : null,
+          durationMs: done.durationMs ?? 0,
+          format: 'markdown',
+          hintLevel: params.hintLevel ?? null,
         };
-        setMessages((prev) => [...prev, assistantMsg]);
 
         if (params.action === 'HINT' && params.hintLevel) {
           setHintUnlockedThrough((prev) =>
@@ -243,6 +293,9 @@ export function useLearningAssistant({
 
         return reply;
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return null;
+        }
         const message = mapCoachError(err);
         setMessages((prev) => [
           ...prev,
@@ -257,10 +310,12 @@ export function useLearningAssistant({
         ]);
         throw err;
       } finally {
+        if (streamAbortRef.current === controller) streamAbortRef.current = null;
+        setStreaming(false);
         setActiveAction(null);
       }
     },
-    [mutation, problemId, language, getSourceCode, getLastRunResult, getLastSubmission],
+    [problemId, language, getSourceCode, getLastRunResult, getLastSubmission],
   );
 
   const regenerate = useCallback(async () => {
@@ -297,8 +352,8 @@ export function useLearningAssistant({
     revealEditorialPrompt,
     hintUnlockedThrough,
     activeAction,
-    isLoading: mutation.isPending,
-    error: mutation.error,
+    isLoading: streaming,
+    error: null,
   };
 }
 

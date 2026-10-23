@@ -31,7 +31,9 @@ Never invent hidden tests or private judge data.
 
 ### Required Markdown structure
 
-Respond with Markdown using **exactly** these top-level headings in this order:
+Respond with Markdown using **exactly** these top-level headings in this order.
+Write at most two sentences under each heading. In Edge Cases, if the user listed inputs, use one short line per input instead.
+Do not repeat a Verified execution list; it is shown separately. If that list shows a mismatch, name that input as the defect. If every listed result matches, do not invent a correctness bug.
 
 # Overall Review
 

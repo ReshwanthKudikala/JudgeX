@@ -20,4 +20,12 @@ router.post(
   controller.coach,
 );
 
+router.post(
+  '/coach/stream',
+  authenticate,
+  aiRateLimit,
+  validate(coachRequestSchema),
+  controller.coachStream,
+);
+
 module.exports = { coachRoutes: router };

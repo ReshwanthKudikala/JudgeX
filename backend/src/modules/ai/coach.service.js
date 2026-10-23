@@ -38,6 +38,7 @@ const {
   shouldVerifyExecution,
   verifyCoachExecution,
 } = require('./coach-verify');
+const { numPredictForAction } = require('./generation-budget');
 
 class CoachService {
   /**
@@ -59,8 +60,177 @@ class CoachService {
    */
   async coach(body, _userId) {
     const started = Date.now();
-    this.#assertSizeLimits(body);
+    const prepared = await this.#prepare(body);
+    const { sanitized, hintLevel, verification, built } = prepared;
+    const provider = this.provider || getCoachProvider();
 
+    let completion;
+    try {
+      completion = await provider.complete({
+        system: built.system,
+        user: built.user,
+        timeoutMs: config.ai.timeoutMs,
+        numPredict: numPredictForAction(built.action, config.ai.ollama.numPredict),
+      });
+    } catch (err) {
+      const mapped = mapCoachProviderError(err);
+      if (
+        verification.status === 'verified' ||
+        verification.status === 'compile_error'
+      ) {
+        const note = mapped
+          ? mapped.message
+          : 'The model did not answer. Runtime claims were not checked.';
+        return {
+          answer: appendVerificationFooter(note, verification),
+          provider: provider.id,
+          model: provider.model || config.ai.ollama.model,
+          tokensUsed: null,
+          durationMs: Date.now() - started,
+          format: 'markdown',
+          hintLevel,
+          verification: verification.status,
+        };
+      }
+      if (mapped) {
+        throw new AIError(mapped.message, { code: mapped.code });
+      }
+      throw err;
+    }
+
+    const mapped = mapCoachMarkdownAnswer(completion.text, {
+      action: built.action,
+      hintLevel,
+    });
+    let answer = mapped.answer;
+    if (completion.truncated) {
+      answer = appendTruncationNotice(answer);
+    }
+    const missing = missingRequestedInputs(sanitized.message, answer);
+    if (missing.length > 0) {
+      answer = appendMissingCoverage(answer, missing);
+    }
+    answer = appendVerificationFooter(answer, verification);
+
+    return {
+      answer,
+      verification: verification.status,
+      provider: completion.provider || provider.id,
+      model: completion.model || provider.model || config.ai.ollama.model,
+      tokensUsed:
+        typeof completion.tokensUsed === 'number' ? completion.tokensUsed : null,
+      durationMs: Date.now() - started,
+      format: mapped.format,
+      hintLevel: hintLevel ?? mapped.hintLevel ?? null,
+      loadMs: completion.loadMs ?? null,
+      promptEvalMs: completion.promptEvalMs ?? null,
+      evalMs: completion.evalMs ?? null,
+      promptTokens: completion.promptTokens ?? null,
+      outputTokens: completion.outputTokens ?? null,
+    };
+  }
+
+  /**
+   * Same preparation as coach(), then yield tokens. The done payload includes
+   * sandbox evidence even when generation stops early.
+   * @param {object} body
+   * @param {string} [_userId]
+   * @param {{ write: Function, signal?: AbortSignal }} io
+   */
+  async coachStream(body, _userId, io) {
+    const started = Date.now();
+    const prepared = await this.#prepare(body);
+    const provider = this.provider || getCoachProvider();
+    const numPredict = numPredictForAction(prepared.action, config.ai.ollama.numPredict);
+    let raw = '';
+    let truncated = false;
+    /** @type {object} */
+    let timing = {};
+    try {
+      if (typeof provider.completeStream === 'function') {
+        for await (const event of provider.completeStream({
+          system: prepared.built.system,
+          user: prepared.built.user,
+          timeoutMs: config.ai.timeoutMs,
+          numPredict,
+          signal: io.signal,
+        })) {
+          if (event.type === 'token') {
+            raw += event.text;
+            io.write('token', { text: event.text });
+          } else if (event.type === 'end') {
+            raw = event.text;
+            truncated = Boolean(event.truncated);
+            timing = event;
+          }
+        }
+      } else {
+        const completion = await provider.complete({
+          system: prepared.built.system,
+          user: prepared.built.user,
+          timeoutMs: config.ai.timeoutMs,
+          numPredict,
+          signal: io.signal,
+        });
+        raw = completion.text;
+        truncated = Boolean(completion.truncated);
+        timing = completion;
+        io.write('token', { text: raw });
+      }
+    } catch (err) {
+      const mapped = mapCoachProviderError(err);
+      const note = mapped
+        ? mapped.message
+        : err instanceof Error
+          ? err.message
+          : 'The model did not answer.';
+      const safeNote = /cancelled|timed out|malformed|empty completion|not found|refused|unavailable/i.test(note)
+        ? note
+        : 'The model did not answer.';
+      const partial = raw.trim()
+        ? `${this.#finishAnswer(raw, prepared, false)}\n\n${safeNote}`
+        : appendVerificationFooter(safeNote, prepared.verification);
+      io.write('done', {
+        answer: partial,
+        incomplete: true,
+        verification: prepared.verification.status,
+        durationMs: Date.now() - started,
+        provider: provider.id,
+        model: provider.model || config.ai.ollama.model,
+      });
+      return;
+    }
+
+    const answer = this.#finishAnswer(raw, prepared, truncated);
+    io.write('done', {
+      answer,
+      incomplete: false,
+      verification: prepared.verification.status,
+      durationMs: Date.now() - started,
+      provider: provider.id,
+      model: provider.model || config.ai.ollama.model,
+      loadMs: timing.loadMs ?? null,
+      promptEvalMs: timing.promptEvalMs ?? null,
+      evalMs: timing.evalMs ?? null,
+      promptTokens: timing.promptTokens ?? null,
+      outputTokens: timing.outputTokens ?? null,
+    });
+  }
+
+  #finishAnswer(raw, prepared, truncated) {
+    const mapped = mapCoachMarkdownAnswer(raw, {
+      action: prepared.action,
+      hintLevel: prepared.hintLevel,
+    });
+    let answer = mapped.answer;
+    if (truncated) answer = appendTruncationNotice(answer);
+    const missing = missingRequestedInputs(prepared.sanitized.message, answer);
+    if (missing.length > 0) answer = appendMissingCoverage(answer, missing);
+    return appendVerificationFooter(answer, prepared.verification);
+  }
+
+  async #prepare(body) {
+    this.#assertSizeLimits(body);
     const sanitized = sanitizeCoachContext(body);
     const action = resolveCoachAction(sanitized.action);
 
@@ -132,67 +302,7 @@ class CoachService {
       maxMessageChars: config.ai.maxMessageChars,
       maxStatementChars: config.ai.maxStatementChars,
     });
-
-    const provider = this.provider || getCoachProvider();
-
-    let completion;
-    try {
-      completion = await provider.complete({
-        system: built.system,
-        user: built.user,
-        timeoutMs: config.ai.timeoutMs,
-      });
-    } catch (err) {
-      const mapped = mapCoachProviderError(err);
-      if (
-        verification.status === 'verified' ||
-        verification.status === 'compile_error'
-      ) {
-        const note = mapped
-          ? mapped.message
-          : 'The model did not answer. Runtime claims were not checked.';
-        return {
-          answer: appendVerificationFooter(note, verification),
-          provider: provider.id,
-          model: provider.model || config.ai.ollama.model,
-          tokensUsed: null,
-          durationMs: Date.now() - started,
-          format: 'markdown',
-          hintLevel,
-          verification: verification.status,
-        };
-      }
-      if (mapped) {
-        throw new AIError(mapped.message, { code: mapped.code });
-      }
-      throw err;
-    }
-
-    const mapped = mapCoachMarkdownAnswer(completion.text, {
-      action: built.action,
-      hintLevel,
-    });
-    let answer = mapped.answer;
-    if (completion.truncated) {
-      answer = appendTruncationNotice(answer);
-    }
-    const missing = missingRequestedInputs(sanitized.message, answer);
-    if (missing.length > 0) {
-      answer = appendMissingCoverage(answer, missing);
-    }
-    answer = appendVerificationFooter(answer, verification);
-
-    return {
-      answer,
-      verification: verification.status,
-      provider: completion.provider || provider.id,
-      model: completion.model || provider.model || config.ai.ollama.model,
-      tokensUsed:
-        typeof completion.tokensUsed === 'number' ? completion.tokensUsed : null,
-      durationMs: Date.now() - started,
-      format: mapped.format,
-      hintLevel: hintLevel ?? mapped.hintLevel ?? null,
-    };
+    return { sanitized, action, hintLevel, verification, built };
   }
 
   #assertSizeLimits(body) {

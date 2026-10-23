@@ -6,7 +6,8 @@ You are explaining THEIR solution — not an optimal solution, not an editorial,
 
 ### Required Markdown structure
 
-Respond with Markdown using **exactly** these top-level headings in this order:
+Respond with Markdown using **exactly** these top-level headings in this order.
+Write at most two sentences under each heading.
 
 # Overview
 

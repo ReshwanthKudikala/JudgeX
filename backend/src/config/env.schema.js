@@ -97,9 +97,14 @@ const envSchema = z
     // code or the tail of a multi-part question. 8192 fits a review plus a
     // short follow-up on a 7B local model without requiring a download.
     OLLAMA_NUM_CTX: z.coerce.number().int().min(512).max(32768).default(8192),
-    OLLAMA_NUM_PREDICT: z.coerce.number().int().min(128).max(8192).default(2048),
+    // 2048 let a slow local model keep writing. 1024 covers a measured
+    // explain that stopped at 896 tokens. Reviews use a lower per-action cap.
+    OLLAMA_NUM_PREDICT: z.coerce.number().int().min(32).max(8192).default(1024),
     // Lower than Ollama's 0.8 default so reviews invent fewer unverified bugs.
     OLLAMA_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+    // Ollama unloads the model after 5 minutes by default. A coach session
+    // otherwise pays model-load time on the next question.
+    OLLAMA_KEEP_ALIVE: z.string().default('30m'),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default('gpt-4o-mini'),
     AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

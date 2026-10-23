@@ -87,35 +87,64 @@ function createOllamaProvider(options = {}) {
   const model = options.model || config.ai.ollama.model;
   const defaultTimeoutMs = options.timeoutMs || config.ai.timeoutMs;
   const numCtx = options.numCtx ?? config.ai.ollama.numCtx ?? 8192;
-  const numPredict = options.numPredict ?? config.ai.ollama.numPredict ?? 2048;
+  const defaultNumPredict = options.numPredict ?? config.ai.ollama.numPredict ?? 512;
   const temperature = options.temperature ?? config.ai.ollama.temperature ?? 0.2;
+  const keepAlive = options.keepAlive ?? config.ai.ollama.keepAlive ?? '30m';
   const fetchImpl = options.fetchImpl || fetch;
+
+  function nsToMs(value) {
+    return typeof value === 'number' ? Math.round(value / 1e6) : null;
+  }
+
+  function timingFrom(payload) {
+    return {
+      loadMs: nsToMs(payload?.load_duration),
+      promptEvalMs: nsToMs(payload?.prompt_eval_duration),
+      evalMs: nsToMs(payload?.eval_duration),
+      promptTokens: typeof payload?.prompt_eval_count === 'number' ? payload.prompt_eval_count : null,
+      outputTokens: typeof payload?.eval_count === 'number' ? payload.eval_count : null,
+    };
+  }
+
+  function chatBody({ system, user, numPredict, stream }) {
+    return {
+      model,
+      stream,
+      keep_alive: keepAlive,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      options: {
+        num_ctx: numCtx,
+        num_predict: numPredict ?? defaultNumPredict,
+        temperature,
+      },
+    };
+  }
 
   /**
    * @param {{ system: string, user: string, timeoutMs?: number }} request
    */
-  async function complete({ system, user, timeoutMs = defaultTimeoutMs }) {
+  function cancelled(signal) {
+    return Boolean(signal && signal.aborted);
+  }
+
+  async function complete({ system, user, timeoutMs = defaultTimeoutMs, numPredict, signal }) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = () => controller.abort();
+    if (signal) signal.addEventListener('abort', onAbort);
 
     try {
+      if (cancelled(signal)) {
+        throw new AIError('The coach request was cancelled.');
+      }
       const response = await fetchImpl(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          model,
-          stream: false,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          options: {
-            num_ctx: numCtx,
-            num_predict: numPredict,
-            temperature,
-          },
-        }),
+        body: JSON.stringify(chatBody({ system, user, numPredict, stream: false })),
       });
 
       if (!response.ok) {
@@ -149,9 +178,13 @@ function createOllamaProvider(options = {}) {
         model,
         tokensUsed,
         truncated: payload?.done_reason === 'length',
+        ...timingFrom(payload),
       };
     } catch (err) {
       if (err instanceof AIError) throw err;
+      if (cancelled(signal)) {
+        throw new AIError('The coach request was cancelled.');
+      }
       if (err && err.name === 'AbortError') {
         throw new AIError('Ollama request timed out.');
       }
@@ -163,10 +196,116 @@ function createOllamaProvider(options = {}) {
       });
     } finally {
       clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
     }
   }
 
-  return { id: PROVIDER_ID, model, complete };
+  async function* completeStream({ system, user, timeoutMs = defaultTimeoutMs, numPredict, signal }) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = () => controller.abort();
+    if (signal) signal.addEventListener('abort', onAbort);
+    try {
+      if (cancelled(signal)) {
+        throw new AIError('The coach request was cancelled.');
+      }
+      const response = await fetchImpl(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify(chatBody({ system, user, numPredict, stream: true })),
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new AIError(friendlyOllamaHttpError(response.status, body, model));
+      }
+      if (!response.body || typeof response.body.getReader !== 'function') {
+        throw new AIError('Ollama returned a malformed response.');
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let text = '';
+      let last = null;
+      while (true) {
+        const step = await reader.read();
+        if (step.done) {
+          buffer += decoder.decode();
+          break;
+        }
+        buffer += decoder.decode(step.value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let payload;
+          try {
+            payload = JSON.parse(line);
+          } catch {
+            throw new AIError('Ollama returned a malformed response.');
+          }
+          const piece =
+            payload && payload.message && typeof payload.message.content === 'string'
+              ? payload.message.content
+              : '';
+          if (piece) {
+            text += piece;
+            yield { type: 'token', text: piece };
+          }
+          if (payload && payload.done) last = payload;
+        }
+      }
+      if (buffer.trim()) {
+        let payload;
+        try {
+          payload = JSON.parse(buffer);
+        } catch {
+          throw new AIError('Ollama returned a malformed response.');
+        }
+        const piece =
+          payload && payload.message && typeof payload.message.content === 'string'
+            ? payload.message.content
+            : '';
+        if (piece) {
+          text += piece;
+          yield { type: 'token', text: piece };
+        }
+        if (payload && payload.done) last = payload;
+      }
+      const trimmed = text.trim();
+      if (!trimmed) {
+        throw new AIError('Ollama returned an empty completion.');
+      }
+      const timing = timingFrom(last);
+      yield {
+        type: 'end',
+        text: trimmed,
+        truncated: last?.done_reason === 'length',
+        tokensUsed:
+          typeof timing.outputTokens === 'number' && typeof timing.promptTokens === 'number'
+            ? timing.outputTokens + timing.promptTokens
+            : timing.outputTokens,
+        ...timing,
+      };
+    } catch (err) {
+      if (err instanceof AIError) throw err;
+      if (cancelled(signal)) {
+        throw new AIError('The coach request was cancelled.');
+      }
+      if (err && err.name === 'AbortError') {
+        throw new AIError('Ollama request timed out.');
+      }
+      if (err instanceof SyntaxError) {
+        throw new AIError('Ollama returned a malformed response.');
+      }
+      throw new AIError(friendlyOllamaNetworkError(err));
+    } finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  return { id: PROVIDER_ID, model, complete, completeStream };
 }
 
 module.exports = {
