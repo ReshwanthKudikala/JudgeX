@@ -1151,11 +1151,11 @@ Supertest against `createApp()` with real Postgres (`tests/integration/helpers/`
 
 `judge-verdicts.test.js`: full submit path with real Postgres, Redis, BullMQ worker (`processJob`), and Docker sandboxes.
 
-Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (compile output), **RE**, **TLE**. **Run** asserts a public sample succeeds and does not create a submission.
+Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (compile output), **RE**, **TLE**, **MLE** (`memory_limit_exceeded` when a run is OOM-killed under the problem memory cap). **C++** verdicts: **AC** and **CE**. **Run** asserts a public sample succeeds and does not create a submission.
 
 **Prerequisites:** Docker daemon; ability to use/build `judgex-python` / `judgex-cpp` images (`e2e/helpers/harness.js` can build missing images). Redis **required** (`e2e/bootstrap.js`). If Docker/infra is unavailable, the harness **skips** rather than failing the suite as a hard red locally without Docker.
 
-**Does not prove:** C++ e2e verdicts, MLE e2e, the cleanup-worker process, or sandbox flag proofs (network-off etc. are config/adapter concerns, not asserted by exec probes in this suite).
+**Does not prove:** the cleanup-worker process, or sandbox flag proofs (network-off etc. are config/adapter concerns, not asserted by exec probes in this suite).
 
 ### CI matrix (source of truth: `.github/workflows/ci.yml`)
 

@@ -82,6 +82,41 @@ async function ensureSandboxImages() {
   }
 }
 
+function databaseNameFromUrl(databaseUrl) {
+  const parsed = new URL(databaseUrl);
+  return decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+}
+
+function redisDbFromUrl(redisUrl) {
+  const parsed = new URL(redisUrl);
+  return parsed.pathname.replace(/^\//, '') || '0';
+}
+
+/**
+ * E2E resets Postgres and drains Redis. Refuse any target other than the
+ * isolated test database and Redis DB 15 before those writes happen.
+ */
+function assertSafeE2eTarget() {
+  const databaseUrl = process.env.DATABASE_URL || '';
+  const redisUrl = process.env.REDIS_URL || '';
+  const databaseName = databaseNameFromUrl(databaseUrl);
+  const redisDb = redisDbFromUrl(redisUrl);
+  if (databaseName !== 'judgex_test') {
+    throw new Error(`Refusing e2e against database "${databaseName}"; expected judgex_test`);
+  }
+  if (redisDb !== '15') {
+    throw new Error(`Refusing e2e against Redis DB "${redisDb}"; expected 15`);
+  }
+}
+
+async function assertConnectedTestDatabase() {
+  const { rows } = await query('SELECT current_database() AS name');
+  const name = rows[0] && rows[0].name;
+  if (name !== 'judgex_test') {
+    throw new Error(`Refusing e2e: connected database is "${name}", expected judgex_test`);
+  }
+}
+
 async function drainJudgeQueue() {
   const queue = getSubmissionsQueue();
   await queue.drain(true);
@@ -160,6 +195,8 @@ async function assertJobCompleted(submissionId, { timeoutMs = 15000, intervalMs 
 
 function registerE2eHooks() {
   before(async () => {
+    assertSafeE2eTarget();
+
     if (!(await dockerAvailable())) {
       skipReason = 'Docker daemon unreachable';
       available = false;
@@ -178,11 +215,15 @@ function registerE2eHooks() {
     }
 
     try {
+      await assertConnectedTestDatabase();
       await ensureSandboxImages();
       await drainJudgeQueue();
       await startJudgeWorker();
       available = true;
     } catch (err) {
+      if (err && typeof err.message === 'string' && err.message.startsWith('Refusing e2e')) {
+        throw err;
+      }
       skipReason = err.message;
       available = false;
       // eslint-disable-next-line no-console
@@ -199,6 +240,7 @@ function registerE2eHooks() {
 
   beforeEach(async () => {
     if (available) {
+      await assertConnectedTestDatabase();
       await resetDatabase();
     }
   });

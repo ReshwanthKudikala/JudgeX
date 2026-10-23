@@ -27,13 +27,18 @@ const ECHO_PLUS = String.raw`a, b = map(int, input().split())
 print(a + b)
 `;
 
-async function seedProblemWithCases(adminToken, { slug, timeLimitMs = 2000, cases }) {
+async function seedProblemWithCases(adminToken, {
+  slug,
+  timeLimitMs = 2000,
+  memoryLimitMb = 256,
+  cases,
+}) {
   const { res: problemRes } = await createPublishedProblem(adminToken, {
     slug,
     title: 'A + B',
     statement: 'Print the sum of two integers.',
     timeLimitMs,
-    memoryLimitMb: 256,
+    memoryLimitMb,
   });
   assert.equal(problemRes.status, 201, JSON.stringify(problemRes.body));
   const problemId = problemRes.body.data.id;
@@ -53,7 +58,13 @@ async function seedProblemWithCases(adminToken, { slug, timeLimitMs = 2000, case
   return problemId;
 }
 
-async function submitAndJudge({ accessToken, problemId, language, sourceCode }) {
+async function submitAndJudge({
+  accessToken,
+  problemId,
+  language,
+  sourceCode,
+  timeoutMs,
+}) {
   const submit = await api()
     .post('/api/v1/submissions')
     .set('Authorization', `Bearer ${accessToken}`)
@@ -63,10 +74,26 @@ async function submitAndJudge({ accessToken, problemId, language, sourceCode }) 
   assert.equal(submit.body.data.status, 'queued');
   const submissionId = submit.body.data.id;
 
-  const row = await waitForTerminalSubmission(submissionId);
+  const row = await waitForTerminalSubmission(
+    submissionId,
+    timeoutMs ? { timeoutMs } : {},
+  );
   const queue = await assertJobCompleted(submissionId);
   return { submissionId, row, queue };
 }
+
+const CPP_ECHO_PLUS = `#include <iostream>
+int main() {
+  long long a = 0, b = 0;
+  std::cin >> a >> b;
+  std::cout << (a + b) << '\\n';
+  return 0;
+}
+`;
+
+// Problem memory cap used by the sandbox. Matches the schema default and
+// JUDGE_MEMORY_LIMIT_MB (256). The program allocates past that cap.
+const PROBLEM_MEMORY_LIMIT_MB = 256;
 
 describe('Judge end-to-end (Docker + queue + worker)', () => {
   it('Accepted: correct Python solution persists accepted + runtime metrics', async (t) => {
@@ -216,6 +243,119 @@ print(a - b)
       `expected runtime_ms >= ${timeLimitMs}, got ${row.runtime_ms}`,
     );
     assert.equal(queue.returnvalue.verdict, 'tle');
+  });
+
+  it('C++ Accepted: valid solution compiles and persists accepted', { timeout: 70_000 }, async (t) => {
+    if (!requireE2e(t)) return;
+
+    const admin = await createAdmin();
+    const user = await createUser();
+    const problemId = await seedProblemWithCases(admin.accessToken, {
+      slug: unique('e2e-cpp-ac'),
+      cases: [
+        { input: '1 2\n', expectedOutput: '3\n' },
+        { input: '10 20\n', expectedOutput: '30\n', isHidden: true },
+      ],
+    });
+
+    const { row, queue } = await submitAndJudge({
+      accessToken: user.accessToken,
+      problemId,
+      language: 'cpp',
+      sourceCode: CPP_ECHO_PLUS,
+      timeoutMs: 60_000,
+    });
+
+    assert.equal(row.status, 'completed');
+    assert.equal(row.verdict, 'accepted');
+    assert.equal(row.failed_test_index, null);
+    assert.equal(row.compile_output, null);
+    assert.equal(typeof row.runtime_ms, 'number');
+    assert.ok(row.runtime_ms >= 0);
+    assert.ok(row.judged_at);
+    assert.equal(queue.returnvalue.verdict, 'accepted');
+
+    const { rows: caseRows } = await query(
+      `SELECT test_index, status
+         FROM submission_test_results
+        WHERE submission_id = $1
+        ORDER BY test_index`,
+      [row.id],
+    );
+    assert.equal(caseRows.length, 2);
+    assert.equal(caseRows[0].status, 'accepted');
+    assert.equal(caseRows[1].status, 'accepted');
+  });
+
+  it('C++ Compile Error: invalid source persists compile_error + compile_output', { timeout: 70_000 }, async (t) => {
+    if (!requireE2e(t)) return;
+
+    const admin = await createAdmin();
+    const user = await createUser();
+    const problemId = await seedProblemWithCases(admin.accessToken, {
+      slug: unique('e2e-cpp-ce'),
+      cases: [{ input: '1 2\n', expectedOutput: '3\n' }],
+    });
+
+    const { row, queue } = await submitAndJudge({
+      accessToken: user.accessToken,
+      problemId,
+      language: 'cpp',
+      sourceCode: 'int main( {\n',
+      timeoutMs: 60_000,
+    });
+
+    assert.equal(row.status, 'completed');
+    assert.equal(row.verdict, 'compile_error');
+    assert.equal(row.failed_test_index, null);
+    assert.ok(row.compile_output && row.compile_output.length > 0);
+    assert.equal(row.runtime_ms, null);
+    assert.equal(queue.returnvalue.verdict, 'compile_error');
+  });
+
+  it('Memory Limit Exceeded: allocation past the problem cap persists memory_limit_exceeded', { timeout: 50_000 }, async (t) => {
+    if (!requireE2e(t)) return;
+
+    const admin = await createAdmin();
+    const user = await createUser();
+    const problemId = await seedProblemWithCases(admin.accessToken, {
+      slug: unique('e2e-mle'),
+      timeLimitMs: 10_000,
+      memoryLimitMb: PROBLEM_MEMORY_LIMIT_MB,
+      cases: [{ input: '\n', expectedOutput: '0\n' }],
+    });
+
+    const { row, queue } = await submitAndJudge({
+      accessToken: user.accessToken,
+      problemId,
+      language: 'python',
+      sourceCode: `blocks = []
+need = 400 * 1024 * 1024
+size = 8 * 1024 * 1024
+while need > 0:
+    block = bytearray(size)
+    block[-1] = 1
+    blocks.append(block)
+    need -= size
+print(len(blocks))
+`,
+      timeoutMs: 40_000,
+    });
+
+    assert.equal(row.status, 'completed');
+    assert.equal(row.verdict, 'memory_limit_exceeded');
+    assert.equal(row.failed_test_index, 0);
+    assert.equal(queue.returnvalue.verdict, 'memory_limit_exceeded');
+
+    const { rows: caseRows } = await query(
+      `SELECT test_index, status
+         FROM submission_test_results
+        WHERE submission_id = $1
+        ORDER BY test_index`,
+      [row.id],
+    );
+    assert.equal(caseRows.length, 1);
+    assert.equal(caseRows[0].status, 'memory_limit_exceeded');
   });
 
   it('Run: public sample passes and does not create a submission', async (t) => {
