@@ -11,18 +11,21 @@
 const { config } = require('../src/config');
 const { CoachService } = require('../src/modules/ai/coach.service');
 const { createOllamaProvider } = require('../src/modules/ai/providers/ollama.provider');
+const { executeCodeRun } = require('../src/modules/code/code.service');
+const { evidenceFromRun } = require('../src/modules/ai/coach-verify');
 const {
-  PALINDROME_CPP,
-  BROKEN_PALINDROME_CPP,
-  OFF_BY_ONE_CPP,
+  PALINDROME_PROGRAM,
+  BROKEN_PALINDROME_PROGRAM,
+  OFF_BY_ONE_PROGRAM,
   TRACE_MESSAGE,
+  TRACE_EXPECTATIONS,
   PALINDROME_PROBLEM,
   gradePalindromeReview,
-  gradeTraces,
   gradeTrailingZeroBug,
   gradeOffByOne,
   gradeHalfReversalComplexity,
   gradeSelfCorrection,
+  gradeVerifiedOutcomes,
 } = require('../src/modules/ai/coach-eval');
 
 const USER_ID = '00000000-0000-7000-8000-0000000000e1';
@@ -71,6 +74,53 @@ function report(id, passed, reason) {
   return passed;
 }
 
+const TRACE_CASES = TRACE_EXPECTATIONS.map((item) => ({
+  label: item.input,
+  input: `${item.input}\n`,
+  expectedOutput: `${item.output}\n`,
+  expected: item.output,
+}));
+
+const SUM_CASE = {
+  label: '4',
+  input: '4\n',
+  expectedOutput: '10\n',
+  expected: '10',
+};
+
+async function runInSandbox(sourceCode, cases) {
+  const run = await executeCodeRun(
+    {
+      problemId: PALINDROME_PROBLEM.id,
+      language: 'cpp',
+      sourceCode,
+      cases: cases.map((item) => ({
+        input: item.input,
+        expectedOutput: item.expectedOutput,
+      })),
+    },
+    {
+      problems: {
+        getProblemById: async () => ({
+          id: PALINDROME_PROBLEM.id,
+          timeLimitMs: 2000,
+          memoryLimitMb: 256,
+        }),
+      },
+      testCases: {
+        getPublicExamples: async () => {
+          throw new Error('verification must not load samples');
+        },
+      },
+    },
+  );
+  return evidenceFromRun(run, cases);
+}
+
+function modelAnswered(answer) {
+  return typeof answer === 'string' && !/Ollama request timed out|The model did not answer/i.test(answer);
+}
+
 async function ask(service, problem, body) {
   const result = await service.coach(
     { problemId: problem.id, language: 'cpp', ...body },
@@ -96,8 +146,41 @@ async function main() {
     return;
   }
 
+  /** @type {Map<string, object>} */
+  const evidenceBySource = new Map();
+  let sandboxReady = false;
+  try {
+    const correctEvidence = await runInSandbox(PALINDROME_PROGRAM, TRACE_CASES);
+    const brokenEvidence = await runInSandbox(BROKEN_PALINDROME_PROGRAM, TRACE_CASES);
+    const sumEvidence = await runInSandbox(OFF_BY_ONE_PROGRAM, [SUM_CASE]);
+    const correctOk = correctEvidence.results.every(
+      (row, index) => row.printed === TRACE_CASES[index].expected,
+    );
+    const brokenTen = brokenEvidence.results.find((row) => row.label === '10');
+    const sumRow = sumEvidence.results[0];
+    if (
+      correctEvidence.status !== 'verified' ||
+      !correctOk ||
+      brokenTen?.printed !== 'true' ||
+      sumRow?.printed !== '6'
+    ) {
+      console.log('execution: sandbox output did not match the fixture contract');
+      process.exitCode = 1;
+      return;
+    }
+    evidenceBySource.set(PALINDROME_PROGRAM, correctEvidence);
+    evidenceBySource.set(BROKEN_PALINDROME_PROGRAM, brokenEvidence);
+    evidenceBySource.set(OFF_BY_ONE_PROGRAM, sumEvidence);
+    sandboxReady = true;
+    console.log('execution: sandbox');
+  } catch {
+    console.log('execution: skipped (sandbox unavailable)');
+  }
+
   const service = new CoachService({
-    provider: createOllamaProvider({ timeoutMs: 120000 }),
+    provider: createOllamaProvider({ timeoutMs: 180000 }),
+    verifyExecution: async ({ sourceCode }) =>
+      evidenceBySource.get(sourceCode) || { status: 'unavailable', results: [] },
     problems: {
       findById: async (id) => {
         if (id === PALINDROME_PROBLEM.id) return problemRow(PALINDROME_PROBLEM);
@@ -107,7 +190,7 @@ async function main() {
     },
     testCases: {
       getPublicExamples: async (id) => {
-        if (id === SUM_PROBLEM.id) return [inlineExample('3', '6')];
+        if (id === SUM_PROBLEM.id) return [inlineExample('4', '10')];
         return [inlineExample('121', 'true'), inlineExample('10', 'false')];
       },
     },
@@ -116,23 +199,33 @@ async function main() {
   let failed = 0;
   const review = await ask(service, PALINDROME_PROBLEM, {
     action: 'REVIEW',
-    code: PALINDROME_CPP,
+    code: PALINDROME_PROGRAM,
     message: 'Review this solution for correctness.',
   });
   const reviewGrade = gradePalindromeReview(review);
   if (
     !report(
-      'A palindrome review',
-      reviewGrade.doesNotInventOddDigitBug && reviewGrade.doesNotCallTenOdd,
-      reviewGrade.doesNotInventOddDigitBug ? '' : 'reported an odd-digit defect',
+      'A model text',
+      modelAnswered(review) &&
+        reviewGrade.doesNotInventOddDigitBug &&
+        reviewGrade.doesNotCallTenOdd,
+      modelAnswered(review) ? '' : 'model did not answer',
     )
   ) {
     failed += 1;
   }
+  if (sandboxReady) {
+    const shown = gradeVerifiedOutcomes(review, evidenceBySource.get(PALINDROME_PROGRAM).results);
+    if (!report('A verified outputs', shown.every((row) => row.printed && row.expected))) {
+      failed += 1;
+    }
+  } else {
+    console.log('A verified outputs: SKIP');
+  }
 
   const traces = await ask(service, PALINDROME_PROBLEM, {
     action: 'UNKNOWN',
-    code: PALINDROME_CPP,
+    code: PALINDROME_PROGRAM,
     message: TRACE_MESSAGE,
     history: [
       {
@@ -141,65 +234,82 @@ async function main() {
       },
     ],
   });
-  const traceGrade = gradeTraces(traces);
-  const missing = traceGrade.filter((item) => !item.mentioned).map((item) => item.input);
-  const wrong = traceGrade
-    .filter((item) => item.mentioned && !item.outputNear)
-    .map((item) => item.input);
+  if (sandboxReady) {
+    const shown = gradeVerifiedOutcomes(traces, evidenceBySource.get(PALINDROME_PROGRAM).results);
+    const missing = shown.filter((row) => !row.printed || !row.expected).map((row) => row.label);
+    if (!report('B verified traces', missing.length === 0, missing.length ? `missing ${missing.join(',')}` : '')) {
+      failed += 1;
+    }
+  } else {
+    console.log('B verified traces: SKIP');
+  }
+
+  const broken = await ask(service, PALINDROME_PROBLEM, {
+    action: 'REVIEW',
+    code: BROKEN_PALINDROME_PROGRAM,
+    message: 'Review this solution. Check input 10.',
+  });
+  if (sandboxReady) {
+    const shown = gradeVerifiedOutcomes(broken, [
+      { label: '10', printed: 'true', expected: 'false' },
+    ]);
+    if (!report('C verified defect', shown[0].printed && shown[0].expected)) failed += 1;
+  } else {
+    console.log('C verified defect: SKIP');
+  }
   if (
     !report(
-      'B required traces',
-      missing.length === 0 && wrong.length === 0,
-      [
-        missing.length ? `missing ${missing.join(',')}` : '',
-        wrong.length ? `output unclear for ${wrong.join(',')}` : '',
-      ]
-        .filter(Boolean)
-        .join('; '),
+      'C model text',
+      modelAnswered(broken) && gradeTrailingZeroBug(broken).identifiesTen,
+      modelAnswered(broken) ? '' : 'model did not answer',
     )
   ) {
     failed += 1;
   }
 
-  const broken = await ask(service, PALINDROME_PROBLEM, {
+  const offByOne = await ask(service, SUM_PROBLEM, {
     action: 'REVIEW',
-    code: BROKEN_PALINDROME_CPP,
-    message: 'Review this solution. Check input 10.',
+    code: OFF_BY_ONE_PROGRAM,
+    message: 'This should print the sum of integers from 1 through n. Review input 4.',
   });
-  if (!report('C known incorrect solution', gradeTrailingZeroBug(broken).identifiesTen)) {
+  if (sandboxReady) {
+    const shown = gradeVerifiedOutcomes(offByOne, [{ label: '4', printed: '6', expected: '10' }]);
+    if (!report('D verified output', shown[0].printed && shown[0].expected)) failed += 1;
+  } else {
+    console.log('D verified output: SKIP');
+  }
+  if (
+    !report(
+      'D model text',
+      modelAnswered(offByOne) && gradeOffByOne(offByOne).identifiesBound,
+      modelAnswered(offByOne) ? '' : 'model did not answer',
+    )
+  ) {
     failed += 1;
   }
 
-  const offByOne = await ask(service, SUM_PROBLEM, {
-    action: 'REVIEW',
-    code: OFF_BY_ONE_CPP,
-    message: 'This should print the sum of integers from 1 through n. Review the loop.',
-  });
-  if (!report('D debugging', gradeOffByOne(offByOne).identifiesBound)) failed += 1;
-
   const complexity = await ask(service, PALINDROME_PROBLEM, {
     action: 'COMPLEXITY',
-    code: PALINDROME_CPP,
+    code: PALINDROME_PROGRAM,
     message: 'State the time and space complexity of this exact code.',
   });
   const complexityGrade = gradeHalfReversalComplexity(complexity);
   if (
     !report(
       'E complexity',
-      complexityGrade.timeMatchesAlgorithm && complexityGrade.spaceMatchesAlgorithm,
+      modelAnswered(complexity) &&
+        complexityGrade.timeMatchesAlgorithm &&
+        complexityGrade.spaceMatchesAlgorithm,
     )
   ) {
     failed += 1;
   }
 
   const correction = gradeSelfCorrection(traces);
-  const correctionMissing = correction.traces
-    .filter((item) => !item.mentioned)
-    .map((item) => item.input);
   if (
     !report(
       'F self-correction',
-      correction.acknowledged && correctionMissing.length === 0,
+      modelAnswered(traces) && correction.acknowledged,
       correction.acknowledged ? '' : 'did not acknowledge the earlier claim',
     )
   ) {

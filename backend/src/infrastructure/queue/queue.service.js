@@ -73,6 +73,7 @@ async function enqueueSubmission(submissionId, meta = {}) {
  *   language: string,
  *   sourceCode: string,
  *   customInput?: string,
+ *   cases?: Array<{ input: string, expectedOutput?: string|null }>,
  *   requestId?: string,
  * }} payload
  * @param {{ timeoutMs?: number }} [opts]
@@ -92,6 +93,9 @@ async function enqueueRunAndWait(payload, opts = {}) {
   };
   if (payload.customInput !== undefined) {
     data.customInput = payload.customInput;
+  }
+  if (Array.isArray(payload.cases) && payload.cases.length > 0) {
+    data.cases = payload.cases;
   }
   if (payload.requestId) {
     data.requestId = payload.requestId;

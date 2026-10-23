@@ -49,6 +49,30 @@ for (int i = 1; i < n; ++i) {
 }
 cout << sum << "\\n";`;
 
+/**
+ * Complete stdin/stdout programs. The sandbox compiles these as main.cpp.
+ * The fragments above are the same logic, kept for prompt assertions.
+ */
+function wrapPalindrome(body) {
+  return `#include <iostream>
+using namespace std;
+int main() {
+  int x;
+  if (!(cin >> x)) return 0;
+${body}
+}
+`;
+}
+
+const PALINDROME_PROGRAM = wrapPalindrome(PALINDROME_CPP);
+const BROKEN_PALINDROME_PROGRAM = wrapPalindrome(BROKEN_PALINDROME_CPP);
+const OFF_BY_ONE_PROGRAM = `#include <iostream>
+using namespace std;
+int main() {
+${OFF_BY_ONE_CPP}
+}
+`;
+
 const TRACE_MESSAGE =
   'Re-evaluate your earlier review. It was incorrect. Trace these inputs: `10`, `121`, `12321`, `1221`, `0`, and `123`.';
 
@@ -194,10 +218,36 @@ function gradeSelfCorrection(answer) {
   return { acknowledged, traces: gradeTraces(text) };
 }
 
+/**
+ * The visible answer states the sandbox result for every row.
+ * @param {unknown} answer
+ * @param {Array<{ label: string, printed: string, expected?: string|null }>} rows
+ */
+function gradeVerifiedOutcomes(answer, rows) {
+  const text = typeof answer === 'string' ? answer : '';
+  return rows.map((row) => {
+    const label = String(row.label).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const printed = String(row.printed).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const printedOk = new RegExp(
+      `Verified: \`${label}\` printed \`${printed}\``,
+    ).test(text);
+    const expectedOk =
+      row.expected == null ||
+      new RegExp(
+        `Verified: \`${label}\` printed \`${printed}\`; expected \`${String(row.expected).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``,
+      ).test(text);
+    return { label: row.label, printed: printedOk, expected: expectedOk };
+  });
+}
+
 module.exports = {
   PALINDROME_CPP,
   BROKEN_PALINDROME_CPP,
   OFF_BY_ONE_CPP,
+  PALINDROME_PROGRAM,
+  BROKEN_PALINDROME_PROGRAM,
+  OFF_BY_ONE_PROGRAM,
+  gradeVerifiedOutcomes,
   TRACE_MESSAGE,
   TRACE_EXPECTATIONS,
   PALINDROME_PROBLEM,

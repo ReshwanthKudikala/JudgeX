@@ -86,13 +86,29 @@ async function executeCodeRun(input, deps = {}) {
     execute = withExecution,
   } = deps;
 
-  const { problemId, language, sourceCode, customInput } = input;
+  const { problemId, language, sourceCode, customInput, cases: suppliedCases } = input;
   const problem = await problems.getProblemById(problemId);
 
   /** @type {Array<{ input: string, expectedOutput: string|null, compare: boolean }>} */
   let cases;
 
-  if (customInput !== undefined) {
+  if (Array.isArray(suppliedCases) && suppliedCases.length > 0) {
+    if (suppliedCases.length > 8) {
+      throw new ValidationError('A verification run accepts at most 8 inputs.');
+    }
+    cases = suppliedCases.map((item) => {
+      if (!item || typeof item.input !== 'string' || item.input.length > 2000) {
+        throw new ValidationError('A verification input is missing or too large.');
+      }
+      const expected =
+        item.expectedOutput == null ? null : String(item.expectedOutput);
+      return {
+        input: item.input,
+        expectedOutput: expected,
+        compare: expected != null,
+      };
+    });
+  } else if (customInput !== undefined) {
     cases = [
       {
         input: customInput,

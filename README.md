@@ -902,7 +902,7 @@ That command fails if `judgex_test` already exists; leave the existing database 
 4. Raise `AI_TIMEOUT_MS` for local inference if needed (e.g. `120000`).
 5. Optional generation settings, with the defaults already applied when unset: `OLLAMA_NUM_CTX=8192`, `OLLAMA_NUM_PREDICT=2048`, `OLLAMA_TEMPERATURE=0.2`. Ollama's own context default is 2048 tokens, which can drop the submitted code.
 
-`npm run eval:coach` (from `backend/`) runs an opt-in local check of the configured model. It is not part of CI, it does not download a model, and it exits 0 with `model_eval: skipped` when that model is not installed.
+`npm run eval:coach` (from `backend/`) runs an opt-in local check of the configured model. It is not part of CI, it does not download a model, and it exits 0 with `model_eval: skipped` when that model is not installed. When the language sandbox image is available, the same command runs the fixture programs through the existing Run sandbox and checks those outputs. A review can do the same through one Run job: it does not create a submission, and the answer ends with the sandbox result. If that job cannot run, the review says execution was unavailable.
 
 See [`docker/README.md`](docker/README.md) for container details.
 

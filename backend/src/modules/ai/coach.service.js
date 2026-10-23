@@ -32,6 +32,12 @@ const {
   appendTruncationNotice,
   missingRequestedInputs,
 } = require('./coach-instruction');
+const {
+  appendVerificationFooter,
+  selectVerificationCases,
+  shouldVerifyExecution,
+  verifyCoachExecution,
+} = require('./coach-verify');
 
 class CoachService {
   /**
@@ -44,6 +50,7 @@ class CoachService {
     this.provider = deps.provider || null;
     this.problems = deps.problems || problemRepository;
     this.testCases = deps.testCases || testCaseService;
+    this.verifyExecution = deps.verifyExecution || verifyCoachExecution;
   }
 
   /**
@@ -90,6 +97,26 @@ class CoachService {
     }
 
     const problem = await this.#loadPublicProblem(sanitized.problemId);
+    const verificationCases = selectVerificationCases({
+      message: sanitized.message,
+      examples: problem.examples,
+    });
+    let verification = { status: 'skipped', results: [] };
+    if (
+      sanitized.code.trim() &&
+      shouldVerifyExecution(action, verificationCases.length)
+    ) {
+      try {
+        verification = await this.verifyExecution({
+          problemId: sanitized.problemId,
+          language: sanitized.language,
+          sourceCode: sanitized.code,
+          cases: verificationCases,
+        });
+      } catch {
+        verification = { status: 'unavailable', results: [] };
+      }
+    }
     const built = buildCoachPrompt({
       action,
       language: sanitized.language,
@@ -100,6 +127,7 @@ class CoachService {
       problem,
       lastRunResult: sanitized.lastRunResult,
       lastSubmission: sanitized.lastSubmission,
+      verification,
       maxCodeChars: config.ai.maxCodeChars,
       maxMessageChars: config.ai.maxMessageChars,
       maxStatementChars: config.ai.maxStatementChars,
@@ -116,6 +144,24 @@ class CoachService {
       });
     } catch (err) {
       const mapped = mapCoachProviderError(err);
+      if (
+        verification.status === 'verified' ||
+        verification.status === 'compile_error'
+      ) {
+        const note = mapped
+          ? mapped.message
+          : 'The model did not answer. Runtime claims were not checked.';
+        return {
+          answer: appendVerificationFooter(note, verification),
+          provider: provider.id,
+          model: provider.model || config.ai.ollama.model,
+          tokensUsed: null,
+          durationMs: Date.now() - started,
+          format: 'markdown',
+          hintLevel,
+          verification: verification.status,
+        };
+      }
       if (mapped) {
         throw new AIError(mapped.message, { code: mapped.code });
       }
@@ -134,9 +180,11 @@ class CoachService {
     if (missing.length > 0) {
       answer = appendMissingCoverage(answer, missing);
     }
+    answer = appendVerificationFooter(answer, verification);
 
     return {
       answer,
+      verification: verification.status,
       provider: completion.provider || provider.id,
       model: completion.model || provider.model || config.ai.ollama.model,
       tokensUsed:

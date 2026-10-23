@@ -26,6 +26,7 @@ const {
   OFF_BY_ONE_CPP,
   TRACE_MESSAGE,
   PALINDROME_PROBLEM,
+  gradeVerifiedOutcomes,
   gradePalindromeReview,
   gradeTraces,
   gradeTrailingZeroBug,
@@ -191,6 +192,7 @@ describe('Incomplete and failed coach replies', () => {
         }),
       },
       testCases: { getPublicExamples: async () => [] },
+      verifyExecution: async () => ({ status: 'skipped', results: [] }),
     });
     const result = await service.coach(
       {
@@ -318,6 +320,167 @@ describe('Incomplete and failed coach replies', () => {
     assert.equal(body.stream, false);
     assert.equal(completion.truncated, true);
     assert.equal(completion.text, 'partial');
+  });
+});
+
+describe('Verified execution evidence', () => {
+  const traced = [
+    { label: '10', printed: 'false', expected: 'false' },
+    { label: '121', printed: 'true', expected: 'true' },
+    { label: '12321', printed: 'true', expected: 'true' },
+    { label: '1221', printed: 'true', expected: 'true' },
+    { label: '0', printed: 'true', expected: 'true' },
+    { label: '123', printed: 'false', expected: 'false' },
+  ];
+
+  function serviceWith(evidence) {
+    return new CoachService({
+      provider: {
+        complete: async () => ({
+          text: 'This solution correctly identifies 10 as not a palindrome. 121 is not a palindrome.',
+          provider: 'mock',
+          model: 'mock',
+          tokensUsed: 1,
+        }),
+      },
+      problems: {
+        findById: async () => ({
+          id: PROBLEM_ID,
+          title: PALINDROME_PROBLEM.title,
+          statement: PALINDROME_PROBLEM.statement,
+          constraints_text: PALINDROME_PROBLEM.constraints,
+        }),
+      },
+      testCases: {
+        getPublicExamples: async () => [
+          { is_inline: true, input_ref: '121', expected_output_ref: 'true' },
+          { is_inline: true, input_ref: '10', expected_output_ref: 'false' },
+        ],
+      },
+      verifyExecution: async () => {
+        if (evidence instanceof Error) throw evidence;
+        return evidence;
+      },
+    });
+  }
+
+  it('keeps sandbox results when the model text is wrong', async () => {
+    const evidence = { status: 'verified', results: traced };
+    const result = await serviceWith(evidence).coach(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: PALINDROME_CPP,
+        action: 'REVIEW',
+        message: TRACE_MESSAGE,
+      },
+      '00000000-0000-7000-8000-000000000001',
+    );
+    const outcomes = gradeVerifiedOutcomes(result.answer, traced);
+    assert.equal(outcomes.every((row) => row.printed && row.expected), true);
+    assert.match(result.answer, /correctly identifies 10/);
+    assert.equal(result.verification, 'verified');
+  });
+
+  it('shows the broken program printing true for 10', async () => {
+    const broken = traced.map((row) =>
+      row.label === '10' ? { ...row, printed: 'true', expected: 'false' } : row,
+    );
+    const result = await serviceWith({ status: 'verified', results: broken }).coach(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: BROKEN_PALINDROME_CPP,
+        action: 'REVIEW',
+        message: 'Review this solution. Check input 10.',
+      },
+      '00000000-0000-7000-8000-000000000001',
+    );
+    assert.match(result.answer, /Verified: `10` printed `true`; expected `false`/);
+  });
+
+  it('reports an off-by-one output without calling it a style note', async () => {
+    const result = await serviceWith({
+      status: 'verified',
+      results: [{ label: '4', printed: '6', expected: '10' }],
+    }).coach(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: OFF_BY_ONE_CPP,
+        action: 'REVIEW',
+        message: 'Review the loop for input 4.',
+      },
+      '00000000-0000-7000-8000-000000000001',
+    );
+    assert.match(result.answer, /Verified: `4` printed `6`; expected `10`/);
+  });
+
+  it('stays usable when the sandbox is down, times out, or the source does not compile', async () => {
+    const down = await serviceWith(new Error('queue timeout')).coach(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: PALINDROME_CPP,
+        action: 'REVIEW',
+        message: 'Review this solution.',
+      },
+      '00000000-0000-7000-8000-000000000001',
+    );
+    assert.match(down.answer, /Verified execution: unavailable/);
+    assert.doesNotMatch(down.answer, /queue timeout/);
+
+    const compile = await serviceWith({ status: 'compile_error', results: [] }).coach(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: PALINDROME_CPP,
+        action: 'REVIEW',
+        message: 'Review this solution.',
+      },
+      '00000000-0000-7000-8000-000000000001',
+    );
+    assert.match(compile.answer, /did not compile/);
+    assert.equal(compile.verification, 'compile_error');
+  });
+
+  it('keeps sandbox results when the model times out', async () => {
+    const result = await new CoachService({
+      provider: {
+        complete: async () => {
+          throw new Error('Ollama request timed out.');
+        },
+      },
+      problems: {
+        findById: async () => ({
+          id: PROBLEM_ID,
+          title: PALINDROME_PROBLEM.title,
+          statement: PALINDROME_PROBLEM.statement,
+          constraints_text: PALINDROME_PROBLEM.constraints,
+        }),
+      },
+      testCases: {
+        getPublicExamples: async () => [
+          { is_inline: true, input_ref: '10', expected_output_ref: 'false' },
+        ],
+      },
+      verifyExecution: async () => ({
+        status: 'verified',
+        results: [{ label: '10', printed: 'true', expected: 'false', timedOut: false, exitCode: 0 }],
+      }),
+    }).coach(
+      {
+        problemId: PROBLEM_ID,
+        language: 'cpp',
+        code: BROKEN_PALINDROME_CPP,
+        action: 'REVIEW',
+        message: 'Review this solution.',
+      },
+      '00000000-0000-7000-8000-000000000001',
+    );
+    assert.match(result.answer, /timed out/i);
+    assert.match(result.answer, /Verified: `10` printed `true`; expected `false`/);
+    assert.doesNotMatch(result.answer, /super-secret/);
   });
 });
 

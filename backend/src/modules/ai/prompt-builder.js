@@ -14,6 +14,7 @@ const {
   formatRequiredCoverage,
   sanitizeCoachHistory,
 } = require('./coach-instruction');
+const { formatVerificationPrompt } = require('./coach-verify');
 
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 
@@ -131,6 +132,11 @@ function buildCoachPrompt(ctx) {
     action === COACH_ACTIONS.OPTIMIZE
   ) {
     userParts.push(section('Current source code', '(empty — no code provided)'));
+  }
+
+  const verificationText = formatVerificationPrompt(ctx.verification);
+  if (verificationText) {
+    userParts.push(section('Verified execution', verificationText));
   }
 
   if (!codeFocused) {

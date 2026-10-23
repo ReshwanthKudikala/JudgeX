@@ -130,6 +130,7 @@ async function processRunJob(job) {
       language: job.data.language,
       sourceCode: job.data.sourceCode,
       customInput: job.data.customInput,
+      cases: job.data.cases,
     });
     jobLog.info('Run job finished', {
       status: result.status,

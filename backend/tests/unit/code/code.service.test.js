@@ -166,6 +166,56 @@ describe('executeCodeRun (worker path)', () => {
     assert.equal(result.results.length, 2);
     assert.equal(result.status, 'ok');
   });
+
+  it('runs supplied cases once and does not load hidden or public samples', async () => {
+    let loadedSamples = false;
+    const inputs = [];
+    const result = await executeCodeRun(
+      {
+        problemId: '00000000-0000-4000-8000-000000000001',
+        language: 'cpp',
+        sourceCode: 'int main(){return 0;}',
+        cases: [
+          { input: '10\n', expectedOutput: 'false\n' },
+          { input: '121\n', expectedOutput: 'true\n' },
+        ],
+      },
+      {
+        problems: {
+          getProblemById: async () => ({
+            id: 'p1',
+            timeLimitMs: 1000,
+            memoryLimitMb: 256,
+          }),
+        },
+        testCases: {
+          getPublicExamples: async () => {
+            loadedSamples = true;
+            return [];
+          },
+        },
+        execute: async (_opts, worker) =>
+          worker({
+            compileResult: { success: true, stdout: '', stderr: '' },
+            runCase: async (stdin) => {
+              inputs.push(stdin);
+              return {
+                stdout: stdin.startsWith('10') ? 'true\n' : 'true\n',
+                stderr: '',
+                exitCode: 0,
+                timedOut: false,
+                durationMs: 4,
+              };
+            },
+          }),
+      },
+    );
+
+    assert.equal(loadedSamples, false);
+    assert.deepEqual(inputs, ['10\n', '121\n']);
+    assert.equal(result.results[0].passed, false);
+    assert.equal(result.results[1].passed, true);
+  });
 });
 
 describe('CodeService.runCode (API path)', () => {
