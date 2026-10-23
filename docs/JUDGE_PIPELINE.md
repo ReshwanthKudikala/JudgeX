@@ -343,7 +343,7 @@ The judge worker process bind-mounts the **host Docker socket** (`/var/run/docke
 - Sandbox `HostConfig` (no network, cap-drop, PID/memory, read-only rootfs) constrains **user programs**, not the worker.
 - This architecture is accepted for the current Compose deployment. Stronger isolation (rootless Docker, gVisor, Firecracker, a tightly wrapped docker-proxy) is a future hardening step — do **not** unmount the socket while `docker.adapter.js` still needs it.
 
-Workspace directories start at `0770`. When the host allows `chown`, they are owned by uid/gid 1000 with mode `0750`. Cleanup refuses paths outside `JUDGE_WORKSPACE_DIR` or without the `judgex-` prefix.
+Workspace directories start at `0770`. When the host allows `chown`, they are owned by uid/gid 1000 with mode `0750`. When it does not, the directory is mode `0707` so sandbox uid 1000 can read and write the bind mount. Cleanup refuses paths outside `JUDGE_WORKSPACE_DIR` or without the `judgex-` prefix.
 
 ### Filesystem isolation
 

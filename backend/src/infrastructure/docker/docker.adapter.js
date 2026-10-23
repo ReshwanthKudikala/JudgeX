@@ -105,7 +105,8 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
 
   // Private per-job workspace under the shared (daemon-visible) root, then
   // bind-mounted into the sandbox. Owned by the non-root container user
-  // (1000:1000) when the worker can chown; otherwise group-writable 0770.
+  // (1000:1000) when the worker can chown. An unprivileged worker cannot
+  // chown, so the directory must still be usable by uid 1000.
   const workspaceRoot = getWorkspaceRoot();
   await fs.mkdir(workspaceRoot, { recursive: true });
   const hostDir = await fs.mkdtemp(path.join(workspaceRoot, 'judgex-'));
@@ -191,6 +192,8 @@ async function copyFiles(sandbox, files = []) {
     await fs.mkdir(path.dirname(dest), { recursive: true });
     // eslint-disable-next-line no-await-in-loop
     await fs.writeFile(dest, file.content, { mode: file.mode ?? 0o644 });
+    // eslint-disable-next-line no-await-in-loop -- paired with the write above
+    await fs.chmod(dest, file.mode ?? 0o644);
   }
 }
 
@@ -279,7 +282,11 @@ async function executeCommand(sandbox, { cmd, input, timeoutMs, workdir, env } =
   let runCmd = cmd;
   if (hasInput) {
     const stdinName = '.judgex_stdin';
-    await fs.writeFile(path.join(sandbox.hostDir, stdinName), input);
+    const stdinPath = path.join(sandbox.hostDir, stdinName);
+    await fs.writeFile(stdinPath, input);
+    // Exact mode: writeFile applies the process umask, which can hide the
+    // file from the sandbox user when the worker cannot chown the workspace.
+    await fs.chmod(stdinPath, 0o644);
     const redirected = `${cmd.map(shellSingleQuote).join(' ')} < ${shellSingleQuote(
       path.posix.join(sandbox.workdir, stdinName),
     )}`;
@@ -405,20 +412,26 @@ async function cleanup(sandbox) {
   }
 }
 
+const SANDBOX_UID = 1000;
+const SANDBOX_GID = 1000;
+
 /**
- * Restrict a per-job workspace so it is not world-writable.
- * chown to the sandbox uid (1000) when the host allows it (Linux worker);
- * Windows bind mounts typically cannot chown — 0770 is the fallback.
+ * Restrict a per-job workspace so the sandbox user can read and write it.
+ * chown to uid/gid 1000 and mode 0750 when the worker may chown (root).
+ * An unprivileged worker (the GitHub-hosted runner) cannot chown. Mode 0770
+ * is then owned by the runner, and the sandbox user 1000 cannot traverse it,
+ * so `test -f` reports the source file as missing. Mode 0707 lets uid 1000
+ * through. Windows bind mounts typically cannot chown.
  *
  * @param {string} hostDir
  */
 async function restrictWorkspacePermissions(hostDir) {
   await fs.chmod(hostDir, 0o770);
   try {
-    await fs.chown(hostDir, 1000, 1000);
+    await fs.chown(hostDir, SANDBOX_UID, SANDBOX_GID);
     await fs.chmod(hostDir, 0o750);
   } catch {
-    // Expected on Docker Desktop / Windows and when the worker is not root.
+    await fs.chmod(hostDir, 0o707);
   }
 }
 
@@ -488,4 +501,5 @@ module.exports = {
   checkDockerHealth,
   isInsideWorkspaceRoot,
   removeWorkspaceDir,
+  restrictWorkspacePermissions,
 };
