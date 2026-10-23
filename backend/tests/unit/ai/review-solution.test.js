@@ -160,7 +160,8 @@ describe('Review My Solution — prompt creation', () => {
     assert.match(built.system, /Task: REVIEW/);
     assert.match(built.system, /Overall Review/);
     assert.match(built.system, /Final Rating/);
-    assert.match(built.system, /technical interviewer/i);
+    assert.match(built.system, /Speak to the user/);
+    assert.doesNotMatch(built.system, /reviewing a candidate/i);
     assert.match(built.system, /Do NOT rewrite/i);
     assert.match(built.user, /Two Sum/);
     assert.match(built.user, /def twoSum/);
@@ -272,7 +273,9 @@ describe('Review My Solution — mocked provider', () => {
     assert.match(result.answer, /# Overall Review/);
     assert.match(result.answer, /Final Rating/);
     assert.match(result.answer, /⭐/);
-    assert.match(seenSystem, /review\.prompt|Task: REVIEW|technical interviewer/i);
+    assert.match(seenSystem, /Task: REVIEW/);
+    assert.match(seenSystem, /Speak to the user/);
+    assert.doesNotMatch(seenSystem, /reviewing a candidate/i);
     assert.match(seenUser, /twoSum/);
     assert.match(seenUser, /Latest Run result/);
     assert.doesNotMatch(seenUser, /HIDDEN_INPUT/);

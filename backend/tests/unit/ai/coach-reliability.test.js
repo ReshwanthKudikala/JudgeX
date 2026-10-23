@@ -72,7 +72,8 @@ describe('Review prompt construction', () => {
     assert.match(built.system, /Task: REVIEW/);
     assert.match(built.system, /Overall Review/);
     assert.match(built.system, /Final Rating/);
-    assert.match(built.system, /technical interviewer/i);
+    assert.match(built.system, /Speak to the user/);
+    assert.doesNotMatch(built.system, /reviewing a candidate/i);
     assert.match(built.system, /Do NOT rewrite/i);
     assert.match(built.system, /trace the submitted source/i);
     assert.match(built.user, /x != 0 && x % 10 == 0/);

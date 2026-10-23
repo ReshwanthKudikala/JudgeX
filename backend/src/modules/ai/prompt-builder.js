@@ -228,7 +228,7 @@ function buildCoachPrompt(ctx) {
     userParts.push(
       section(
         'Recent conversation',
-        `The Current source code section is the code to judge. Earlier turns are context only and may describe a previous claim about this same editor buffer.\n\n${transcript}`,
+        `The Current source code section is the code to discuss. Earlier turns are context only and may describe a previous claim about this same editor buffer.\n\n${transcript}`,
       ),
     );
   }

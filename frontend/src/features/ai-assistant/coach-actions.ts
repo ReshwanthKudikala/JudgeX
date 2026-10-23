@@ -20,7 +20,7 @@ const EXPLAIN_CODE: CoachQuickAction = {
 const REVIEW: CoachQuickAction = {
   label: 'Review My Solution',
   action: 'REVIEW',
-  message: 'Review my solution like an experienced technical interviewer.',
+  message: 'Review my code and tell me the important issues.',
 };
 
 const OPTIMIZE: CoachQuickAction = {

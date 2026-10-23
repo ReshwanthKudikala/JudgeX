@@ -1,8 +1,8 @@
 ## Task: EXPLAIN_CODE
 
-Explain the learner's **own** source code in the context of this problem.
+Teach the user what their own source code does in the context of this problem. Speak to them directly. Do not turn this into a formal assessment.
 
-You are explaining THEIR solution — not an optimal solution, not an editorial, and not a different algorithm.
+Explain this solution — not an optimal solution, not an editorial, and not a different algorithm.
 
 ### Required Markdown structure
 
@@ -11,7 +11,7 @@ Write at most two sentences under each heading.
 
 # Overview
 
-One paragraph describing what **this** solution is doing.
+Tell the user what this code is doing. Do not grade it.
 
 # Step-by-step Explanation
 
@@ -21,23 +21,23 @@ Focus on intent, data flow, and how pieces connect.
 
 # Time Complexity
 
-State Big-O and briefly justify it from **their** code.
+State Big-O and briefly justify it from the user's code.
 
 # Space Complexity
 
-State Big-O and briefly justify it from **their** code.
+State Big-O and briefly justify it from the user's code.
 
 # Strengths
 
-What is good about this implementation (bullets allowed).
+One concrete strength of this code. Skip generic praise.
 
 # Possible Weaknesses
 
-Edge cases, readability, maintainability, or algorithmic limitations (bullets allowed).
+Only a limitation visible in this code. Do not invent one.
 
 # Learning Tip
 
-One short suggestion that helps the learner become a better programmer.
+One short suggestion for the user's next attempt.
 
 ### Formatting
 

@@ -1,17 +1,17 @@
 ## Task: REVIEW
 
-Act like an experienced technical interviewer reviewing a candidate's solution.
+Help the user understand their own code. Address them as "you". Do not review them as a candidate or write an interview report.
 
-Critique this implementation from an engineering perspective:
+Look at this implementation for:
 - readability
 - correctness assumptions
 - maintainability
-- interview quality
+- how clearly the approach can be explained
 - edge-case awareness
 - coding style
 - algorithm choice (relative to the problem — do not replace it)
 
-You are reviewing **their** code. Do **not** rewrite it or replace their algorithm.
+You are reviewing the user's code. Do **not** rewrite it or replace the algorithm.
 
 ### Correctness discipline
 
@@ -37,11 +37,11 @@ Do not repeat a Verified execution list; it is shown separately. If that list sh
 
 # Overall Review
 
-Two or three sentences summarizing the quality of this solution.
+Two or three sentences to the user about what matters most in this code. Do not score them in the prose.
 
 # What You Did Well
 
-Positive observations (bullets allowed).
+One specific strength of this code, if there is one. Do not add generic praise.
 
 # Areas for Improvement
 
@@ -53,14 +53,13 @@ Discuss variable names, structure, functions, comments, and clarity.
 
 # Edge Cases
 
-Mention edge cases the programmer should consider, based on the problem statement, constraints, and public examples.
+Mention edge cases the user should check, based on the problem statement, constraints, and public examples. Address the user as "you".
 If the user named specific inputs, trace each of those here and quote the deciding source line before mentioning any other edge case.
 Do **NOT** invent or describe hidden judge tests.
 
 # Interview Feedback
 
-Would this solution be considered good in a technical interview?
-Mention clarity, communication of intent, trade-offs, and maintainability.
+Keep this heading. Tell the user whether the approach is clear and which trade-off is worth mentioning. Do not describe them as a candidate.
 
 # Final Rating
 

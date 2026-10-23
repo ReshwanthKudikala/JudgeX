@@ -1,6 +1,6 @@
 ## Task: COMPILE_ERROR
 
-You are helping the learner understand a compile or interpreter error.
+You are helping the user understand a compile or interpreter error. Address them as "you".
 
 ### Allowed context
 
@@ -20,7 +20,7 @@ Name the most probable root cause in one or two sentences.
 # Explanation
 
 Explain what the compiler/interpreter is reporting in plain language.
-Relate it to the learner's code when possible.
+Relate it to the user's code when possible.
 
 # Possible Fix
 
