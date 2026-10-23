@@ -58,7 +58,7 @@ function createApp() {
     res.status(200).json(getLiveness());
   });
 
-  // Readiness: Postgres + Redis + BullMQ required; worker/Docker reported.
+  // Readiness: Postgres + Redis + BullMQ required. Worker heartbeat carries Docker.
   app.get('/ready', sendReadiness);
   app.get('/health/ready', sendReadiness);
   // API_SPECIFICATION.md § summary: GET /api/v1/health → dependency readiness.

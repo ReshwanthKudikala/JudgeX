@@ -18,6 +18,7 @@ const {
 const {
   writeWorkerHeartbeat,
 } = require('../infrastructure/queue/worker-heartbeat');
+const { checkDockerHealth } = require('../infrastructure/docker/docker.adapter');
 const { submissionService } = require('../modules/submissions/submissions.service');
 const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
 const { executeCodeRun } = require('../modules/code/code.service');
@@ -376,7 +377,14 @@ function registerWorkerEvents(w) {
 
 async function beat() {
   try {
-    await writeWorkerHeartbeat({ concurrency: CONCURRENCY });
+    const docker = await checkDockerHealth();
+    await writeWorkerHeartbeat({
+      concurrency: CONCURRENCY,
+      docker: {
+        ok: docker.ok,
+        ...(docker.error ? { error: docker.error } : {}),
+      },
+    });
   } catch (err) {
     log.warn('Worker heartbeat failed', {
       error: err instanceof Error ? err.message : String(err),

@@ -26,7 +26,7 @@ Sprint 33 production observability notes.
 | `GET /health/ready` | Readiness alias |
 | `GET /api/v1/health` | Readiness (API contract) |
 
-Readiness checks Postgres, Redis, BullMQ. Worker heartbeat + Docker ping are reported; API `ready` stays true when the data plane is up (worker/Docker may run on another host → `degraded`).
+Readiness requires Postgres, Redis, and BullMQ. `ready` stays true when that data plane is up. `degraded` is true when the judge worker heartbeat is missing or stale, or when that heartbeat says the worker cannot reach Docker. The API process does not ping Docker and does not mount the Docker socket; sandbox execution runs on the judge worker.
 
 ## Metrics
 

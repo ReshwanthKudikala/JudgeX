@@ -1,7 +1,7 @@
 // Health / readiness probes for orchestrators (PRD NFR-OBS-3).
 // Liveness = process is up. Readiness = Postgres + Redis + BullMQ can serve traffic.
-// Extended checks (worker heartbeat, Docker) are reported without failing API readiness
-// when the API host does not run the judge worker / Docker daemon.
+// A missing worker heartbeat, or a worker that cannot reach Docker, sets
+// degraded without clearing ready. The API process does not ping Docker.
 
 const { getBuildInfo } = require('../../shared/build-info');
 const {
@@ -10,7 +10,6 @@ const {
 } = require('../../infrastructure');
 const { getSubmissionsQueue, SUBMISSIONS_QUEUE_NAME } = require('../../infrastructure/queue/queues');
 const { getWorkerHeartbeat } = require('../../infrastructure/queue/worker-heartbeat');
-const { checkDockerHealth } = require('../../infrastructure/docker/docker.adapter');
 const { getLastReaperSweep } = require('../reaper/reaper.service');
 const { metrics } = require('../../shared/observability/metrics');
 
@@ -66,23 +65,52 @@ function getLiveness() {
 }
 
 /**
- * Full readiness diagnostics: Postgres, Redis, BullMQ + worker/Docker/reaper.
+ * Docker status for readiness. Only an explicit worker probe counts.
+ * No heartbeat, or a heartbeat from a worker that did not probe Docker,
+ * is "not reported" — that is not treated as a Docker failure.
+ *
+ * @param {{ docker?: { ok?: boolean, error?: string } } | null | undefined} worker
+ */
+function sandboxDockerCheck(worker) {
+  if (worker && worker.docker && typeof worker.docker.ok === 'boolean') {
+    return worker.docker.error
+      ? { ok: worker.docker.ok, error: worker.docker.error }
+      : { ok: worker.docker.ok };
+  }
+  return { ok: false, reported: false, error: 'not_reported' };
+}
+
+/**
+ * Core data plane is up, but judging cannot run: the worker is absent, or
+ * the worker reports that its Docker daemon is unreachable.
+ *
+ * @param {boolean} ready
+ * @param {{ ok?: boolean, docker?: { ok?: boolean } } | null | undefined} worker
+ */
+function isDegraded(ready, worker) {
+  if (!ready) return false;
+  if (!worker || worker.ok !== true) return true;
+  return Boolean(worker.docker && worker.docker.ok === false);
+}
+
+/**
+ * Full readiness diagnostics: Postgres, Redis, BullMQ + worker heartbeat.
+ * Docker in this payload is the worker's probe, not a ping from the API.
  * @returns {Promise<object>}
  */
 async function getReadiness() {
-  const [postgres, redis, bullmq, worker, docker] = await Promise.all([
+  const [postgres, redis, bullmq, worker] = await Promise.all([
     checkPostgresHealth(),
     checkRedisHealth(),
     checkBullmqHealth(),
     getWorkerHeartbeat(),
-    checkDockerHealth(),
   ]);
 
+  const docker = sandboxDockerCheck(worker);
   const checks = { postgres, redis, bullmq, worker, docker };
-  // API can accept traffic when core data plane is up. Worker/Docker are
-  // reported for operators; they may live on a separate host.
+  // API can accept traffic when the core data plane is up.
   const ready = Boolean(postgres.ok && redis.ok && bullmq.ok);
-  const degraded = ready && (!worker.ok || !docker.ok);
+  const degraded = isDegraded(ready, worker);
 
   const build = getBuildInfo();
   return {
@@ -114,4 +142,6 @@ module.exports = {
   getLiveness,
   getReadiness,
   checkBullmqHealth,
+  sandboxDockerCheck,
+  isDegraded,
 };
