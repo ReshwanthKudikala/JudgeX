@@ -1,6 +1,6 @@
 # JudgeX — Judge Pipeline Design
 
-> **Status:** Design document (no implementation). Pre-requisite to the BullMQ and Docker sprints.
+> **Status:** Implemented. This document is the behavioral contract. Where code and this file disagree, **code plus tests are authoritative** — update this file in the same change.
 > **Sources of truth:** `docs/PRD.md`, `docs/ARCHITECTURE.md` (§3 lifecycle, §4 judge engine, §5 Docker, §6 Redis/BullMQ), `docs/DATABASE_DESIGN.md` (§3.7 `submissions`, §3.8 `submission_test_results`), `docs/BACKEND_STRUCTURE.md`, `docs/API_SPECIFICATION.md` (§4 submissions).
 > **Scope:** how a submission travels from the API to a stored verdict, and how the system behaves under failure and load. This document does not introduce new schema or endpoints; it specifies the behavior the judge sprints must implement.
 
@@ -157,7 +157,7 @@ The worker maps job progress onto submission status. A **verdict is not a job fa
 | **Retry (delayed)** | Failed with attempts remaining; waiting out backoff before re-activation. | stays `running`/`queued` | No |
 | **Error (dead-letter)** | Retries exhausted or non-retryable failure. | `error` | **Yes** (operationally; user may resubmit) |
 
-**Key rule:** the worker sets `running` exactly once on first pickup and writes a terminal state exactly once at the end. Re-entry via retry re-reads status and refuses to re-finalize an already-terminal submission (§7).
+**Key rule:** the worker may set `running` on every pickup (CAS from `queued|running`). It writes a **legitimate verdict** (`completed` + AC/WA/TLE/RE/CE/MLE) as soon as the pipeline finishes. It writes `error`/`internal_error` **only** on the last BullMQ attempt or for unrecoverable (deterministic) failures. Re-entry via retry re-reads status and refuses to re-finalize an already-terminal submission (§7). Delivery is **at-least-once**; finalization is **effectively-once** via the status CAS. Do not claim exactly-once execution.
 
 ---
 
@@ -166,31 +166,16 @@ The worker maps job progress onto submission status. A **verdict is not a job fa
 Docker is the security cornerstone (`ARCHITECTURE.md` §5). Containers are **cattle, not pets**: created for one purpose, torn down unconditionally in a `finally`-style guarantee. Containers are **never reused across submissions**.
 
 ```
-per submission:
+per submission (actual implementation — execution.service.withExecution):
   ── prepare isolated workspace (throwaway dir for this job) ──
-  ── write source file into workspace ──
-
-  [COMPILE PHASE]  (compiled languages)
-    create container (prebuilt toolchain image, locked-down)
-      → mount workspace (source in; artifact out)
-      → run compiler with a hard compile timeout
-      → capture compiler stderr + exit code
-    remove container            ◄── always
-    (exit ≠ 0) ⇒ Compilation Error, skip run phase
-
-  [RUN PHASE]  (once per test case)
-    for each test case:
-      create container (prebuilt runtime image, locked-down)
-        → mount workspace read-only (binary/script)
-        → feed test input on stdin
-        → execute with hard wall-clock timeout
-        → capture stdout, stderr, exit code, elapsed time, peak memory
-        → force-kill on timeout/limit breach
-      remove container          ◄── always
-      evaluate case → may short-circuit (RE/TLE) per precedence
-
-  ── delete workspace ──         ◄── always (finally)
+  ── create ONE locked-down sandbox container ──
+  ── copy source into the bind-mounted workspace ──
+  ── compile via docker exec (C++; Python syntax/no-op per compiler) ──
+  ── for each test case: docker exec with stdin + wall-clock SIGKILL ──
+  ── finally: remove container AND delete workspace ──
 ```
+
+One sandbox per submission (not one container per test case). Exec isolation is process-level inside that sandbox; the HostConfig limits still apply to the whole container.
 
 ### Container creation
 
@@ -229,7 +214,7 @@ per submission:
 
 ### Memory limits
 
-- Hard container memory cap (from `problems.memory_limit_mb`). Exceeding it triggers an **OOM kill** → surfaced as **Runtime Error** in the MVP (distinct `Memory Limit Exceeded` is a documented future verdict).
+- Hard container memory cap (from `problems.memory_limit_mb`). Exceeding it triggers an **OOM kill** → `memory_limit_exceeded` (`verdict-engine.js`).
 
 ---
 
@@ -290,7 +275,8 @@ Retries exist to mask **transient infrastructure failures**, never to re-roll a 
 ### Backoff strategy
 
 - **Exponential backoff**, base ~`2000 ms`: retries spaced roughly `2s → 4s → 8s`. Exponential (vs fixed) spacing avoids hammering a recovering dependency (Docker daemon, Postgres) and naturally spreads a thundering herd after a Redis restart.
-- On exhaustion → **dead-letter** (job retained as `failed`), submission set to `error`, surfaced to the user as a **retryable "judging failed"** message (never a false verdict) and logged/observable for operators (`ARCHITECTURE.md` §6.4).
+- On exhaustion → **dead-letter** (job retained as `failed`), submission set to `error` **at that point only**, surfaced as `internal_error` (never a false AC/WA). Intermediate retries leave the row `running` so the next attempt is not skipped.
+- Worker lock duration (`JUDGE_LOCK_DURATION_MS`, default 5 minutes) must exceed worst-case compile + N × time-limit. Without this, BullMQ marks the job stalled and may deliver it again while the first attempt is still inside the pipeline. A Postgres advisory lock, held for that attempt on its own connection, is what stops the second delivery from starting a sandbox. The duplicate is delayed and does not consume a retry or write a verdict. The status CAS still prevents a second terminal write. `running` → `running` stays allowed so a retry after a crash can continue once the lock is released.
 
 ---
 
@@ -327,7 +313,7 @@ The design assumes every dependency can fail. Recovery leans on two pillars: **p
 
 - The BullMQ **lock / visibility timeout** on the active job expires; the job becomes eligible for another worker and is retried (counts against `attempts`).
 - Because containers are torn down out-of-band and the submission is re-read fresh, a half-finished job leaves no partial verdict (the status guard prevents double finalization).
-- Orphaned containers/workspaces from a hard crash are swept by a periodic **janitor** (label-based prune) on the worker host.
+- Exited sandbox containers labeled for an explicit `JUDGE_SANDBOX_OWNER` can be removed by the cleanup worker. A **running** sandbox is never removed by that sweep: age past the BullMQ lock is not proof the job is finished. A crashed worker can therefore leave a running keep-alive container until an operator removes that container id.
 
 ### Docker crash
 
@@ -341,12 +327,23 @@ The design assumes every dependency can fail. Recovery leans on two pillars: **p
 - **On write (finalize):** the verdict was computed but can't be persisted → **retry the persist** (the computed result may be recomputed on retry; judging is deterministic, so recomputation yields the same verdict). The submission remains `running` until a persist succeeds; the status guard ensures only one persist wins.
 - The API's **persist-before-enqueue** means a Postgres outage at submit time fails the request cleanly (no orphan job), rather than enqueuing work with no backing row.
 - Prolonged outage → jobs back up in Redis (backpressure) and drain on recovery. The reaper reconciles any `running` rows stranded by crashes during the outage.
+- If Redis still has the job as `completed` while the row is `queued` or `running`, the reaper removes that completed job and enqueues it once. A second observation writes `internal_error` through the status CAS, which does not replace a real verdict. An in-flight job is not removed.
 
 ---
 
 ## 9. Security Considerations
 
-Untrusted code is the central threat. Every run is **ephemeral, powerless, and disposable** (`ARCHITECTURE.md` §5.3). The container is its own trust boundary: **nothing it produces is trusted except captured stdout / exit code / metrics.**
+Untrusted code is the central threat. Every run is **ephemeral, powerless, and disposable** (`ARCHITECTURE.md` §5.3). The **sandbox container** is a trust boundary for user code: **nothing it produces is trusted except captured stdout / exit code / metrics.**
+
+### Docker socket trust boundary (not the sandbox)
+
+The judge worker process bind-mounts the **host Docker socket** (`/var/run/docker.sock` in Compose) so dockerode can create sandboxes. That is a **separate, weaker boundary**:
+
+- A compromised worker is equivalent to local Docker root on the host.
+- Sandbox `HostConfig` (no network, cap-drop, PID/memory, read-only rootfs) constrains **user programs**, not the worker.
+- This architecture is accepted for the current Compose deployment. Stronger isolation (rootless Docker, gVisor, Firecracker, a tightly wrapped docker-proxy) is a future hardening step — do **not** unmount the socket while `docker.adapter.js` still needs it.
+
+Workspace directories start at `0770`. When the host allows `chown`, they are owned by uid/gid 1000 with mode `0750`. Cleanup refuses paths outside `JUDGE_WORKSPACE_DIR` or without the `judgex-` prefix.
 
 ### Filesystem isolation
 
@@ -371,7 +368,7 @@ Untrusted code is the central threat. Every run is **ephemeral, powerless, and d
 ### Temporary file cleanup
 
 - Container removal + workspace deletion are **unconditional** (`finally`-guaranteed), even on crash/timeout/exception.
-- A periodic **janitor** prunes orphaned containers/workspaces (identified by labels) left by hard crashes, so resources can never leak indefinitely.
+- Sandboxes are labeled `judgex.sandbox=true` and `judgex.sandbox.owner`. The cleanup worker removes **exited** containers for that owner only when `JUDGE_SANDBOX_OWNER` is set. It does not sweep the daemon when the owner is the default, and it does not stop running containers. Stuck `running` rows are still recovered by the reaper. Do not claim host-wide container GC.
 - Hidden test data is streamed via stdin and never persisted to a shared location, minimizing its on-host footprint.
 
 ---

@@ -107,7 +107,7 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 ### Testing
 
 - Unit tests · integration tests · end-to-end judge verdict tests (local Docker)
-- GitHub Actions CI (lint, build, unit + integration)
+- GitHub Actions CI (lint, build, unit + integration, `npm audit --audit-level=high`)
 
 ### AI Coach
 
@@ -934,6 +934,8 @@ By default the checked-in nginx config serves **HTTP**. Compose maps host port *
 | `JUDGE_MEMORY_LIMIT_MB` | Sandbox memory limit |
 | `JUDGE_PID_LIMIT` | Max PIDs per sandbox |
 | `JUDGE_WORKER_CONCURRENCY` | Parallel jobs per worker |
+| `JUDGE_LOCK_DURATION_MS` | BullMQ job lock (default 5m); must exceed worst-case judge duration |
+| `REAPER_RUNNING_STUCK_THRESHOLD_MS` | Age after which a `running` row is treated as a dead worker |
 | `JUDGE_WORKSPACE_DIR` | In-container workspace path |
 | `JUDGE_WORKSPACE_HOST_DIR` | Host path for sandbox bind mounts |
 | `EMAIL_PROVIDER` | `console` or `smtp` |
@@ -1155,7 +1157,8 @@ Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (co
 | Frontend | `lint`, `build` | Any UI/browser tests |
 | Backend lint | `npm run lint` (syntax) | dependency-cruiser / full ESLint ecosystem |
 | Backend unit | `npm run test:unit` | — |
-| Backend integration | `npm test` + Postgres 17 + Redis 7 services | E2E, benchmarks, `npm audit` |
+| Backend integration | `npm test` + Postgres 17 + Redis 7 services | E2E, benchmarks |
+| Backend / Frontend audit | `npm audit --omit=dev --audit-level=high` (`continue-on-error`) | Does not fail merge until dependency upgrades are verified |
 
 **Merge-green does not mean the Docker judge still works**—e2e is local/optional relative to CI.
 

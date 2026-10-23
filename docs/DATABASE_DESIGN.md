@@ -450,9 +450,10 @@ For each hot query: what it does, and which index serves it.
 - **Indexes used:** `idx_submissions_user_created` for **global** user history; `idx_submissions_user_problem_created` on `(user_id, problem_id, submitted_at DESC)` for the common **"all submissions of a user for a specific problem"** query (problem-page feed); `idx_submissions_problem_created` for a problem's overall submission feed.
 
 ### 5.6 Leaderboard
-- **Reads:** top-N ranked users by `problems_solved`, then `acceptance_rate`, then recency.
-- **Indexes used:** `idx_user_stats_ranking` (base) and the `leaderboard` materialized view's `rank` index; fronted by Redis cache.
-- **Notes:** avoids scanning `submissions`; that's the entire reason `user_statistics` exists.
+- **Reads:** top-N ranked users by problems solved, then acceptance rate, then recency.
+- **Actual implementation:** `statistics.repository.js` computes ranks from a CTE over `submissions` ⋈ `users` (so weekly/monthly windows stay correct). Redis caches the payload.
+- **`user_statistics`:** upserted in the same transaction that finalizes a submission (`refreshUserStatistics`). Used by admin/platform listings. It is **not** the leaderboard source of truth.
+- **`problems.total_submissions` / `total_accepted`:** incremented in that same finalizing transaction for catalog display. Problem-detail statistics still use live aggregates (`getLiveStatistics`) so they cannot drift.
 
 ### 5.7 Admin Dashboard
 - **Reads:** counts of users/problems/submissions and verdict distribution (future analytics, PRD `FR-ADMIN-7`).
