@@ -39,6 +39,11 @@ const {
   verifyCoachExecution,
 } = require('./coach-verify');
 const { numPredictForAction } = require('./generation-budget');
+const {
+  classifyCoachScope,
+  containsProhibitedRequest,
+  redactProhibitedAsides,
+} = require('./coach-scope');
 
 class CoachService {
   /**
@@ -60,6 +65,8 @@ class CoachService {
    */
   async coach(body, _userId) {
     const started = Date.now();
+    const refused = this.#outOfScopeReply(body, started);
+    if (refused) return refused;
     const prepared = await this.#prepare(body);
     const { sanitized, hintLevel, verification, built } = prepared;
     const provider = this.provider || getCoachProvider();
@@ -139,6 +146,12 @@ class CoachService {
    */
   async coachStream(body, _userId, io) {
     const started = Date.now();
+    const refused = this.#outOfScopeReply(body, started);
+    if (refused) {
+      io.write('token', { text: refused.answer });
+      io.write('done', { ...refused, incomplete: false });
+      return;
+    }
     const prepared = await this.#prepare(body);
     const provider = this.provider || getCoachProvider();
     const numPredict = numPredictForAction(prepared.action, config.ai.ollama.numPredict);
@@ -229,9 +242,45 @@ class CoachService {
     return appendVerificationFooter(answer, prepared.verification);
   }
 
+  /**
+   * Scope refusal, or null when the request may proceed to Ollama.
+   * @param {object} body
+   * @param {number} started
+   */
+  #outOfScopeReply(body, started) {
+    this.#assertSizeLimits(body);
+    const sanitized = sanitizeCoachContext(body);
+    const action = resolveCoachAction(sanitized.action);
+    const decision = classifyCoachScope({
+      action,
+      message: sanitized.message,
+      history: sanitized.history,
+    });
+    if (decision.decision === 'allow') return null;
+    return {
+      answer: decision.answer,
+      verification: 'skipped',
+      provider: 'policy',
+      model: 'scope',
+      tokensUsed: null,
+      durationMs: Date.now() - started,
+      format: 'markdown',
+      hintLevel: null,
+      loadMs: null,
+      promptEvalMs: null,
+      evalMs: null,
+      promptTokens: null,
+      outputTokens: null,
+    };
+  }
+
   async #prepare(body) {
     this.#assertSizeLimits(body);
     const sanitized = sanitizeCoachContext(body);
+    sanitized.history = sanitized.history.filter(
+      (turn) => !containsProhibitedRequest(turn.content),
+    );
+    sanitized.message = redactProhibitedAsides(sanitized.message);
     const action = resolveCoachAction(sanitized.action);
 
     if (requiresSourceCode(action) && isCoachCodeEmpty(sanitized.code)) {

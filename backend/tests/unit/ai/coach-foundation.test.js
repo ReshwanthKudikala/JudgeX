@@ -305,7 +305,7 @@ describe('CoachService foundation', () => {
       language: 'cpp',
       code: 'int main(){return 0;}',
       action: 'totally_unknown',
-      message: 'hmm',
+      message: 'Explain this function.',
     });
 
     assert.equal(result.answer, 'generic help');
