@@ -13,6 +13,7 @@
 const { Client } = require('pg');
 
 const { config } = require('../../config');
+const { logger } = require('../../shared/logger/logger');
 
 /**
  * Two signed int4 keys from a submission UUID. Advisory locks take int4 pairs.
@@ -35,6 +36,13 @@ function advisoryKey(submissionId) {
  */
 async function acquireSubmissionExecutionLock(submissionId) {
   const client = new Client({ connectionString: config.database.url });
+  // A dropped session releases the advisory lock. Without a listener, node-pg
+  // turns that socket error into an uncaught exception and crashes the worker.
+  client.on('error', (err) => {
+    logger.warn('Submission execution lock connection closed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
   await client.connect();
   const [k1, k2] = advisoryKey(submissionId);
   try {

@@ -384,4 +384,53 @@ print(len(blocks))
     const after = await query('SELECT COUNT(*)::int AS n FROM submissions');
     assert.equal(after.rows[0].n, before.rows[0].n);
   });
+
+  it('Network: an outbound TCP connect fails immediately inside the sandbox', async (t) => {
+    if (!requireE2e(t)) return;
+
+    const admin = await createAdmin();
+    const user = await createUser();
+    const problemId = await seedProblemWithCases(admin.accessToken, {
+      slug: unique('e2e-net'),
+      timeLimitMs: 5000,
+      cases: [{ input: '\n', expectedOutput: 'blocked\n', isHidden: false }],
+    });
+
+    const sourceCode = `import errno
+import socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(2)
+try:
+    sock.connect(("1.1.1.1", 443))
+except OSError as exc:
+    if exc.errno in (
+        errno.ENETUNREACH,
+        errno.EHOSTUNREACH,
+        errno.ENETDOWN,
+        errno.EADDRNOTAVAIL,
+    ):
+        print("blocked")
+    else:
+        print("other")
+else:
+    print("connected")
+`;
+
+    const { row, queue } = await submitAndJudge({
+      accessToken: user.accessToken,
+      problemId,
+      language: 'python',
+      sourceCode,
+      timeoutMs: 20_000,
+    });
+
+    assert.equal(row.status, 'completed');
+    assert.equal(row.verdict, 'accepted', JSON.stringify(row));
+    assert.equal(queue.returnvalue.verdict, 'accepted');
+    assert.equal(typeof row.runtime_ms, 'number');
+    assert.ok(
+      row.runtime_ms < 1500,
+      `expected an immediate network-unreachable failure, runtime_ms=${row.runtime_ms}`,
+    );
+  });
 });
