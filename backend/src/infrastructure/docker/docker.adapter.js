@@ -18,6 +18,11 @@ const fs = require('fs/promises');
 const Docker = require('dockerode');
 
 const { config } = require('../../config');
+const {
+  SANDBOX_LABEL,
+  SANDBOX_OWNER_LABEL,
+  SANDBOX_STARTED_LABEL,
+} = require('../../modules/judge/sandbox-labels');
 const { logger } = require('../../shared/logger/logger');
 const { DockerError } = require('../../shared/errors/domain-errors');
 
@@ -99,12 +104,12 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
   const containerUser = user || DEFAULT_USER;
 
   // Private per-job workspace under the shared (daemon-visible) root, then
-  // bind-mounted into the sandbox. World-writable so the non-root container
-  // user can write compile artifacts.
+  // bind-mounted into the sandbox. Owned by the non-root container user
+  // (1000:1000) when the worker can chown; otherwise group-writable 0770.
   const workspaceRoot = getWorkspaceRoot();
   await fs.mkdir(workspaceRoot, { recursive: true });
   const hostDir = await fs.mkdtemp(path.join(workspaceRoot, 'judgex-'));
-  await fs.chmod(hostDir, 0o777);
+  await restrictWorkspacePermissions(hostDir);
   const bindSource = toDaemonBindPath(hostDir);
 
   const memoryBytes = (memoryMb ?? config.judge.memoryLimitMb) * 1024 * 1024;
@@ -120,6 +125,11 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
       Cmd: KEEPALIVE_CMD,
       Tty: false,
       NetworkDisabled: true, // no networking at the container level…
+      Labels: {
+        [SANDBOX_LABEL]: 'true',
+        [SANDBOX_OWNER_LABEL]: config.judge.sandboxOwner,
+        [SANDBOX_STARTED_LABEL]: String(Date.now()),
+      },
       HostConfig: {
         NetworkMode: 'none', // …and at the host-config level (belt and suspenders)
         Binds: [`${bindSource}:${containerWorkdir}:rw`],
@@ -144,7 +154,7 @@ async function createSandbox({ image, memoryMb, cpus, pids, user, workdir, scrat
         /* ignore */
       }
     }
-    await fs.rm(hostDir, { recursive: true, force: true }).catch(() => {});
+    await removeWorkspaceDir(hostDir);
     throw new DockerError(`Failed to create sandbox: ${err.message}`);
   }
 
@@ -391,13 +401,62 @@ async function cleanup(sandbox) {
   if (!sandbox) return;
   await removeSandbox(sandbox);
   if (sandbox.hostDir) {
-    await fs.rm(sandbox.hostDir, { recursive: true, force: true }).catch((err) => {
-      logger.warn('Failed to remove sandbox workspace', {
-        hostDir: sandbox.hostDir,
-        error: err.message,
-      });
-    });
+    await removeWorkspaceDir(sandbox.hostDir);
   }
+}
+
+/**
+ * Restrict a per-job workspace so it is not world-writable.
+ * chown to the sandbox uid (1000) when the host allows it (Linux worker);
+ * Windows bind mounts typically cannot chown — 0770 is the fallback.
+ *
+ * @param {string} hostDir
+ */
+async function restrictWorkspacePermissions(hostDir) {
+  await fs.chmod(hostDir, 0o770);
+  try {
+    await fs.chown(hostDir, 1000, 1000);
+    await fs.chmod(hostDir, 0o750);
+  } catch {
+    // Expected on Docker Desktop / Windows and when the worker is not root.
+  }
+}
+
+/**
+ * True when `target` is the workspace root or a subdirectory of it.
+ * @param {string} target
+ * @returns {boolean}
+ */
+function isInsideWorkspaceRoot(target) {
+  const root = path.resolve(getWorkspaceRoot());
+  const resolved = path.resolve(target);
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+  return resolved === root || resolved.startsWith(prefix);
+}
+
+/**
+ * Delete a per-job workspace. Refuses paths outside the configured root or
+ * without the `judgex-` mkdtemp prefix so a bad handle cannot wipe unrelated
+ * files. Never throws.
+ *
+ * @param {string} hostDir
+ */
+async function removeWorkspaceDir(hostDir) {
+  if (!hostDir) return;
+  const base = path.basename(hostDir);
+  if (!isInsideWorkspaceRoot(hostDir) || !base.startsWith('judgex-')) {
+    logger.error('Refusing workspace cleanup outside sandbox root', {
+      hostDir,
+      workspaceRoot: getWorkspaceRoot(),
+    });
+    return;
+  }
+  await fs.rm(hostDir, { recursive: true, force: true }).catch((err) => {
+    logger.warn('Failed to remove sandbox workspace', {
+      hostDir,
+      error: err.message,
+    });
+  });
 }
 
 /**
@@ -427,4 +486,6 @@ module.exports = {
   removeSandbox,
   cleanup,
   checkDockerHealth,
+  isInsideWorkspaceRoot,
+  removeWorkspaceDir,
 };

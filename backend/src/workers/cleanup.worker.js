@@ -2,18 +2,21 @@
 // submission reaper (persist-before-enqueue safety net).
 //
 // Runs as its own process: `node src/workers/cleanup.worker.js`.
-// Sprint 16 scope: ONLY the queued-submission reaper. Orphan-container /
-// dead-job handling remains for later cleanup passes.
+// Reaps stuck `queued` rows (persist-before-enqueue misses) and stuck
+// `running` rows (dead workers). The sandbox janitor removes exited containers
+// for an explicit JUDGE_SANDBOX_OWNER only. It does not stop running sandboxes.
 
 const { config } = require('../config');
 const { assertProductionReady, getStartupDiagnostics } = require('../config/production');
 const { configure: configureLogger, createLogger } = require('../shared/logger/logger');
 const { initInfrastructure, shutdownInfrastructure } = require('../infrastructure');
 const { startReaperScheduler } = require('../modules/reaper/reaper.scheduler');
+const { startSandboxJanitor } = require('../modules/judge/sandbox-janitor');
 
 const log = createLogger({ component: 'cleanup-worker' });
 
 let scheduler = null;
+let janitor = null;
 let shuttingDown = false;
 
 async function shutdown(signal) {
@@ -31,6 +34,10 @@ async function shutdown(signal) {
     if (scheduler) {
       await scheduler.stop();
       scheduler = null;
+    }
+    if (janitor) {
+      janitor.stop();
+      janitor = null;
     }
     await shutdownInfrastructure();
     clearTimeout(forceTimer);
@@ -70,6 +77,7 @@ async function start() {
   }
 
   scheduler = startReaperScheduler();
+  janitor = startSandboxJanitor();
   log.info('Cleanup worker started', {
     ...getStartupDiagnostics(),
     role: 'cleanup',

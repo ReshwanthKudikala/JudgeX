@@ -134,6 +134,8 @@ services:
       JUDGE_WORKSPACE_DIR: ${JUDGE_WORKSPACE_DIR:-/var/judgex/workspace}
       JUDGE_WORKSPACE_HOST_DIR: ${JUDGE_WORKSPACE_HOST_DIR}
     volumes:
+      # Host Docker socket: required by dockerode. Compromised worker = local Docker.
+      # Sandbox HostConfig does not constrain this process. See docs/JUDGE_PIPELINE.md §9.
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.judge-workspaces:/var/judgex/workspace
     networks:

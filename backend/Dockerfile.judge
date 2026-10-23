@@ -30,8 +30,10 @@ COPY scripts ./scripts
 
 RUN chown -R judgex:judgex /app
 
-# The judge worker talks to the host Docker daemon via a mounted socket to
-# create sandboxes. Socket access typically requires root or docker group.
+# TRUST BOUNDARY: this process bind-mounts the host Docker socket at runtime
+# (see docker-compose*.yml). A compromised worker is equivalent to local
+# Docker access. Sandbox HostConfig constrains user code, not this process.
+# Socket access typically requires root or the docker group.
 USER root
 
 STOPSIGNAL SIGTERM
