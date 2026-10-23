@@ -105,6 +105,12 @@ const envSchema = z
     // Ollama unloads the model after 5 minutes by default. A coach session
     // otherwise pays model-load time on the next question.
     OLLAMA_KEEP_ALIVE: z.string().default('30m'),
+    // Unset means Ollama chooses the GPU split. A fixed layer count is
+    // machine-specific: 24 of 28 was faster on a 4 GB GPU, and 28 was slower.
+    OLLAMA_NUM_GPU: z.preprocess(
+      (value) => (value === '' || value == null ? undefined : value),
+      z.coerce.number().int().min(1).max(256).optional(),
+    ),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default('gpt-4o-mini'),
     AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

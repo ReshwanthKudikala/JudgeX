@@ -90,6 +90,7 @@ function createOllamaProvider(options = {}) {
   const defaultNumPredict = options.numPredict ?? config.ai.ollama.numPredict ?? 512;
   const temperature = options.temperature ?? config.ai.ollama.temperature ?? 0.2;
   const keepAlive = options.keepAlive ?? config.ai.ollama.keepAlive ?? '30m';
+  const numGpu = options.numGpu !== undefined ? options.numGpu : (config.ai.ollama.numGpu ?? null);
   const fetchImpl = options.fetchImpl || fetch;
 
   function nsToMs(value) {
@@ -119,6 +120,7 @@ function createOllamaProvider(options = {}) {
         num_ctx: numCtx,
         num_predict: numPredict ?? defaultNumPredict,
         temperature,
+        ...(Number.isInteger(numGpu) && numGpu > 0 ? { num_gpu: numGpu } : {}),
       },
     };
   }

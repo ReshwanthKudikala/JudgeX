@@ -137,6 +137,7 @@ const config = Object.freeze({
       numPredict: env.OLLAMA_NUM_PREDICT,
       temperature: env.OLLAMA_TEMPERATURE,
       keepAlive: env.OLLAMA_KEEP_ALIVE,
+      numGpu: env.OLLAMA_NUM_GPU ?? null,
     }),
     openai: Object.freeze({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL }),
   }),

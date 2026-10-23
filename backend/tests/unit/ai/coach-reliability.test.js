@@ -303,6 +303,7 @@ describe('Incomplete and failed coach replies', () => {
       numPredict: 2048,
       temperature: 0.2,
       keepAlive: '30m',
+      numGpu: null,
       fetchImpl: async (_url, init) => {
         body = JSON.parse(init.body);
         return {
@@ -322,6 +323,7 @@ describe('Incomplete and failed coach replies', () => {
     assert.equal(body.options.temperature, 0.2);
     assert.equal(body.keep_alive, '30m');
     assert.equal(body.stream, false);
+    assert.equal(body.options.num_gpu, undefined);
     assert.equal(completion.truncated, true);
     assert.equal(completion.text, 'partial');
   });
@@ -631,6 +633,30 @@ describe('Generation budget and streaming', () => {
     assert.equal(events.at(-1).data.incomplete, true);
     assert.match(events.at(-1).data.answer, /cancelled/i);
     assert.match(events.at(-1).data.answer, /Verified: `10` printed `false`/);
+  });
+
+  it('sends a GPU layer count only when one is configured', async () => {
+    let body = null;
+    const provider = createOllamaProvider({
+      baseUrl: 'http://127.0.0.1:9',
+      model: 'qwen2.5-coder:7b',
+      numGpu: 24,
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(init.body);
+        return {
+          ok: true,
+          json: async () => ({
+            message: { content: 'ok' },
+            done_reason: 'stop',
+            eval_count: 1,
+            prompt_eval_count: 1,
+          }),
+        };
+      },
+    });
+    await provider.complete({ system: 's', user: 'u' });
+    assert.equal(body.options.num_gpu, 24);
+    assert.equal(body.options.num_ctx, 8192);
   });
 
   it('reports a caller abort before any token as cancelled', async () => {
