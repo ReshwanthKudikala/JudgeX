@@ -101,13 +101,13 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 ### Infrastructure
 
 - PostgreSQL 17 · Redis 7 · BullMQ · Docker Compose (dev + prod)
-- Nginx edge proxy in the self-hosted Compose stack · health checks · cleanup worker (stuck-queued reaper)
+- Nginx edge proxy in the self-hosted Compose stack · health checks · cleanup worker (reaps stuck `queued` and `running` submissions)
 - AI Coach via **Ollama** (local LLM)
 
 ### Testing
 
 - Unit tests · integration tests · end-to-end judge verdict tests (local Docker)
-- GitHub Actions CI (lint, build, unit + integration, `npm audit --audit-level=high`)
+- GitHub Actions CI (lint, build, unit + integration). `npm audit --omit=dev --audit-level=high` runs for backend and frontend and does not fail the merge (`continue-on-error`)
 
 ### AI Coach
 
@@ -153,7 +153,7 @@ AI Coach is intentionally **off** this path: coaching calls the LLM provider dir
 | **Redis** | BullMQ backing store; caches (e.g. leaderboard); rate-limit windows | No |
 | **BullMQ `judge` queue** | One queue; job names distinguish **submit** vs **run-code** | No |
 | **Judge worker** | Consumes `judge` jobs; loads submission/problem from Postgres; runs `ExecutionService` / pipelines; writes verdicts | **Yes** |
-| **Cleanup worker** | Separate process: stuck-**queued** submission reaper (re-enqueue safety net). Not a BullMQ consumer for judging | No |
+| **Cleanup worker** | Reaps stuck `queued` and `running` rows. Removes exited sandboxes only when `JUDGE_SANDBOX_OWNER` is set. Not a judge-queue consumer. The checked-in Compose service does not mount Docker | No |
 | **ExecutionService** | Shared sandbox lifecycle: create → copy source → compile → expose `runCase` → cleanup. **No** compare, verdict, or DB writes | Yes (via worker) |
 | **Docker sandboxes** | `judgex-cpp` / `judgex-python`; network disabled, non-root, capability drop, read-only rootfs, memory/CPU/PID limits | — |
 
@@ -235,7 +235,7 @@ flowchart TB
   subgraph Workers
     BQ["BullMQ queue: judge<br/>jobs: submit · run-code"]
     JW[Judge worker]
-    CW[Cleanup worker<br/>queued reaper]
+    CW[Cleanup worker<br/>queued and running reaper]
   end
 
   subgraph Execution
@@ -284,7 +284,7 @@ flowchart TB
                      │ →runCase→cleanup │     │ ro rootfs · caps│
                      └──────────────────┘     └─────────────────┘
 
-Cleanup worker (separate): reaps stuck queued submissions — not on the judge path.
+Cleanup worker (separate): reaps stuck queued and running rows. Exited-sandbox removal stays off unless JUDGE_SANDBOX_OWNER is set and the process can reach Docker. Not on the judge path.
 ⚠ API never executes untrusted code. Only the judge worker uses Docker.
 ```
 
@@ -507,13 +507,15 @@ sequenceDiagram
     X->>PG: completeSubmission aggregate
   end
   X->>D: cleanup always
-  alt pipeline throws
+  alt unrecoverable error or last BullMQ attempt
     W->>PG: failSubmissionInternal internal_error
-    W-->>Q: throw (submit retries per job options)
+  else retryable failure
+    Note over W,PG: row stays queued or running
   end
+  W-->>Q: rethrow so BullMQ can retry
 ```
 
-**Status contract:** `queued` → `running` → `completed` (with a verdict) or `error` (`verdict = internal_error` on unexpected pipeline failure). Worker skips jobs whose submission is already `completed` or `error`.
+**Status contract:** `queued` → `running` → `completed` (with a verdict) or `error`. `verdict = internal_error` is written only on the last BullMQ attempt or for an unrecoverable error. A retryable failure leaves the row non-terminal. Worker skips jobs whose submission is already `completed` or `error`.
 
 **Per-case loop (after successful compile):**
 
@@ -536,7 +538,7 @@ Empty judge test lists throw `JudgeError` (no silent AC).
 5. `wrong_answer` — comparison `matches === false`
 6. `accepted` — otherwise
 
-`internal_error` is **not** produced by the verdict engine; the worker sets it via `failSubmissionInternal` when the pipeline throws.
+`internal_error` is **not** produced by the verdict engine. The worker calls `failSubmissionInternal` only when the thrown error is unrecoverable (`JudgeError`, validation, not found) or this is the last BullMQ attempt. Earlier retries rethrow and leave the row non-terminal. A duplicate delivery that loses the submission execution lock is delayed and does not write a verdict or consume a retry.
 
 ### Comparator (shared by Submit and Run sample mode)
 
@@ -592,7 +594,8 @@ sequenceDiagram
 | WA / RE with fail-fast | Stop; persist first failure + index | Continue remaining samples; aggregate status |
 | TLE / MLE | Hard-stop; container already killed on TLE | Case marked timedOut / exit; aggregate may be `time_limit` or `runtime_error` (Run does not emit `memory_limit_exceeded` as a top-level status today) |
 | No tests / no public samples | `JudgeError` → worker `internal_error` + rethrow | `ValidationError` → job fails |
-| Unexpected throw after `running` | `failSubmissionInternal` + rethrow (BullMQ submit retries) | Rethrow to fail the wait |
+| Unexpected throw after `running` | Persist `internal_error` only on the last BullMQ attempt, or immediately for an unrecoverable error; earlier retries leave the row non-terminal and rethrow | Rethrow to fail the wait |
+| Duplicate delivery while this submission's execution lock is held | Delay that job (`DelayedError`); no verdict write and no consumed retry | — |
 | Missing language image | `JudgeError` before useful work | Same via `withExecution` |
 
 External (non-inline) test payloads currently resolve through storage as **not implemented** and propagate—never swallowed as WA.
@@ -689,21 +692,23 @@ These are the load-bearing choices in the codebase—not a feature list. Each ro
 
 **Extend by.** New domains: add `src/modules/<name>`, mount in `module-registry.js`, keep Docker/queue I/O behind infrastructure ports. Do not create a new service until there is an operational reason the worker split does not already cover.
 
-### 8. Live SQL for problem stats (not a denormalized write path on complete)
+### 8. Catalog counters commit with the verdict; problem detail and the leaderboard stay live SQL
 
-**Why.** Problem statistics endpoints aggregate from `submissions` at read time (counts, acceptance-related metrics). That keeps numbers correct when verdicts change and avoids a second write path that can drift from the judge’s `completeSubmission` updates.
+**Why.** `completeSubmission` writes the verdict, `problems.total_submissions` / `total_accepted`, and `user_statistics` in one transaction. A compare-and-set miss does not increment. `failSubmissionInternal` (`internal_error`) does not increment those counters. Problem-detail statistics still aggregate from `submissions` (`getLiveStatistics`). The public leaderboard ranks from `submissions` in `statistics.repository.js`; it does not read `user_statistics`.
 
-**Tradeoff.** Heavier reads under load versus counter columns updated in the judge transaction. Indexes and caching elsewhere (e.g. leaderboard Redis cache invalidated on AC) are the complementary pattern—stats freshness vs write complexity is a deliberate split.
+**Tradeoff.** Catalog counters can drift if a row is repaired outside that transaction. `backend/scripts/backfill-submission-counters.js` rebuilds them. It refuses `NODE_ENV=production`, and it refuses the database name `judgex` unless `--allow-development-database` is passed. Leaderboard freshness still depends on the Redis cache invalidated after an accepted verdict.
 
-**Extend by.** If you add counter columns later, update them in the same completion path as the verdict and backfill carefully; until then, prefer query aggregates for user-facing problem stats.
+**Extend by.** Keep new counter writes in that same transaction. Leave the leaderboard on the submissions aggregate.
 
-### 9. Cleanup worker = queued reaper, not a Docker janitor
+### 9. Cleanup worker reaps stranded rows; the sandbox janitor fails closed
 
-**Why.** Persist-before-enqueue creates a class of stranded `queued` rows when enqueue fails or workers die before pickup. The cleanup process runs `startReaperScheduler`: find old `queued` rows, skip if a BullMQ job already exists for that `jobId`, otherwise re-enqueue. It does not need `docker.sock`.
+**Why.** Persist-before-enqueue can leave a `queued` row when enqueue fails, and a dead worker can leave a `running` row. The cleanup process runs the reaper for both. An active BullMQ job is left alone. A `completed` job whose row is still `queued` or `running` is requeued once (`COMPLETED_RECOVERY_MAX`). A second observation writes `internal_error` through the status compare-and-set, which does not replace a real verdict.
 
-**Tradeoff.** Stuck `running` submissions and orphan containers are **out of scope** of this worker today (see comments in `cleanup.worker.js`). Documenting it as a general “cleanup queue” would oversell the implementation.
+The same process starts the sandbox janitor. The sweep does not contact Docker unless `JUDGE_SANDBOX_OWNER` is set, and it removes only exited containers for that owner. A running sandbox is never removed because it is older than the BullMQ lock. The checked-in production `cleanup-worker` service does not mount the Docker socket, so that sweep does not run in Compose until the socket and an explicit owner are both configured.
 
-**Extend by.** New janitors (orphan containers, stuck `running`) should be explicit new responsibilities—likely still off the request path—rather than silently assumed.
+**Tradeoff.** A crashed worker can leave a running keep-alive container until an operator removes that container id. This process is not host-wide container GC.
+
+**Extend by.** Mount the Docker socket on the cleanup service only together with a distinct `JUDGE_SANDBOX_OWNER`. Do not remove running sandboxes by age.
 
 ### Decision summary
 
@@ -716,8 +721,8 @@ These are the load-bearing choices in the codebase—not a feature list. Each ro
 | Hardened sandboxes | Contain hostile code with defense-in-depth defaults |
 | Hidden tests + viewer DTO | Prevent I/O leakage on failure |
 | Modular monolith + adapters | Ship fast with clear extension points |
-| Live SQL problem stats | Avoid denormalized counter drift |
-| Separate reaper process | Repair stranded `queued` rows without Docker |
+| Counters in the finalize transaction | Catalog totals and `user_statistics` update with the winning verdict; problem detail and the leaderboard stay live SQL |
+| Separate cleanup process | Repair stranded `queued` and `running` rows; remove exited sandboxes only for an explicit owner |
 
 ---
 
@@ -900,7 +905,7 @@ What this Compose file actually encodes:
 - **Redis required in this mode** — `REDIS_REQUIRED=true` for API and workers in the prod compose env.
 - **Persistence** — Postgres and Redis data volumes survive container recreation.
 - **Healthchecks** — service-level health probes for postgres, redis, api, frontend, and nginx (as defined in the compose file).
-- **Cleanup worker** — stuck-`queued` reaper only; not an orphan-container janitor.
+- **Cleanup worker** — reaps stuck `queued` and `running` rows. The sandbox janitor removes exited containers only when `JUDGE_SANDBOX_OWNER` is set. This Compose service does not mount the Docker socket.
 
 ### TLS (optional)
 
@@ -936,6 +941,7 @@ By default the checked-in nginx config serves **HTTP**. Compose maps host port *
 | `JUDGE_WORKER_CONCURRENCY` | Parallel jobs per worker |
 | `JUDGE_LOCK_DURATION_MS` | BullMQ job lock (default 5m); must exceed worst-case judge duration |
 | `REAPER_RUNNING_STUCK_THRESHOLD_MS` | Age after which a `running` row is treated as a dead worker |
+| `JUDGE_SANDBOX_OWNER` | Optional owner label. Unset, the janitor does not contact Docker. Set, it removes exited sandboxes for that owner only. A running sandbox is never removed by age |
 | `JUDGE_WORKSPACE_DIR` | In-container workspace path |
 | `JUDGE_WORKSPACE_HOST_DIR` | Host path for sandbox bind mounts |
 | `EMAIL_PROVIDER` | `console` or `smtp` |
@@ -1144,11 +1150,11 @@ Supertest against `createApp()` with real Postgres (`tests/integration/helpers/`
 
 `judge-verdicts.test.js`: full submit path with real Postgres, Redis, BullMQ worker (`processJob`), and Docker sandboxes.
 
-Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (compile output), **RE**, **TLE**.
+Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (compile output), **RE**, **TLE**. **Run** asserts a public sample succeeds and does not create a submission.
 
 **Prerequisites:** Docker daemon; ability to use/build `judgex-python` / `judgex-cpp` images (`e2e/helpers/harness.js` can build missing images). Redis **required** (`e2e/bootstrap.js`). If Docker/infra is unavailable, the harness **skips** rather than failing the suite as a hard red locally without Docker.
 
-**Does not prove:** C++ e2e verdicts, MLE e2e, Run Code end-to-end, cleanup-worker process, or sandbox flag proofs (network-off etc. are config/adapter concerns, not asserted by exec probes in this suite).
+**Does not prove:** C++ e2e verdicts, MLE e2e, the cleanup-worker process, or sandbox flag proofs (network-off etc. are config/adapter concerns, not asserted by exec probes in this suite).
 
 ### CI matrix (source of truth: `.github/workflows/ci.yml`)
 
@@ -1201,7 +1207,7 @@ For contributors: run **unit + integration** before a typical PR; run **e2e** wh
 ## Project status
 
 - Core online-judge loop shipped: auth, problems, **Run Code**, **Submit**, contests, discussions, editorials, dashboard, leaderboard, admin.
-- Judge path: **judge worker** + shared **ExecutionService** + Docker sandboxes (`judgex-cpp` / `judgex-python`); **cleanup worker** reaps stuck queued submissions.
+- Judge path: **judge worker** + shared **ExecutionService** + Docker sandboxes (`judgex-cpp` / `judgex-python`); **cleanup worker** reaps stuck `queued` and `running` submissions.
 - AI Coach actions available over `POST /api/v1/ai/coach` with **Ollama**; provider port is abstracted for future backends (OpenAI is not on the coach path today).
 - Self-hosted Compose stacks for development and deployment; CI runs lint, build, unit, and integration (judge **e2e** is local/Docker).
 
