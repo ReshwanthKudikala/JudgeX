@@ -107,7 +107,7 @@ Inspired by the workflows and UX patterns of **LeetCode**, **Codeforces**, and *
 ### Testing
 
 - Unit tests · integration tests · end-to-end judge verdict tests (local Docker)
-- GitHub Actions CI (lint, build, unit + integration). `npm audit --omit=dev --audit-level=high` runs for backend and frontend and does not fail the merge (`continue-on-error`)
+- GitHub Actions CI (lint, build, unit, integration, judge e2e, SMTP). `npm audit --omit=dev --audit-level=high` runs for backend and frontend with `continue-on-error`, so an audit finding does not fail the workflow by itself and does not configure branch protection
 
 ### AI Coach
 
@@ -1164,11 +1164,12 @@ Asserted **Python** verdicts: **AC, WA** (incl. `failed_test_index`), **CE** (co
 | Frontend | `lint`, `build` | Any UI/browser tests |
 | Backend lint | `npm run lint` (syntax) | dependency-cruiser / full ESLint ecosystem |
 | Backend unit | `npm run test:unit` | — |
-| Backend integration | `npm test` + Postgres 17 + Redis 7 services | E2E, benchmarks |
+| Backend integration | `npm test` + Postgres 17 + Redis 7 services | E2E, SMTP, benchmarks |
 | Backend e2e | `npm run test:e2e` on the host Docker daemon, with `judgex_test`, Redis DB 15, and images `judgex-python` / `judgex-cpp` | Benchmarks, cleanup-worker process, production Compose |
-| Backend / Frontend audit | `npm audit --omit=dev --audit-level=high` (`continue-on-error`) | Does not fail merge until dependency upgrades are verified |
+| Backend smtp | `npm run test:smtp` in its own process against a localhost SMTP catcher | External mail providers, production credentials, the console-mode integration suite |
+| Backend / Frontend audit | `npm audit --omit=dev --audit-level=high` (`continue-on-error`) | Does not fail the workflow, and does not configure branch protection |
 
-The Backend (e2e) job is a required check. A skipped suite does not count as success there. Audit jobs still use `continue-on-error`.
+A failing Backend (e2e) job fails that workflow run. A skipped suite does not count as success there. Making the check required for merge is a GitHub branch-protection setting and is not configured by `ci.yml`. Audit jobs still use `continue-on-error`.
 
 ### Frontend / Playwright
 
@@ -1211,7 +1212,7 @@ For contributors: run **unit + integration** before a typical PR; run **e2e** wh
 - Core online-judge loop shipped: auth, problems, **Run Code**, **Submit**, contests, discussions, editorials, dashboard, leaderboard, admin.
 - Judge path: **judge worker** + shared **ExecutionService** + Docker sandboxes (`judgex-cpp` / `judgex-python`); **cleanup worker** reaps stuck `queued` and `running` submissions.
 - AI Coach actions available over `POST /api/v1/ai/coach` with **Ollama**; provider port is abstracted for future backends (OpenAI is not on the coach path today).
-- Self-hosted Compose stacks for development and deployment. CI runs lint, build, unit, integration, and judge e2e on a GitHub-hosted Docker daemon.
+- Self-hosted Compose stacks for development and deployment. CI runs lint, build, unit, integration, judge e2e, and the isolated SMTP suite.
 
 ---
 

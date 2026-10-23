@@ -263,7 +263,52 @@ jobs:
           if ((${#ids[@]})); then
             docker rm -f "${ids[@]}"
           fi
-          find "${TMPDIR:-/tmp}" /tmp -maxdepth 1 -name 'judgex-*' -exec rm -rf {} +
+          # Sandbox uid 1000 owns files such as __pycache__/*.pyc. The runner
+          # can see the judgex-* directory but cannot unlink those files.
+          # Delete only those top-level temp directories.
+          mapfile -t dirs < <(find "${TMPDIR:-/tmp}" /tmp -maxdepth 1 -type d -name 'judgex-*' -print | sort -u)
+          if ((${#dirs[@]})); then
+            for dir in "${dirs[@]}"; do
+              base="$(basename "$dir")"
+              case "$base" in
+                judgex-*) ;;
+                *)
+                  echo "Refusing to delete unexpected path: $dir" >&2
+                  exit 1
+                  ;;
+              esac
+            done
+            sudo rm -rf -- "${dirs[@]}"
+          fi
+
+  backend-smtp:
+    name: Backend (smtp)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Own process and env. The integration suite stays on the console provider
+      # and must not load tests/smtp. No external SMTP server or credentials.
+      - name: SMTP compatibility tests
+        run: npm run test:smtp
+        env:
+          NODE_ENV: test
+          LOG_LEVEL: error
+          DB_REQUIRED: "false"
+          REDIS_REQUIRED: "false"
 
   backend-audit:
     name: Backend (npm audit)
@@ -282,8 +327,9 @@ jobs:
       - name: Install
         run: npm ci
       - name: Audit production dependencies
-        # Informational. The remaining production high is nodemailer 6 → 10.
-        # Do not fail the merge gate on this job. See docs/NODEMAILER_UPGRADE.md.
+        # Nodemailer 10.2.1 cleared the previous production advisory.
+        # continue-on-error keeps a newly published finding visible without
+        # making this job a branch-protection rule. See docs/NODEMAILER_UPGRADE.md.
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: true
 

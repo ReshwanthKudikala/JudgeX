@@ -1,23 +1,36 @@
-# Nodemailer 6 → 10 upgrade plan
+# Nodemailer 10.2.1
 
-Do not upgrade `nodemailer` in the current lifecycle change. `npm audit --omit=dev` reports one high advisory on `nodemailer@6.10.1`. The patched line is `nodemailer@10.2.1`, which is a major upgrade.
+`backend` depends on `nodemailer@^10.2.1` (resolved 10.2.1). `npm audit --omit=dev` is clean for both backend and frontend. The old production advisory on `nodemailer@6.10.1` is gone.
 
-## What JudgeX uses
+## What JudgeX sends
 
-`backend/src/infrastructure/email/email.service.js` calls `nodemailer.createTransport` with host, port, `secure`, and user/password auth, then `sendMail({ from, to, subject, text, html })`. The default provider is `console`. SMTP is used only when `EMAIL_PROVIDER=smtp` and the host, user, and password are set. Verification and password-reset messages are plain text plus an HTML alternative. There are no attachments, OAuth2 token fetches, or raw MIME bodies.
+`backend/src/infrastructure/email/email.service.js` uses `nodemailer.createTransport` with host, port, `secure`, and user/password auth, then `sendMail({ from, to, subject, text, html })`.
 
-Integration coverage in `backend/tests/integration/auth-email.test.js` records the console mailbox. It does not open an SMTP connection, so it cannot detect a Nodemailer 10 transport change.
+The default provider is `console`. SMTP is used only when `EMAIL_PROVIDER=smtp` and host, user, and password are set. `buildVerifyEmailMessage` and `buildPasswordResetMessage` return `{ to, subject, text }` only. They do not set `html`. There are no attachments, OAuth2 token fetches, or raw MIME bodies.
 
-## Why this is a separate change
+## Tests
 
-Nodemailer 7–10 changed address parsing, TLS defaults, and header handling. The current advisory also names issues this code does not exercise (`envelope.size`, a custom EHLO name, `List-*` comments, `jsonTransport` / `raw` / `resolveContent` file access, OAuth2 token fetch, and DKIM unfolding). Address-parser and TLS changes still apply to `sendMail` recipients and SMTP. `createTransport` / `sendMail` still exist, but the major versions are not a drop-in lockfile bump. Forcing the upgrade to clear CI would hide that gap.
+Console-mode registration and password-reset coverage stays in `backend/tests/integration/auth-email.test.js` (`npm test`). That process loads the email service as `console` and must not import the SMTP file, because config freezes `EMAIL_PROVIDER` on first import.
 
-## Required before upgrading
+SMTP delivery is a separate process:
 
-1. Read the Nodemailer 7, 8, 9, and 10 changelogs against `createTransport` and `sendMail`.
-2. Add a test that stands up a local SMTP catcher and sends one verification message and one password-reset message through `EMAIL_PROVIDER=smtp`.
-3. Assert the recipient, subject, text link, and HTML alternative survive the new parser, and that a malformed recipient is rejected.
-4. Run `backend/tests/integration/auth-email.test.js` plus that SMTP test.
-5. Only then change the `nodemailer` range to `^10.2.1` and re-run `npm audit --omit=dev`.
+```bash
+cd backend
+npm run test:smtp
+```
 
-Until that lands, leave the advisory visible. Do not suppress it in CI.
+That runs `node --test tests/smtp/email-smtp.test.js`. The test starts a localhost plaintext SMTP catcher, sets `EMAIL_PROVIDER=smtp` and the catcher host before loading the email service, and closes the catcher and its sockets in `after`. It uses no external SMTP service and no production credentials. CI runs it as the **Backend (smtp)** job, not inside the integration job.
+
+The SMTP tests assert the recipient, subject, text link, `text/plain`, and the absence of `text/html` and `multipart/alternative`. A malformed recipient is rejected and delivers nothing.
+
+## Audit status
+
+Production (`npm audit --omit=dev --audit-level=high`) reports no vulnerabilities.
+
+Full `npm audit` still reports development-only findings that are not safe to clear in this tree:
+
+- **Backend, high:** `nodemon` 3.x depends on `chokidar` 3, which depends on `braces`. The only audit fix is `nodemon@1.14.10`, a major downgrade. Every `nodemon` 3 release, including 3.1.14, still depends on `chokidar@^3.5.2`. Left on nodemon 3.
+- **Frontend, high:** `tailwindcss` 3.4 depends on `chokidar`, `micromatch`, `braces`, and `fast-glob`. The audit fix is `tailwindcss@4`, a major upgrade. Left on Tailwind 3.
+- **Frontend, moderate:** `postcss-selector-parser` below 7 and `postcss-nested`, pulled in by Tailwind 3. The non-breaking update does not reach parser 7. Left in place.
+
+Other frontend development advisories that have same-major fixes (Vite 6, PostCSS 8, Playwright 1, and their lockfile transitives such as `js-yaml`, `nanoid`, `browserslist`, `brace-expansion`, and `source-map-js`) are updated in the lockfile without `npm audit fix --force`.
