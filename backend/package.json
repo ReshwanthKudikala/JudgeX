@@ -23,6 +23,7 @@
     "test:e2e": "node tests/e2e/run.js",
     "test:smtp": "node --test tests/smtp/email-smtp.test.js",
     "test:unit": "node tests/unit/run.js",
+    "eval:coach": "node scripts/eval-ai-coach.js",
     "benchmark:security": "node scripts/benchmark-security.js",
     "benchmark:load": "node scripts/benchmark-load.js",
     "benchmark:queue": "node scripts/benchmark-queue.js",

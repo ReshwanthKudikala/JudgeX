@@ -2,6 +2,8 @@
  * Strip anything that must never reach the model (hidden judge data).
  */
 
+const { sanitizeCoachHistory } = require('./coach-instruction');
+
 const HIDDEN_KEY_RE =
   /^(hidden|judge|secret|private).*$|.*(hidden|secret).*(input|output|expected|actual|stdout|stdin|cases?|count|metadata).*$/i;
 
@@ -186,6 +188,7 @@ function sanitizeCoachContext(input) {
     code: typeof src.code === 'string' ? src.code : '',
     action: typeof src.action === 'string' ? src.action : 'UNKNOWN',
     message: typeof src.message === 'string' ? src.message : '',
+    history: sanitizeCoachHistory(src.history),
     hintLevel:
       src.hintLevel == null || src.hintLevel === ''
         ? null

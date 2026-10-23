@@ -86,6 +86,9 @@ function createOllamaProvider(options = {}) {
   const baseUrl = (options.baseUrl || config.ai.ollama.baseUrl).replace(/\/$/, '');
   const model = options.model || config.ai.ollama.model;
   const defaultTimeoutMs = options.timeoutMs || config.ai.timeoutMs;
+  const numCtx = options.numCtx ?? config.ai.ollama.numCtx ?? 8192;
+  const numPredict = options.numPredict ?? config.ai.ollama.numPredict ?? 2048;
+  const temperature = options.temperature ?? config.ai.ollama.temperature ?? 0.2;
   const fetchImpl = options.fetchImpl || fetch;
 
   /**
@@ -107,6 +110,11 @@ function createOllamaProvider(options = {}) {
             { role: 'system', content: system },
             { role: 'user', content: user },
           ],
+          options: {
+            num_ctx: numCtx,
+            num_predict: numPredict,
+            temperature,
+          },
         }),
       });
 
@@ -140,11 +148,15 @@ function createOllamaProvider(options = {}) {
         provider: PROVIDER_ID,
         model,
         tokensUsed,
+        truncated: payload?.done_reason === 'length',
       };
     } catch (err) {
       if (err instanceof AIError) throw err;
       if (err && err.name === 'AbortError') {
         throw new AIError('Ollama request timed out.');
+      }
+      if (err instanceof SyntaxError) {
+        throw new AIError('Ollama returned a malformed response.');
       }
       throw new AIError(friendlyOllamaNetworkError(err), {
         cause: err instanceof Error ? err.message : String(err),

@@ -8,6 +8,12 @@ const path = require('path');
 
 const { COACH_ACTIONS, resolveCoachAction } = require('./coach.actions');
 const { sanitizePublicExamples } = require('./context-sanitizer');
+const {
+  challengesPriorClaim,
+  extractRequestedInputs,
+  formatRequiredCoverage,
+  sanitizeCoachHistory,
+} = require('./coach-instruction');
 
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 
@@ -208,8 +214,36 @@ function buildCoachPrompt(ctx) {
     );
   }
 
+  const history = sanitizeCoachHistory(ctx.history);
+  if (history.length > 0) {
+    const transcript = history
+      .map((turn) => `${turn.role}: ${truncate(turn.content, 1500)}`)
+      .join('\n\n');
+    userParts.push(
+      section(
+        'Recent conversation',
+        `The Current source code section is the code to judge. Earlier turns are context only and may describe a previous claim about this same editor buffer.\n\n${transcript}`,
+      ),
+    );
+  }
+
+  if (history.some((turn) => turn.role === 'assistant') && challengesPriorClaim(ctx.message)) {
+    userParts.push(
+      section(
+        'Correction request',
+        'The learner is disputing an earlier coach claim. The first line of the answer must be exactly "The earlier claim was wrong." or "The earlier claim stands." Then answer from the current source code. Do not repeat the earlier claim as if it were a new finding.',
+      ),
+    );
+  }
+
   if (ctx.message) {
     userParts.push(section('User question', truncate(ctx.message, maxMessage)));
+  }
+
+  const requested = extractRequestedInputs(ctx.message);
+  const coverage = formatRequiredCoverage(requested);
+  if (coverage) {
+    userParts.push(section('Required checks', coverage));
   }
 
   userParts.push(
@@ -231,6 +265,8 @@ function buildCoachPrompt(ctx) {
       codeChars: typeof ctx.code === 'string' ? ctx.code.length : 0,
       codeFocused,
       hintLevel: action === COACH_ACTIONS.HINT ? Number(ctx.hintLevel) || null : null,
+      historyTurns: history.length,
+      requestedInputs: requested,
     },
   };
 }

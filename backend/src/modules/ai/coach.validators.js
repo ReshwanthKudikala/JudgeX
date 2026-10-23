@@ -88,6 +88,16 @@ const coachRequestSchema = z.object({
       { message: 'Invalid action' },
     ),
   message: z.string().trim().max(2_000).default(''),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().max(2_000),
+      }),
+    )
+    .max(6)
+    .optional()
+    .default([]),
   hintLevel: z.coerce.number().int().min(1).max(3).optional().nullable(),
   lastRunResult: lastRunResultSchema,
   lastSubmission: lastSubmissionSchema,

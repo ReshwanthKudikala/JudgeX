@@ -89,6 +89,8 @@ export interface CoachRequest {
   code: string;
   action: CoachAction | string;
   message?: string;
+  /** Prior turns only. The current editor buffer is sent separately as `code`. */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   hintLevel?: 1 | 2 | 3 | null;
   lastRunResult?: CoachLastRunResult | null;
   lastSubmission?: CoachLastSubmission | null;

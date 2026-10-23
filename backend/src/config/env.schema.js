@@ -93,6 +93,13 @@ const envSchema = z
     AI_PROVIDER: z.enum(['ollama', 'openai']).default('ollama'),
     OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
     OLLAMA_MODEL: z.string().default('qwen2.5-coder:7b'),
+    // Ollama's API default context is 2048 tokens, which drops the submitted
+    // code or the tail of a multi-part question. 8192 fits a review plus a
+    // short follow-up on a 7B local model without requiring a download.
+    OLLAMA_NUM_CTX: z.coerce.number().int().min(512).max(32768).default(8192),
+    OLLAMA_NUM_PREDICT: z.coerce.number().int().min(128).max(8192).default(2048),
+    // Lower than Ollama's 0.8 default so reviews invent fewer unverified bugs.
+    OLLAMA_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default('gpt-4o-mini'),
     AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

@@ -900,6 +900,9 @@ That command fails if `judgex_test` already exists; leave the existing database 
 2. Pull the model: `ollama pull qwen2.5-coder:7b` (or `docker exec -it judgex-ollama ollama pull qwen2.5-coder:7b`).
 3. In `backend/.env` (or `.env.production`): set `AI_PROVIDER=ollama`, `OLLAMA_MODEL=qwen2.5-coder:7b`, and `OLLAMA_BASE_URL` to a reachable Ollama URL.
 4. Raise `AI_TIMEOUT_MS` for local inference if needed (e.g. `120000`).
+5. Optional generation settings, with the defaults already applied when unset: `OLLAMA_NUM_CTX=8192`, `OLLAMA_NUM_PREDICT=2048`, `OLLAMA_TEMPERATURE=0.2`. Ollama's own context default is 2048 tokens, which can drop the submitted code.
+
+`npm run eval:coach` (from `backend/`) runs an opt-in local check of the configured model. It is not part of CI, it does not download a model, and it exits 0 with `model_eval: skipped` when that model is not installed.
 
 See [`docker/README.md`](docker/README.md) for container details.
 
@@ -1177,7 +1180,7 @@ Anchors under `backend/tests/unit/` (non-exhaustive but representative of intent
 
 - **Judge:** `verdict-engine` precedence; `pipeline` fail-fast / continue / compile short-circuit (**mocked** Docker).
 - **Run orchestration:** `code.service` DTO mapping and enqueue-and-wait behavior with **mocked** execution/queue edges.
-- **AI Coach:** action routing, sanitizer (strips hidden-shaped context), PromptBuilder shapes, provider factory, per-action suites (explain/review/hint/WA/optimize/CE) with **mocked** providers—no live Ollama.
+- **AI Coach:** action routing, sanitizer (strips hidden-shaped context), PromptBuilder shapes, provider factory, per-action suites (explain/review/hint/WA/optimize/CE) with **mocked** providers—no live Ollama. `npm run eval:coach` is a separate local model check and is not part of `npm test`.
 - **Reaper:** stuck `queued` re-enqueue, duplicate `jobId`, Redis-down stop.
 - **Security helpers:** rate-limit 429 headers; Helmet/CORS helpers; production config asserts.
 - **Other:** migrator ordering, observability metrics naming, admin platform mapping, discussion helpers.

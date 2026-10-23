@@ -27,6 +27,11 @@ const {
   NO_PUBLIC_FAILURE_MESSAGE,
   hasPublicFailingTestcase,
 } = require('./wrong-answer-debugger');
+const {
+  appendMissingCoverage,
+  appendTruncationNotice,
+  missingRequestedInputs,
+} = require('./coach-instruction');
 
 class CoachService {
   /**
@@ -90,6 +95,7 @@ class CoachService {
       language: sanitized.language,
       code: sanitized.code,
       message: sanitized.message,
+      history: sanitized.history,
       hintLevel,
       problem,
       lastRunResult: sanitized.lastRunResult,
@@ -120,9 +126,17 @@ class CoachService {
       action: built.action,
       hintLevel,
     });
+    let answer = mapped.answer;
+    if (completion.truncated) {
+      answer = appendTruncationNotice(answer);
+    }
+    const missing = missingRequestedInputs(sanitized.message, answer);
+    if (missing.length > 0) {
+      answer = appendMissingCoverage(answer, missing);
+    }
 
     return {
-      answer: mapped.answer,
+      answer,
       provider: completion.provider || provider.id,
       model: completion.model || provider.model || config.ai.ollama.model,
       tokensUsed:

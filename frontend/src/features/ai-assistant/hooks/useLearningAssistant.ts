@@ -87,6 +87,8 @@ export function useLearningAssistant({
   getLastSubmission,
 }: UseLearningAssistantOptions) {
   const [messages, setMessages] = useState<AiConversationMessage[]>([]);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [hintUnlockedThrough, setHintUnlockedThrough] = useState(0);
   const [lastRequest, setLastRequest] = useState<CoachLastRequest | null>(null);
   const [activeAction, setActiveAction] = useState<CoachAction | null>(null);
@@ -199,6 +201,15 @@ export function useLearningAssistant({
       setLastRequest(requestMeta);
       setActiveAction(params.action);
 
+      let prior = messagesRef.current;
+      if (params.regenerate && prior.at(-1)?.role === 'assistant') {
+        prior = prior.slice(0, -1);
+      }
+      const history = prior.slice(-4).map((turn) => ({
+        role: turn.role,
+        content: turn.content.slice(0, 1500),
+      }));
+
       try {
         const reply: CoachReply = await mutation.mutateAsync({
           problemId,
@@ -206,6 +217,7 @@ export function useLearningAssistant({
           code,
           action: params.action,
           message: params.message || params.label,
+          history,
           hintLevel: params.hintLevel ?? null,
           lastRunResult: getLastRunResult?.() ?? null,
           lastSubmission: getLastSubmission?.() ?? null,
