@@ -29,6 +29,10 @@ describe('Editorials', () => {
       .get(`/api/v1/problems/${slug}/editorial`);
     assert.equal(unpublished.status, 404);
 
+    const beforeEditorial = await api().get(`/api/v1/problems/${slug}`);
+    assert.equal(beforeEditorial.status, 200);
+    assert.equal(beforeEditorial.body.data.hasEditorial, false);
+
     const create = await api()
       .post(`/api/v1/admin/problems/${problemId}/editorial`)
       .set('Authorization', `Bearer ${admin.accessToken}`)
@@ -45,6 +49,8 @@ describe('Editorials', () => {
 
     const stillHidden = await api().get(`/api/v1/problems/${slug}/editorial`);
     assert.equal(stillHidden.status, 404);
+    const stillNoFlag = await api().get(`/api/v1/problems/${slug}`);
+    assert.equal(stillNoFlag.body.data.hasEditorial, false);
 
     const publish = await api()
       .patch(`/api/v1/admin/editorials/${create.body.data.id}`)
@@ -56,6 +62,8 @@ describe('Editorials', () => {
 
     const publicGet = await api().get(`/api/v1/problems/${slug}/editorial`);
     assert.equal(publicGet.status, 200);
+    const withEditorial = await api().get(`/api/v1/problems/${slug}`);
+    assert.equal(withEditorial.body.data.hasEditorial, true);
     assert.equal(publicGet.body.data.title, 'Approach Guide');
     assert.ok(publicGet.body.data.markdown.includes('hash map'));
     assert.ok(publicGet.body.data.updatedAt);
@@ -83,5 +91,7 @@ describe('Editorials', () => {
 
     const gone = await api().get(`/api/v1/problems/${slug}/editorial`);
     assert.equal(gone.status, 404);
+    const afterDelete = await api().get(`/api/v1/problems/${slug}`);
+    assert.equal(afterDelete.body.data.hasEditorial, false);
   });
 });

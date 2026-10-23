@@ -11,6 +11,7 @@ const {
   setCachedEditorial,
   invalidateEditorialCache,
 } = require('./editorials.cache');
+const { invalidateProblemDetail } = require('../problems/problems.cache');
 const { toEditorialAdmin, toEditorialPublic } = require('./editorials.helpers');
 
 class EditorialService {
@@ -51,6 +52,7 @@ class EditorialService {
 
     if (row.published) {
       await setCachedEditorial(problem.slug, toEditorialPublic(row));
+      await invalidateProblemDetail(problem.slug);
     }
 
     return toEditorialAdmin(row);
@@ -67,6 +69,7 @@ class EditorialService {
     if (row.published && slug) {
       await setCachedEditorial(slug, toEditorialPublic(row));
     }
+    await invalidateProblemDetail(slug);
 
     return toEditorialAdmin(row);
   }
@@ -80,6 +83,7 @@ class EditorialService {
     if (!deleted) throw new NotFoundError('Editorial not found.');
 
     await invalidateEditorialCache(slug);
+    await invalidateProblemDetail(slug);
     return { id, deleted: true };
   }
 

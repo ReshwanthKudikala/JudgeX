@@ -22,6 +22,7 @@ const {
 } = require('./submissions.repository');
 const { userRepository } = require('../auth/auth.repository');
 const { problemRepository } = require('../problems/problems.repository');
+const { invalidateProblemDetail } = require('../problems/problems.cache');
 
 // Terminal verdicts the worker may report (DB enum + Sprint 25 extensions).
 const TERMINAL_VERDICTS = new Set([
@@ -146,12 +147,33 @@ class SubmissionService {
     problemRepository: probRepo,
     enqueueSubmission: enqueueFn,
     withTransaction: withTx,
+    invalidateProblemDetail: invalidateDetailFn,
   } = {}) {
     this.submissionRepository = subRepo || submissionRepository;
     this.userRepository = usrRepo || userRepository;
     this.problemRepository = probRepo || problemRepository;
     this.enqueueSubmission = enqueueFn || enqueueSubmission;
     this.withTransaction = withTx || withTransaction;
+    this.invalidateProblemDetail = invalidateDetailFn || invalidateProblemDetail;
+  }
+
+  /**
+   * Drop the cached problem detail so acceptance counters refresh with the verdict.
+   * Cache failure must not fail a verdict that is already committed.
+   * @param {string} problemId
+   */
+  async #invalidateProblemReadModel(problemId) {
+    try {
+      if (!problemId || typeof this.problemRepository.findById !== 'function') return;
+      const problem = await this.problemRepository.findById(problemId);
+      if (!problem?.slug) return;
+      await this.invalidateProblemDetail(problem.slug);
+    } catch (err) {
+      logger.warn('Problem cache invalidation after verdict failed', {
+        problemId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**
@@ -364,6 +386,7 @@ class SubmissionService {
     if (!row) {
       return this.#rejectStaleTransition(id);
     }
+    await this.#invalidateProblemReadModel(row.problem_id);
     return toSubmissionDetail(row);
   }
 

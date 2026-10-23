@@ -40,6 +40,11 @@ export interface ProblemDetail extends ProblemSummary {
   createdBy?: string | null;
   /** Public sample cases (is_hidden = false). Absent/hidden cases never appear. */
   examples?: ProblemExample[];
+  /**
+   * True when a published editorial exists.
+   * False skips the editorial request. Absent on older cached payloads, which still probe.
+   */
+  hasEditorial?: boolean;
   /** Forward-compatible — not returned by the current detail endpoint. */
   notes?: string | null;
   /** Forward-compatible alias some APIs use instead of constraintsText. */

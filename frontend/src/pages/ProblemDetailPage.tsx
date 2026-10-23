@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { ApiError } from '@/types';
 import { DiscussionsPanel } from '@/features/discussions';
+import { editorialRequestSlug } from '@/features/editorials/editorial-request';
 import { EditorialPanel, useEditorial } from '@/features/editorials';
 import { ProblemCodeEditor } from '@/features/editor';
 import { ProblemBreadcrumb } from '@/features/problems/components/ProblemBreadcrumb';
@@ -32,7 +33,7 @@ export function ProblemDetailPage() {
     data: editorial,
     isLoading: editorialLoading,
     isFetched: editorialFetched,
-  } = useEditorial(problem?.slug);
+  } = useEditorial(editorialRequestSlug(problem) ?? undefined);
 
   if (!problemSlug) {
     return <ProblemErrorState notFound />;

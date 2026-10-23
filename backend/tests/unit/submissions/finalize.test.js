@@ -15,14 +15,20 @@ const SUB_ID = '00000000-0000-7000-8000-0000000000bb';
 const USER_ID = '00000000-0000-7000-8000-0000000000cc';
 const PROBLEM_ID = '00000000-0000-7000-8000-0000000000dd';
 
-function makeService({ updateResult, existing } = {}) {
+function makeService({ updateResult, existing, invalidateProblemDetail } = {}) {
   const calls = {
     increment: 0,
     refresh: 0,
     replace: 0,
+    invalidate: [],
   };
   const svc = new SubmissionService({
     withTransaction: async (fn) => fn(null),
+    invalidateProblemDetail:
+      invalidateProblemDetail ||
+      (async (slug) => {
+        calls.invalidate.push(slug);
+      }),
     submissionRepository: {
       updateSubmissionResult: async (...args) => {
         if (updateResult) return updateResult(...args);
@@ -51,6 +57,7 @@ function makeService({ updateResult, existing } = {}) {
       incrementSubmissionCounters: async () => {
         calls.increment += 1;
       },
+      findById: async () => ({ id: PROBLEM_ID, slug: 'a-plus-b' }),
     },
   });
   return { svc, calls };
@@ -68,6 +75,17 @@ describe('SubmissionService.completeSubmission', () => {
     assert.equal(calls.replace, 1);
     assert.equal(calls.increment, 1);
     assert.equal(calls.refresh, 1);
+    assert.deepEqual(calls.invalidate, ['a-plus-b']);
+  });
+
+  it('still returns the committed verdict when problem cache invalidation fails', async () => {
+    const { svc } = makeService({
+      invalidateProblemDetail: async () => {
+        throw new Error('redis unavailable');
+      },
+    });
+    const row = await svc.completeSubmission(SUB_ID, { verdict: 'accepted' });
+    assert.equal(row.verdict, 'accepted');
   });
 
   it('does not increment counters when the CAS misses a terminal row', async () => {
@@ -82,6 +100,7 @@ describe('SubmissionService.completeSubmission', () => {
     assert.equal(calls.replace, 0);
     assert.equal(calls.increment, 0);
     assert.equal(calls.refresh, 0);
+    assert.deepEqual(calls.invalidate, []);
   });
 });
 

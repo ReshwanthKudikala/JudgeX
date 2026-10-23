@@ -283,6 +283,28 @@ class ProblemRepository extends BaseRepository {
    * @param {{ accepted: boolean }} opts
    * @param {import('pg').PoolClient} [client]
    */
+  /**
+   * True only when a published, non-deleted editorial exists.
+   * Drafts stay hidden so the public problem payload cannot reveal them.
+   * @param {string} problemId
+   * @param {import('pg').PoolClient} [client]
+   * @returns {Promise<boolean>}
+   */
+  async hasPublishedEditorial(problemId, client) {
+    const row = await this.queryOne(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM editorials
+          WHERE problem_id = $1
+            AND published = true
+            AND COALESCE(is_deleted, false) = false
+       ) AS present`,
+      [problemId],
+      client,
+    );
+    return row?.present === true;
+  }
+
   incrementSubmissionCounters(problemId, { accepted } = {}, client) {
     return this.query(
       `UPDATE problems

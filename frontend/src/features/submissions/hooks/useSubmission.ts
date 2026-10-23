@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { createSubmission, getSubmissionById } from '@/api/submissions.api';
 import type { EditorLanguage } from '@/features/editor/types';
+import { queryKeysToRefreshAfterTerminalVerdict } from '@/features/submissions/terminal-refresh';
 import {
   isTerminalSubmission,
   type CreateSubmissionInput,
@@ -22,12 +23,13 @@ export interface SubmitCodeInput {
  * Submit + poll lifecycle. No UI logic.
  * Cancels polling on unmount / reset / terminal verdict.
  */
-export function useSubmission() {
+export function useSubmission(problemSlug?: string) {
   const queryClient = useQueryClient();
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const pollStartedAtRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const refreshedMarkerRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -81,6 +83,16 @@ export function useSubmission() {
       : null;
   const isTerminal = submission ? isTerminalSubmission(submission) : false;
   const isPolling = Boolean(submissionId) && !isTerminal && !pollTimedOut;
+
+  useEffect(() => {
+    if (!submission || !isTerminalSubmission(submission)) return;
+    const marker = `${submission.id}:${submission.status}:${submission.verdict ?? ''}`;
+    if (refreshedMarkerRef.current === marker) return;
+    refreshedMarkerRef.current = marker;
+    for (const queryKey of queryKeysToRefreshAfterTerminalVerdict(problemSlug)) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  }, [queryClient, problemSlug, submission]);
 
   const submit = useCallback(async (input: SubmitCodeInput) => {
     setPollTimedOut(false);

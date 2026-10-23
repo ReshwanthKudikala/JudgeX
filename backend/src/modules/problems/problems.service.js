@@ -112,7 +112,7 @@ class ProblemService {
    */
   async getProblemBySlug(slug) {
     const cached = await getCachedProblemDetail(slug);
-    if (cached) return cached;
+    if (cached && typeof cached.hasEditorial === 'boolean') return cached;
 
     const row = await this.problemRepository.findBySlug(slug);
     if (!row) {
@@ -121,6 +121,7 @@ class ProblemService {
     const detail = toProblemDetail(row);
     const publicRows = await this.testCaseService.getPublicExamples(row.id);
     detail.examples = publicRows.map(toPublicExample);
+    detail.hasEditorial = await this.problemRepository.hasPublishedEditorial(row.id);
 
     if (detail.isPublished) {
       await setCachedProblemDetail(slug, detail);

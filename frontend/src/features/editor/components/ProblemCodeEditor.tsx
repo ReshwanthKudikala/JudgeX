@@ -81,7 +81,7 @@ export const ProblemCodeEditor = memo(function ProblemCodeEditor({
     pollTimedOut,
     submitError,
     pollError,
-  } = useSubmission();
+  } = useSubmission(problemSlug);
 
   const { run, isRunning } = useRunCode();
 
