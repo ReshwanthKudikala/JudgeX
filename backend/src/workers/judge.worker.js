@@ -4,7 +4,7 @@
 // Docker / sandboxes run ONLY here — never in the API process.
 // Submit → runJudgePipeline; Run → executeCodeRun (shared ExecutionService).
 
-const { Worker } = require('bullmq');
+const { Worker, UnrecoverableError, DelayedError } = require('bullmq');
 
 const { config } = require('../config');
 const { configure: configureLogger, createLogger } = require('../shared/logger/logger');
@@ -21,7 +21,13 @@ const {
 const { submissionService } = require('../modules/submissions/submissions.service');
 const { runJudgePipeline } = require('../modules/judge/judge.pipeline');
 const { executeCodeRun } = require('../modules/code/code.service');
-const { NotFoundError, ValidationError } = require('../shared/errors/http-errors');
+const { NotFoundError, ValidationError, ConflictError } = require('../shared/errors/http-errors');
+const {
+  TERMINAL_STATUSES,
+  isLastAttempt,
+  isUnrecoverableJudgeError,
+} = require('../modules/judge/job-lifecycle');
+const { acquireSubmissionExecutionLock } = require('../modules/judge/execution-lock');
 const { metrics } = require('../shared/observability/metrics');
 const {
   trackError,
@@ -34,16 +40,45 @@ const {
 const log = createLogger({ component: 'judge-worker' });
 
 const CONCURRENCY = Math.max(1, Number(config.judge.workerConcurrency) || 2);
+const LOCK_DURATION_MS = Math.max(30_000, Number(config.judge.lockDurationMs) || 300_000);
 const HEARTBEAT_INTERVAL_MS = 10_000;
+const DUPLICATE_EXECUTION_DELAY_MS = 2_000;
 
-const TERMINAL_STATUSES = new Set(['completed', 'error']);
+function isDelayedError(err) {
+  return err instanceof DelayedError || (err && err.name === 'DelayedError');
+}
+
+/**
+ * Another attempt already holds the submission execution lock.
+ * Move this delivery later without burning a retry or writing a verdict.
+ * @param {import('bullmq').Job} job
+ * @param {object} jobLog
+ * @param {string} submissionId
+ */
+async function deferDuplicateExecution(job, jobLog, submissionId) {
+  jobLog.info('Submission execution already in progress; delaying duplicate', {
+    submissionId,
+    delayMs: DUPLICATE_EXECUTION_DELAY_MS,
+  });
+  if (typeof job.moveToDelayed === 'function') {
+    try {
+      await job.moveToDelayed(Date.now() + DUPLICATE_EXECUTION_DELAY_MS, job.token);
+    } catch (err) {
+      jobLog.warn('Could not delay duplicate execution', {
+        submissionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  throw new DelayedError('Submission execution already in progress');
+}
 
 function assertValidSubmissionPayload(data) {
   if (!data || typeof data.submissionId !== 'string' || data.submissionId.length === 0) {
-    throw new Error('Invalid judge job payload: missing submissionId.');
+    throw new UnrecoverableError('Invalid judge job payload: missing submissionId.');
   }
   if (data.schemaVersion !== SCHEMA_VERSION) {
-    throw new Error(
+    throw new UnrecoverableError(
       `Unsupported judge job schemaVersion: got ${data.schemaVersion}, expected ${SCHEMA_VERSION}.`,
     );
   }
@@ -117,9 +152,55 @@ async function processRunJob(job) {
 }
 
 /**
- * Submit job processor (unchanged behavior).
+ * Persist `error`/`internal_error` only when no further BullMQ attempt will run.
+ * A ConflictError means another worker already wrote a terminal verdict — ignore.
+ *
+ * @param {object} submissions
+ * @param {string} submissionId
+ * @param {unknown} err
+ * @param {object} jobLog
  */
-async function processSubmissionJob(job) {
+async function persistFinalFailure(submissions, submissionId, err, jobLog) {
+  try {
+    await submissions.failSubmissionInternal(submissionId, {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  } catch (persistErr) {
+    if (persistErr instanceof ConflictError || persistErr instanceof NotFoundError) {
+      jobLog.info('Submission already terminal while persisting failure', {
+        submissionId,
+      });
+      return;
+    }
+    trackError('judge.persist_internal_error', persistErr, { submissionId }, { log: jobLog });
+  }
+}
+
+/**
+ * Submit job processor.
+ *
+ * Retry policy:
+ *   - Legitimate verdicts (AC/WA/TLE/RE/CE/MLE) are successful jobs; they
+ *     persist `completed` inside the pipeline and are never retried.
+ *   - Infrastructure failures throw so BullMQ can retry. `error` is written
+ *     only on the last attempt or for unrecoverable (deterministic) errors.
+ *   - Cache invalidation after a successful verdict must not fail the job
+ *     (that used to overwrite AC with internal_error).
+ *
+ * @param {import('bullmq').Job} job
+ * @param {{
+ *   submissions?: object,
+ *   runPipeline?: Function,
+ *   invalidateLeaderboardCache?: Function,
+ *   acquireExecutionLock?: (submissionId: string) => Promise<{ acquired: boolean, release: () => Promise<void> }>,
+ * }} [deps]
+ */
+async function processSubmissionJob(job, deps = {}) {
+  const submissions = deps.submissions || submissionService;
+  const runPipeline = deps.runPipeline || runJudgePipeline;
+  const invalidateCache = deps.invalidateLeaderboardCache || invalidateLeaderboardCache;
+  const acquireExecutionLock = deps.acquireExecutionLock || acquireSubmissionExecutionLock;
+
   assertValidSubmissionPayload(job.data);
   const { submissionId } = job.data;
   const requestId = job.data.requestId || job.data.correlationId || null;
@@ -136,14 +217,15 @@ async function processSubmissionJob(job) {
   }
 
   const started = Date.now();
-  jobLog.info('Processing judge job', { attempt: job.attemptsMade + 1 });
+  const attempt = (Number(job.attemptsMade) || 0) + 1;
+  jobLog.info('Processing judge job', { attempt, lastAttempt: isLastAttempt(job) });
 
   let submission;
   try {
-    submission = await submissionService.getSubmissionById(submissionId);
+    submission = await submissions.getSubmissionById(submissionId);
   } catch (err) {
     if (err instanceof NotFoundError) {
-      throw new Error(`Submission ${submissionId} does not exist; failing job.`);
+      throw new UnrecoverableError(`Submission ${submissionId} does not exist; failing job.`);
     }
     throw err;
   }
@@ -156,16 +238,39 @@ async function processSubmissionJob(job) {
     return { submissionId, skipped: true, status: submission.status };
   }
 
-  await submissionService.markSubmissionRunning(submissionId);
-
   try {
-    const outcome = await runJudgePipeline(submissionId);
+    await submissions.markSubmissionRunning(submissionId);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      jobLog.info('Submission became terminal before running; skipping', {
+        submissionId,
+      });
+      metrics.recordJudgeJob('skipped');
+      return { submissionId, skipped: true };
+    }
+    throw err;
+  }
+
+  let lock = null;
+  try {
+    lock = await acquireExecutionLock(submissionId);
+    if (!lock || !lock.acquired) {
+      await deferDuplicateExecution(job, jobLog, submissionId);
+    }
+
+    const outcome = await runPipeline(submissionId);
 
     const durationSeconds = (Date.now() - started) / 1000;
     metrics.recordJudgeDuration(outcome.verdict, durationSeconds);
     metrics.recordJudgeJob('completed');
     if (outcome.verdict === 'accepted') {
-      await invalidateLeaderboardCache();
+      try {
+        await invalidateCache();
+      } catch (cacheErr) {
+        jobLog.warn('Leaderboard cache invalidation failed after accepted verdict', {
+          error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
+        });
+      }
     }
     jobLog.info('Submission judged', {
       verdict: outcome.verdict,
@@ -173,16 +278,46 @@ async function processSubmissionJob(job) {
     });
     return { submissionId, verdict: outcome.verdict };
   } catch (err) {
+    if (isDelayedError(err)) {
+      throw err;
+    }
+    if (err instanceof ConflictError) {
+      jobLog.info('Submission already finalized by another worker; skipping', {
+        submissionId,
+      });
+      metrics.recordJudgeJob('skipped');
+      return { submissionId, skipped: true };
+    }
+
     metrics.recordJudgeJob('failed');
     trackError('judge.pipeline', err, { submissionId }, { log: jobLog });
-    try {
-      await submissionService.failSubmissionInternal(submissionId, {
-        message: err instanceof Error ? err.message : String(err),
+
+    const unrecoverable = isUnrecoverableJudgeError(err);
+    const last = isLastAttempt(job);
+    if (unrecoverable || last) {
+      await persistFinalFailure(submissions, submissionId, err, jobLog);
+    } else {
+      jobLog.warn('Retryable judge failure; leaving submission non-terminal', {
+        submissionId,
+        attempt,
       });
-    } catch (persistErr) {
-      trackError('judge.persist_internal_error', persistErr, { submissionId }, { log: jobLog });
+    }
+
+    if (unrecoverable) {
+      throw new UnrecoverableError(err instanceof Error ? err.message : String(err));
     }
     throw err;
+  } finally {
+    if (lock && lock.acquired && typeof lock.release === 'function') {
+      try {
+        await lock.release();
+      } catch (releaseErr) {
+        jobLog.warn('Failed to release submission execution lock', {
+          submissionId,
+          error: releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
+        });
+      }
+    }
   }
 }
 
@@ -296,6 +431,8 @@ async function start() {
   worker = new Worker(SUBMISSIONS_QUEUE_NAME, processJob, {
     connection: getRedis(),
     concurrency: CONCURRENCY,
+    lockDuration: LOCK_DURATION_MS,
+    maxStalledCount: 2,
   });
   registerWorkerEvents(worker);
 
@@ -305,7 +442,11 @@ async function start() {
   }, HEARTBEAT_INTERVAL_MS);
   if (typeof heartbeatTimer.unref === 'function') heartbeatTimer.unref();
 
-  log.info('Judge worker started', { queue: SUBMISSIONS_QUEUE_NAME, concurrency: CONCURRENCY });
+  log.info('Judge worker started', {
+    queue: SUBMISSIONS_QUEUE_NAME,
+    concurrency: CONCURRENCY,
+    lockDurationMs: LOCK_DURATION_MS,
+  });
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
@@ -323,5 +464,6 @@ module.exports = {
   processJob,
   processRunJob,
   processSubmissionJob,
+  persistFinalFailure,
   start,
 };
