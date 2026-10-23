@@ -105,6 +105,9 @@ const envSchema = z
     JUDGE_MEMORY_LIMIT_MB: z.coerce.number().int().positive().default(256),
     JUDGE_PID_LIMIT: z.coerce.number().int().positive().default(64),
     JUDGE_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+    // BullMQ lock duration. Must exceed worst-case compile + N × time-limit or
+    // the job is marked stalled and another worker may start the same submission.
+    JUDGE_LOCK_DURATION_MS: z.coerce.number().int().positive().default(300_000),
     // When true, stop after the first non-accepted test case (default).
     JUDGE_FAIL_FAST: booleanish.default('true'),
     // Shared host-visible workspace for sandbox bind mounts (DinD). Empty → os.tmpdir().
@@ -112,6 +115,12 @@ const envSchema = z
     // Optional host path for Docker Binds when it differs from JUDGE_WORKSPACE_DIR
     // (e.g. Windows project bind). Defaults to JUDGE_WORKSPACE_DIR / tmpdir.
     JUDGE_WORKSPACE_HOST_DIR: z.string().optional(),
+    // Distinguishes this installation's sandboxes on a shared Docker daemon.
+    // Default is judgex-<NODE_ENV>, so development and production do not match.
+    JUDGE_SANDBOX_OWNER: z.string().min(1).optional(),
+    // Retained for operators. The janitor does not use it: a running sandbox
+    // is never removed because it is older than the BullMQ lock.
+    JUDGE_SANDBOX_MAX_AGE_MS: z.coerce.number().int().positive().optional(),
 
     // --- Object storage (optional in dev) ---
     STORAGE_BUCKET: z.string().optional(),
@@ -133,6 +142,9 @@ const envSchema = z
     REAPER_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
     // A queued submission older than this is eligible for re-enqueue.
     REAPER_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(60000),
+    // A `running` submission whose updated_at is older than this is treated as
+    // a dead worker. Must be greater than JUDGE_LOCK_DURATION_MS.
+    REAPER_RUNNING_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(600_000),
     // Max rows processed per sweep (bounded work per tick).
     REAPER_BATCH_SIZE: z.coerce.number().int().positive().default(100),
   })

@@ -139,16 +139,24 @@ const config = Object.freeze({
     memoryLimitMb: env.JUDGE_MEMORY_LIMIT_MB,
     pidLimit: env.JUDGE_PID_LIMIT,
     workerConcurrency: env.JUDGE_WORKER_CONCURRENCY,
+    lockDurationMs: env.JUDGE_LOCK_DURATION_MS,
     failFast: env.JUDGE_FAIL_FAST,
     // Where the worker writes per-job dirs (must be visible to the Docker daemon).
     workspaceDir: env.JUDGE_WORKSPACE_DIR || null,
     // Path used in sandbox Binds (same as workspaceDir when host↔container paths match).
     workspaceHostDir: env.JUDGE_WORKSPACE_HOST_DIR || env.JUDGE_WORKSPACE_DIR || null,
+    sandboxOwner: env.JUDGE_SANDBOX_OWNER || `judgex-${env.NODE_ENV}`,
+    // True only when the operator set JUDGE_SANDBOX_OWNER. The janitor will
+    // not contact Docker on the default judgex-<NODE_ENV> label.
+    sandboxOwnerExplicit: Boolean(env.JUDGE_SANDBOX_OWNER),
+    // Unused by the janitor. Running sandboxes are not removed by age.
+    sandboxMaxAgeMs: env.JUDGE_SANDBOX_MAX_AGE_MS || env.JUDGE_LOCK_DURATION_MS,
   }),
 
   reaper: Object.freeze({
     intervalMs: env.REAPER_INTERVAL_MS,
     stuckThresholdMs: env.REAPER_STUCK_THRESHOLD_MS,
+    runningStuckThresholdMs: env.REAPER_RUNNING_STUCK_THRESHOLD_MS,
     batchSize: env.REAPER_BATCH_SIZE,
   }),
 
