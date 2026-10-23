@@ -14,7 +14,7 @@ const REVIEW_SECTIONS = Object.freeze([
   'Areas for Improvement',
   'Readability',
   'Edge Cases',
-  'Interview Feedback',
+  'Key Findings',
   'Final Rating',
   'Learning Tip',
 ]);

@@ -55,8 +55,8 @@ Names like \`seen\` are fine; a short comment on the complement check would help
 # Edge Cases
 Consider empty arrays (if allowed), duplicate values, and when no pair exists — based on constraints and public examples only.
 
-# Interview Feedback
-Interviewers would like the clear trade-off of extra space for speed. Explain why a hash map beats nested loops.
+# Key Findings
+The useful trade-off is extra space for a faster lookup. That is worth mentioning when you explain the hash map.
 
 # Final Rating
 
@@ -66,7 +66,7 @@ Interviewers would like the clear trade-off of extra space for speed. Explain wh
 | Readability | ⭐⭐⭐⭐☆ |
 | Efficiency | ⭐⭐⭐⭐⭐ |
 | Maintainability | ⭐⭐⭐☆☆ |
-| Interview Readiness | ⭐⭐⭐⭐☆ |
+| Clarity | ⭐⭐⭐⭐☆ |
 
 # Learning Tip
 Narrate the complement idea out loud while coding — it shows communication skill.`;
@@ -191,6 +191,8 @@ describe('Review My Solution — markdown mapping', () => {
     assert.equal(mapped.format, 'markdown');
     assert.match(mapped.answer, /^# Overall Review/m);
     assert.match(mapped.answer, /\| Category \| Rating \|/);
+    assert.ok(mapped.sectionsFound.includes('Key Findings'));
+    assert.ok(!mapped.sectionsFound.includes('Interview Feedback'));
     assert.ok(mapped.sectionsFound.includes('Final Rating'));
     assert.ok(mapped.sectionsFound.includes('Learning Tip'));
     assert.equal(REVIEW_SECTIONS.length, 8);

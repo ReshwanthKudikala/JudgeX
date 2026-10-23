@@ -45,10 +45,15 @@ describe('coach voice', () => {
     assert.match(explain.system, /Task: EXPLAIN_CODE/);
     assert.match(explain.system, /Do not turn this into a formal assessment/);
     assert.match(explain.system, /# Overview/);
+    assert.match(explain.system, /the provided code/);
+    assert.doesNotMatch(explain.system, /Interview Feedback/);
 
     const review = built('REVIEW', { message: 'Review my code and tell me the important issues.' });
     assert.match(review.system, /Task: REVIEW/);
     assert.match(review.system, /Address them as "you"/);
+    assert.match(review.system, /# Key Findings/);
+    assert.doesNotMatch(review.system, /Interview Feedback/);
+    assert.doesNotMatch(review.system, /reviewing a candidate/i);
     assert.match(review.system, /# Overall Review/);
     assert.match(review.system, /trace the submitted source/i);
     assert.doesNotMatch(review.system, /the programmer should/i);

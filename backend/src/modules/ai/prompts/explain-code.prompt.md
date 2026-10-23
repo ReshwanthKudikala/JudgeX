@@ -11,7 +11,7 @@ Write at most two sentences under each heading.
 
 # Overview
 
-Tell the user what this code is doing. Do not grade it.
+Describe what the code is doing, speaking to the user. Prefer "your code" or "this part of your code" instead of "the provided code". Do not grade it, and do not start every section the same way.
 
 # Step-by-step Explanation
 

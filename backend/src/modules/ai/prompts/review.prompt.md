@@ -57,9 +57,9 @@ Mention edge cases the user should check, based on the problem statement, constr
 If the user named specific inputs, trace each of those here and quote the deciding source line before mentioning any other edge case.
 Do **NOT** invent or describe hidden judge tests.
 
-# Interview Feedback
+# Key Findings
 
-Keep this heading. Tell the user whether the approach is clear and which trade-off is worth mentioning. Do not describe them as a candidate.
+Tell the user the most important thing about this code: what is clear, and which trade-off matters. Do not score them as a candidate.
 
 # Final Rating
 
@@ -71,7 +71,7 @@ Return ratings using **this exact table**:
 | Readability | ⭐⭐⭐⭐☆ |
 | Efficiency | ⭐⭐⭐⭐⭐ |
 | Maintainability | ⭐⭐⭐⭐☆ |
-| Interview Readiness | ⭐⭐⭐⭐☆ |
+| Clarity | ⭐⭐⭐⭐☆ |
 
 Use filled (⭐) and empty (☆) stars only. Be honest and consistent with your written feedback.
 
