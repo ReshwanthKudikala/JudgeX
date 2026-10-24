@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import {
   loginSchema,
+  type LoginFormInput,
   type LoginFormValues,
 } from '@/features/auth/schemas/auth.schemas';
 import { paths } from '@/routes/paths';
@@ -28,7 +29,7 @@ export function LoginForm() {
     handleSubmit,
     setError,
     formState: { errors },
-  } = useForm<LoginFormValues>({
+  } = useForm<LoginFormInput, unknown, LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       emailOrUsername: '',

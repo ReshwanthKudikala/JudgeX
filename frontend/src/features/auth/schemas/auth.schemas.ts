@@ -48,7 +48,10 @@ export const registerSchema = z
     path: ['confirmPassword'],
   });
 
-export type LoginFormValues = z.infer<typeof loginSchema>;
+/** Form field values before Zod defaults/transforms. */
+export type LoginFormInput = z.input<typeof loginSchema>;
+/** Parsed login values after Zod defaults (rememberMe is always boolean). */
+export type LoginFormValues = z.output<typeof loginSchema>;
 export type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export const forgotPasswordSchema = z.object({
