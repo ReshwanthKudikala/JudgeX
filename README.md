@@ -1216,6 +1216,8 @@ npm run lint
 npm run build                # tsc -b && vite build
 ```
 
+**Do not run `npm test` / `test:integration` and `test:e2e` at the same time on one machine.** Both truncate `judgex_test` and share Redis DB 15; concurrent runs race and produce false failures (for example `401 User account no longer exists` mid-suite). CI runs those jobs in separate workflows with isolated services. Locally, run them one after the other.
+
 Benchmarks (`npm run benchmark:security|load|queue|explain`) are **manual scripts**, not CI gates and not part of the test runners.
 
 ### Pyramid (what exists)
