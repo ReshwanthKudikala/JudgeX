@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { resetPassword } from '@/api/auth.api';
 import { Button } from '@/components/ui/Button';
@@ -12,12 +12,12 @@ import {
   resetPasswordSchema,
   type ResetPasswordFormValues,
 } from '@/features/auth/schemas/auth.schemas';
+import { readAuthToken } from '@/features/auth/verification-feedback.js';
 import { paths } from '@/routes/paths';
 import { applyApiFormErrors } from '@/utils/apply-api-form-errors';
 
 export function ResetPasswordPage() {
-  const [params] = useSearchParams();
-  const tokenFromUrl = params.get('token')?.trim() || '';
+  const [tokenFromUrl] = useState(() => readAuthToken());
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
 
   const {

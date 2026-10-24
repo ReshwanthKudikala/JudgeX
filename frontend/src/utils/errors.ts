@@ -18,6 +18,9 @@ export function getFriendlyErrorMessage(err: unknown, fallback = 'Something went
     if (err.status === 429) {
       return err.message || 'Too many requests. Please wait a moment and try again.';
     }
+    if (err.code === 'EMAIL_DELIVERY_FAILED' || err.code === 'EMAIL_NOT_CONFIGURED') {
+      return err.message || 'The verification message could not be sent. Try again shortly.';
+    }
     if (err.status >= 500) {
       return 'The server is temporarily unavailable. Please try again later.';
     }

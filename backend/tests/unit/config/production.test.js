@@ -38,6 +38,17 @@ function baseCfg(overrides = {}) {
     security: {
       rateLimit: { enabled: true },
     },
+    email: {
+      provider: 'smtp',
+      from: 'JudgeX <noreply@example.com>',
+      smtp: {
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        user: 'mailer@example.com',
+        pass: 'example-app-password',
+      },
+    },
     ...overrides,
   };
 }
@@ -119,6 +130,22 @@ describe('Production configuration validation', () => {
           }),
         ),
       /ALLOW_LOCALHOST_CORS_IN_PRODUCTION/,
+    );
+  });
+
+  it('rejects console email and incomplete SMTP in production', () => {
+    assert.throws(
+      () => assertProductionReady(baseCfg({ email: { provider: 'console', from: 'a@b.c', smtp: {} } })),
+      /EMAIL_PROVIDER must be smtp/,
+    );
+    assert.throws(
+      () =>
+        assertProductionReady(
+          baseCfg({
+            email: { provider: 'smtp', from: '', smtp: { host: '', user: '', pass: '' } },
+          }),
+        ),
+      /SMTP_HOST is required/,
     );
   });
 

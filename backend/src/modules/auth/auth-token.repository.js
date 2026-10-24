@@ -69,6 +69,42 @@ class AuthTokenRepository extends BaseRepository {
     );
   }
 
+  /**
+   * Lock the token row for this purpose, including used and expired rows.
+   * Caller must pass a transaction client so FOR UPDATE is meaningful.
+   * @returns {Promise<object|null>}
+   */
+  findByRawTokenForUpdate(rawToken, purpose, client) {
+    return this.queryOne(
+      `SELECT id, user_id, purpose, expires_at, used_at, created_at
+         FROM auth_tokens
+        WHERE token_hash = $1
+          AND purpose = $2
+        FOR UPDATE`,
+      [hashToken(rawToken), purpose],
+      client,
+    );
+  }
+
+  /**
+   * Newest unused, unexpired token for cooldown checks. Does not consume it.
+   * @returns {Promise<object|null>}
+   */
+  findLatestUnused(userId, purpose, client) {
+    return this.queryOne(
+      `SELECT id, created_at, expires_at
+         FROM auth_tokens
+        WHERE user_id = $1
+          AND purpose = $2
+          AND used_at IS NULL
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [userId, purpose],
+      client,
+    );
+  }
+
   markUsed(id, client) {
     return this.queryOne(
       `UPDATE auth_tokens

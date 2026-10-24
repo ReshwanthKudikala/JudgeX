@@ -52,7 +52,10 @@ export function RegisterForm() {
     <Card>
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
-        <CardDescription>Join JudgeX and start practicing today.</CardDescription>
+        <CardDescription>
+          Join JudgeX and start practicing today. A verification message is created when you
+          register. Console mode writes it to the local API mailbox instead of an inbox.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -147,7 +150,7 @@ export function RegisterForm() {
           </Link>
         </p>
         <p className="mt-2 text-center text-sm text-muted">
-          Didn&apos;t get a verification email?{' '}
+          Didn&apos;t get a verification message?{' '}
           <Link
             to={paths.resendVerification}
             className="font-medium text-primary hover:underline"

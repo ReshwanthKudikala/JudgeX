@@ -9,6 +9,7 @@ const {
   sendEmail,
   buildVerifyEmailMessage,
   buildPasswordResetMessage,
+  redactMessageText,
 } = require('../../infrastructure/email/email.service');
 const { AppError } = require('../../shared/errors/base.error');
 const { ConflictError, NotFoundError, ValidationError } = require('../../shared/errors/http-errors');
@@ -22,11 +23,90 @@ const { toPublicUser } = require('./auth.helpers');
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
+const RESEND_COOLDOWN_MS = 60 * 1000;
 
-const GENERIC_VERIFY_RESEND =
-  'If an account exists for that email and is unverified, a verification link has been sent.';
 const GENERIC_FORGOT =
   'If an account exists for that email, a password reset link has been sent.';
+
+let emailSender = sendEmail;
+
+function setEmailSenderForTests(fn) {
+  emailSender = typeof fn === 'function' ? fn : sendEmail;
+}
+
+function frontendUrl(path, query) {
+  const base = String(config.email.frontendUrl || '').replace(/\/$/, '');
+  let url;
+  try {
+    url = new URL(path, `${base}/`);
+  } catch {
+    throw new AppError('FRONTEND_URL is not a valid absolute URL.', {
+      statusCode: 503,
+      code: 'EMAIL_NOT_CONFIGURED',
+    });
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new AppError('FRONTEND_URL must use http or https.', {
+      statusCode: 503,
+      code: 'EMAIL_NOT_CONFIGURED',
+    });
+  }
+  if (url.origin !== new URL(base).origin) {
+    throw new AppError('Email links must stay on the configured frontend origin.', {
+      statusCode: 503,
+      code: 'EMAIL_NOT_CONFIGURED',
+    });
+  }
+  url.search = '';
+  if (query && Object.keys(query).length > 0) {
+    const hash = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      hash.set(key, String(value));
+    }
+    url.hash = hash.toString();
+  }
+  return url.toString();
+}
+
+function publicResendResult() {
+  const transportNote =
+    config.email?.provider === 'smtp'
+      ? 'When this server uses SMTP, an eligible message is submitted to the mail server. Submission does not guarantee inbox delivery.'
+      : 'This server is in console mode. An eligible message is written to the local development mailbox and is not emailed.';
+  return {
+    outcome: 'accepted',
+    delivery: null,
+    message:
+      'If an account exists for that email and still needs verification, a verification message has been requested. ' +
+      transportNote,
+  };
+}
+
+function deliveryResult(sent) {
+  if (sent?.delivery === 'submitted') {
+    return {
+      outcome: 'submitted',
+      delivery: 'smtp',
+      message:
+        'The verification message was submitted to the configured mail server. Submission does not guarantee inbox delivery.',
+    };
+  }
+  return {
+    outcome: 'logged',
+    delivery: 'console',
+    message:
+      'The verification message was written to the local development mailbox. It was not emailed.',
+  };
+}
+
+function logSendFailure(event, userId, err) {
+  const raw = err instanceof Error ? err.message : String(err);
+  logger.warn(event, {
+    userId,
+    code: err && err.code ? err.code : undefined,
+    error: redactMessageText(raw),
+  });
+}
 
 let dummyHashPromise;
 function getDummyHash() {
@@ -34,17 +114,6 @@ function getDummyHash() {
     dummyHashPromise = bcrypt.hash('unused-placeholder-password', config.security.bcryptSaltRounds);
   }
   return dummyHashPromise;
-}
-
-function frontendUrl(path, query) {
-  const base = config.email.frontendUrl.replace(/\/$/, '');
-  const url = new URL(path, `${base}/`);
-  if (query) {
-    for (const [k, v] of Object.entries(query)) {
-      url.searchParams.set(k, v);
-    }
-  }
-  return url.toString();
 }
 
 class AuthService {
@@ -86,17 +155,21 @@ class AuthService {
       }
     });
 
-    // Best-effort verification email — account remains usable.
+    // Best-effort verification message — the account remains usable if sending fails.
+    let verification;
     try {
-      await this.#issueAndSendVerification(user);
+      verification = deliveryResult(await this.#issueAndSendVerification(user));
     } catch (err) {
-      logger.warn('Failed to send verification email after register', {
-        userId: user.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      logSendFailure('verification_send_failed', user.id, err);
+      verification = {
+        outcome: 'failed',
+        delivery: null,
+        message:
+          'The account was created, but the verification message could not be sent. Sign in and use Resend on your profile.',
+      };
     }
 
-    return toPublicUser(user);
+    return { user: toPublicUser(user), verification };
   }
 
   async login({ email, password }) {
@@ -139,23 +212,35 @@ class AuthService {
     }
 
     return withTransaction(async (client) => {
-      const tokenRow = await this.authTokenRepository.findValidByRawToken(
+      const tokenRow = await this.authTokenRepository.findByRawTokenForUpdate(
         rawToken,
         PURPOSE.EMAIL_VERIFICATION,
         client,
       );
       if (!tokenRow) {
-        throw new AppError('This verification link is invalid or has expired.', {
+        throw new AppError('This verification link is invalid.', {
           statusCode: 400,
           code: 'INVALID_VERIFICATION_TOKEN',
+        });
+      }
+      if (tokenRow.used_at) {
+        throw new AppError('This verification link was already used.', {
+          statusCode: 400,
+          code: 'USED_VERIFICATION_TOKEN',
+        });
+      }
+      if (new Date(tokenRow.expires_at).getTime() <= Date.now()) {
+        throw new AppError('This verification link has expired. Request a new one.', {
+          statusCode: 400,
+          code: 'EXPIRED_VERIFICATION_TOKEN',
         });
       }
 
       const marked = await this.authTokenRepository.markUsed(tokenRow.id, client);
       if (!marked) {
-        throw new AppError('This verification link is invalid or has expired.', {
+        throw new AppError('This verification link was already used.', {
           statusCode: 400,
-          code: 'INVALID_VERIFICATION_TOKEN',
+          code: 'USED_VERIFICATION_TOKEN',
         });
       }
 
@@ -178,32 +263,82 @@ class AuthService {
   }
 
   /**
-   * Resend verification email. Always returns the same message (no enumeration).
-   * @param {{ email?: string, userId?: string }} input
+   * Resend a verification message.
+   * Authenticated callers get an explicit outcome. Public callers always get
+   * the same accepted payload so the response does not reveal whether the
+   * address exists, is verified, or is suspended.
+   * @param {{ email?: string, userId?: string, authenticated?: boolean }} input
    */
-  async resendVerification({ email, userId } = {}) {
-    let user = null;
-    if (userId) {
-      user = await this.userRepository.findById(userId);
-    } else if (email) {
-      user = await this.userRepository.findByEmail(email);
+  async resendVerification({ email, userId, authenticated = false } = {}) {
+    if (!authenticated) {
+      return this.#publicResend(email);
     }
 
-    if (user && !user.email_verified_at && !user.is_suspended) {
-      try {
-        await this.#issueAndSendVerification(user);
-      } catch (err) {
-        logger.warn('Failed to resend verification email', {
-          userId: user.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    } else if (!user && email) {
-      // Timing equalization when no account.
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new AppError('User account no longer exists.', {
+        statusCode: 401,
+        code: 'UNAUTHENTICATED',
+      });
+    }
+    if (user.is_suspended === true) {
+      throw new AppError('This account is suspended.', {
+        statusCode: 403,
+        code: 'ACCOUNT_SUSPENDED',
+      });
+    }
+    if (user.email_verified_at) {
+      return {
+        outcome: 'already_verified',
+        delivery: null,
+        message: 'This email address is already verified.',
+        user: toPublicUser(user),
+      };
+    }
+
+    const latest = await this.authTokenRepository.findLatestUnused(
+      user.id,
+      PURPOSE.EMAIL_VERIFICATION,
+    );
+    if (latest && Date.now() - new Date(latest.created_at).getTime() < RESEND_COOLDOWN_MS) {
+      return {
+        outcome: 'recent',
+        delivery: null,
+        message: 'A verification message was requested recently. Wait a minute before requesting another.',
+      };
+    }
+
+    const sent = await this.#issueAndSendVerification(user);
+    return {
+      ...deliveryResult(sent),
+      user: toPublicUser(user),
+    };
+  }
+
+  async #publicResend(email) {
+    const user = email ? await this.userRepository.findByEmail(email) : null;
+    if (!user) {
       await getDummyHash();
+      return publicResendResult();
+    }
+    if (user.email_verified_at || user.is_suspended === true) {
+      return publicResendResult();
     }
 
-    return { message: GENERIC_VERIFY_RESEND };
+    const latest = await this.authTokenRepository.findLatestUnused(
+      user.id,
+      PURPOSE.EMAIL_VERIFICATION,
+    );
+    if (latest && Date.now() - new Date(latest.created_at).getTime() < RESEND_COOLDOWN_MS) {
+      return publicResendResult();
+    }
+
+    try {
+      await this.#issueAndSendVerification(user);
+    } catch (err) {
+      logSendFailure('public_verification_send_failed', user.id, err);
+    }
+    return publicResendResult();
   }
 
   /**
@@ -240,10 +375,7 @@ class AuthService {
           );
         });
       } catch (err) {
-        logger.warn('Failed to send password reset email', {
-          userId: user.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        logSendFailure('password_reset_send_failed', user.id, err);
       }
     } else {
       await getDummyHash();
@@ -332,7 +464,7 @@ class AuthService {
   }
 
   async #issueAndSendVerification(user) {
-    await withTransaction(async (client) => {
+    return withTransaction(async (client) => {
       await this.authTokenRepository.invalidateUnusedForUser(
         user.id,
         PURPOSE.EMAIL_VERIFICATION,
@@ -348,7 +480,7 @@ class AuthService {
         client,
       );
       const verifyUrl = frontendUrl('/verify-email', { token: issued.rawToken });
-      await sendEmail(
+      return emailSender(
         buildVerifyEmailMessage({
           to: user.email,
           username: user.username,
@@ -387,6 +519,7 @@ module.exports = {
   AuthService,
   authService: new AuthService(),
   toPublicUser,
-  GENERIC_VERIFY_RESEND,
   GENERIC_FORGOT,
+  setEmailSenderForTests,
+  RESEND_COOLDOWN_MS,
 };

@@ -15,6 +15,7 @@ const {
   loginSchema,
   emailOnlySchema,
   verifyEmailQuerySchema,
+  verifyEmailBodySchema,
   resetPasswordSchema,
   changePasswordSchema,
 } = require('./auth.validators');
@@ -30,6 +31,12 @@ router.get(
   '/verify-email',
   authRateLimit,
   validate(verifyEmailQuerySchema, 'query'),
+  controller.verifyEmail,
+);
+router.post(
+  '/verify-email',
+  authRateLimit,
+  validate(verifyEmailBodySchema),
   controller.verifyEmail,
 );
 router.post(

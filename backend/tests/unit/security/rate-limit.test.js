@@ -9,6 +9,15 @@ process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-unit-secret-change-me-32chars!!!';
 
 describe('Rate limit middleware', () => {
+  it('limits verification resends to five requests per 15 minutes per IP', () => {
+    const { resolvePreset } = require('../../../src/middlewares/rate-limit');
+    const preset = resolvePreset('resendVerification');
+    assert.equal(preset.max, 5);
+    assert.equal(preset.windowMs, 15 * 60 * 1000);
+    assert.equal(preset.keyBy, 'ip');
+    assert.equal(preset.failClosed, true);
+  });
+
   it('returns 429 with Retry-After when the window is exceeded', async () => {
     let count = 0;
     const storePath = require.resolve('../../../src/infrastructure/cache/rate-limit.store');

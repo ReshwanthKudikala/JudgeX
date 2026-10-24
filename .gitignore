@@ -41,3 +41,6 @@ backups/
 # Vite / frontend caches
 .vite/
 *.local
+
+# Local console-mode verification mailbox (contains one-time links)
+.local-mailbox/

@@ -49,6 +49,14 @@ function assertProductionReady(cfg = config) {
         '(set ALLOW_LOCALHOST_CORS_IN_PRODUCTION=true only for local prod Docker testing)',
     );
   }
+  if (!cfg.email || cfg.email.provider !== 'smtp') {
+    problems.push('EMAIL_PROVIDER must be smtp in production');
+  } else {
+    if (!cfg.email.from) problems.push('EMAIL_FROM is required in production');
+    if (!cfg.email.smtp?.host) problems.push('SMTP_HOST is required in production');
+    if (!cfg.email.smtp?.user) problems.push('SMTP_USER is required in production');
+    if (!cfg.email.smtp?.pass) problems.push('SMTP_PASS is required in production');
+  }
 
   if (problems.length > 0) {
     const message = `Production configuration invalid:\n${problems.map((p) => `  - ${p}`).join('\n')}`;

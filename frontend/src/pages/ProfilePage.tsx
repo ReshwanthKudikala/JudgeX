@@ -19,6 +19,7 @@ import { SubmissionsErrorState } from '@/features/submissions/components/Submiss
 import { SubmissionsTable } from '@/features/submissions/components/SubmissionsTable';
 import { VerdictBadge } from '@/features/submissions/components/VerdictBadge';
 import { useSubmissionStats } from '@/features/submissions/hooks/useSubmissionStats';
+import { resendTone } from '@/features/auth/verification-feedback.js';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
 import { LANGUAGE_LABELS, type SubmissionLanguage } from '@/types/submissions';
@@ -65,6 +66,7 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const setSession = useAuthStore((s) => s.setSession);
+  const setUser = useAuthStore((s) => s.setUser);
   const rememberMe = useAuthStore((s) => s.rememberMe);
   const isValidatingSession = useAuthStore((s) => s.isValidatingSession);
 
@@ -72,6 +74,7 @@ export function ProfilePage() {
   const rankQuery = useUserRank(user?.id, Boolean(token));
 
   const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendOutcome, setResendOutcome] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -109,9 +112,12 @@ export function ProfilePage() {
     setResendLoading(true);
     setResendError(null);
     setResendMessage(null);
+    setResendOutcome(null);
     try {
       const result = await resendVerificationMe();
+      setResendOutcome(result.outcome);
       setResendMessage(result.message);
+      if (result.user) setUser(result.user);
     } catch (err) {
       setResendError(getFriendlyErrorMessage(err, 'Unable to resend verification email.'));
     } finally {
@@ -226,7 +232,8 @@ export function ProfilePage() {
           {!user.emailVerified ? (
             <div className="space-y-2 border-b border-border py-3">
               <p className="text-muted">
-                Verify your email to unlock the full account experience.
+                Verification confirms this address. It is not required to sign in, submit
+                solutions, or join contests.
               </p>
               <Button
                 type="button"
@@ -236,20 +243,31 @@ export function ProfilePage() {
                 disabled={resendLoading}
                 onClick={() => void onResend()}
               >
-                Resend verification email
+                Resend verification message
               </Button>
               {resendMessage ? (
-                <p className="text-sm text-success" role="status">
+                <p
+                  className={
+                    resendTone(resendOutcome || undefined) === 'success'
+                      ? 'text-sm text-success'
+                      : 'text-sm text-foreground'
+                  }
+                  role="status"
+                >
                   {resendMessage}
                 </p>
               ) : null}
               {resendError ? (
                 <p className="text-sm text-error" role="alert">
-                  {resendError}
+                  {resendError} You can try again.
                 </p>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <p className="border-b border-border py-3 text-muted">
+              This address is verified. Verification is not required to use JudgeX.
+            </p>
+          )}
           <div className="flex items-center justify-between border-b border-border py-3">
             <span className="text-muted">Role</span>
             <Badge variant={user.role === 'admin' ? 'primary' : 'default'}>{user.role}</Badge>

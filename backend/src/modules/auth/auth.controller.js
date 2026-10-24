@@ -7,9 +7,9 @@ const { logSecurityEvent } = require('../../shared/security/security-log');
 
 async function register(req, res, next) {
   try {
-    const user = await authService.register(req.body);
+    const { user, verification } = await authService.register(req.body);
     const accessToken = generateAccessToken(user);
-    sendSuccess(req, res, 201, { user, accessToken });
+    sendSuccess(req, res, 201, { user, accessToken, verification });
   } catch (err) {
     next(err);
   }
@@ -41,7 +41,8 @@ function currentUser(req, res) {
 
 async function verifyEmail(req, res, next) {
   try {
-    const result = await authService.verifyEmail(req.query.token);
+    const token = req.body?.token || req.query?.token;
+    const result = await authService.verifyEmail(token);
     sendSuccess(req, res, 200, result);
   } catch (err) {
     next(err);
@@ -50,9 +51,11 @@ async function verifyEmail(req, res, next) {
 
 async function resendVerification(req, res, next) {
   try {
+    const authenticated = Boolean(req.user?.id);
     const result = await authService.resendVerification({
-      email: req.body?.email,
-      userId: req.user?.id,
+      email: authenticated ? undefined : req.body?.email,
+      userId: authenticated ? req.user.id : undefined,
+      authenticated,
     });
     sendSuccess(req, res, 200, result);
   } catch (err) {

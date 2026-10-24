@@ -41,7 +41,8 @@ export function ResendVerificationPage() {
       <CardHeader>
         <CardTitle>Resend verification</CardTitle>
         <CardDescription>
-          We will send a new verification link if the account exists and is unverified.
+          If an unverified account exists for this address, a new verification message is
+          requested. This page does not say whether the address is registered.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -49,7 +50,7 @@ export function ResendVerificationPage() {
           <div className="space-y-4">
             <div
               role="status"
-              className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
+              className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               {doneMessage}
             </div>
@@ -78,7 +79,7 @@ export function ResendVerificationPage() {
               />
             </FormField>
             <Button type="submit" className="w-full" loading={isSubmitting} disabled={isSubmitting}>
-              Resend verification email
+              Request verification message
             </Button>
             <p className="text-center text-sm text-muted">
               <Link to={paths.login} className="font-medium text-primary hover:underline">

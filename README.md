@@ -888,7 +888,7 @@ That command fails if `judgex_test` already exists; leave the existing database 
 
 ### Optional services
 
-- **Email.** `EMAIL_PROVIDER=console` (the example default) prints verification and reset links in the API log. SMTP is used only when `EMAIL_PROVIDER=smtp` and `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS` are set. No external mailbox is required for local use.
+- **Email.** `EMAIL_PROVIDER=console` (the local and test default) writes the verification or reset message to `backend/.local-mailbox/latest.txt` and logs only the recipient, subject, and file path. It does not send mail. Open that file for the link. The link uses a URL fragment (`#token=`) so the token is not sent to the API as a query string. `EMAIL_PROVIDER=smtp` submits the message to `SMTP_HOST` and requires `EMAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS`. Missing SMTP settings stop the process; they do not fall back to console. SMTP acceptance means the server accepted the message. It does not guarantee the inbox received it. No feature currently requires a verified email: login, submissions, and contests stay available.
 - **AI Coach.** The rest of the app starts without Ollama. A coach request returns an unavailable error until Ollama is running and `ollama pull qwen2.5-coder:7b` has completed. OpenAI is not required.
 - **Object storage.** `STORAGE_*` can stay empty in local development.
 
@@ -1062,7 +1062,7 @@ Prerequisite: sandbox lifecycle and hidden-test viewer rules are detailed in [Ju
 
 **Implementation.** `authenticate`: Bearer JWT → `verifyAccessToken` → load user by `sub` → reject missing/suspended users → require `claims.tv === user.token_version`. Password reset/change increments `token_version` in the auth repository. Claims include `tv` at issue time (`jwt.service.js`).
 
-**Residual.** Access tokens remain bearer secrets until expiry or `tv` bump—no refresh-token rotation in the MVP auth model (`docs/SECURITY.md`). Email verification does **not** gate login or protected routes.
+**Residual.** Access tokens remain bearer secrets until expiry or `tv` bump—no refresh-token rotation in the MVP auth model (`docs/SECURITY.md`). Email verification does **not** gate login, submissions, contests, or other protected routes. The verified flag is stored in `users.email_verified_at` and is set only by consuming a matching unused `email_verification` token.
 
 ### Password theft at rest / online guessing
 
@@ -1070,7 +1070,7 @@ Prerequisite: sandbox lifecycle and hidden-test viewer rules are detailed in [Ju
 
 **Mitigation.** Slow hashes; constant-ish login work; tight auth rate limits.
 
-**Implementation.** `bcrypt` with `BCRYPT_SALT_ROUNDS` (default 12). Login compares against a cached dummy hash when the user is missing (`auth.service.js`) before failing. Auth routes use the Redis `auth` rate-limit tier (IP, fail-closed). Forgot-password / resend-verification use stricter IP tiers (`forgotPassword`, `resendVerification`). Email/password-reset tokens: `crypto.randomBytes` raw, **SHA-256** stored (`auth-token.repository.js`); single-use flows in auth service.
+**Implementation.** `bcrypt` with `BCRYPT_SALT_ROUNDS` (default 12). Login compares against a cached dummy hash when the user is missing (`auth.service.js`) before failing. Auth routes use the Redis `auth` rate-limit tier (IP, fail-closed). Forgot-password / resend-verification use stricter IP tiers (`forgotPassword`, `resendVerification`: 5 requests per 15 minutes per IP, fail-closed). A signed-in resend also waits 60 seconds before replacing an unused verification token. Email/password-reset tokens: `crypto.randomBytes(32)` raw, **SHA-256** stored (`auth-token.repository.js`); the raw token is placed in the link fragment, locked with `FOR UPDATE` when consumed, and marked used in the same transaction that sets `email_verified_at`. Public resend returns one response for missing, verified, and suspended addresses. Authenticated resend returns `logged`, `submitted`, `recent`, `already_verified`, or HTTP 503 `EMAIL_DELIVERY_FAILED`.
 
 **Residual.** Password rules are length-bounded (Zod), not complexity-scored. Generic messaging reduces but does not eliminate all enumeration via timing/secondary channels.
 

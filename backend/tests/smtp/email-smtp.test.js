@@ -48,6 +48,7 @@ describe('SMTP delivery through the email service', { timeout: 15000 }, () => {
     const result = await email.sendEmail(message);
 
     assert.equal(result.provider, 'smtp');
+    assert.equal(result.delivery, 'submitted');
     assert.ok(result.messageId);
     const delivered = catcher.messages[before];
     assert.ok(delivered, 'expected the catcher to receive the verification message');
@@ -70,6 +71,7 @@ describe('SMTP delivery through the email service', { timeout: 15000 }, () => {
     const result = await email.sendEmail(message);
 
     assert.equal(result.provider, 'smtp');
+    assert.equal(result.delivery, 'submitted');
     const delivered = catcher.messages[before];
     assert.ok(delivered, 'expected the catcher to receive the reset message');
     assertDelivered(delivered, {
@@ -87,7 +89,11 @@ describe('SMTP delivery through the email service', { timeout: 15000 }, () => {
         subject: 'malformed',
         text: 'should not be delivered',
       }),
-      /No recipients defined|recipient/i,
+      (err) => {
+        assert.equal(err.code, 'EMAIL_DELIVERY_FAILED');
+        assert.equal(/No recipients defined/i.test(err.message), false);
+        return true;
+      },
     );
     assert.equal(catcher.messages.length, before);
   });

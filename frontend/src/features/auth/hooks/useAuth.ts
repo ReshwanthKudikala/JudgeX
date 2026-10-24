@@ -64,13 +64,15 @@ export function useAuth() {
   const registerMutation = useMutation({
     mutationFn: (input: RegisterInput) => authApi.register(input),
     onMutate: () => setLoading(true),
-    onSuccess: () => {
-      // Sprint 20: account created → Login (discard JWT; do not auto-sign-in).
+    onSuccess: (session) => {
+      // Account created → Login (discard JWT; do not auto-sign-in).
       setLoading(false);
+      const failed = session.verification?.outcome === 'failed';
       pushToast({
         title: 'Account created',
-        description: 'Please sign in with your new credentials.',
-        variant: 'success',
+        description:
+          session.verification?.message || 'Please sign in with your new credentials.',
+        variant: failed ? 'error' : 'success',
       });
     },
     onError: (err: unknown) => {

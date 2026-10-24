@@ -48,7 +48,7 @@ FRONTEND_URL=https://judgex.example.com
 # Local Vite only:      FRONTEND_URL=http://localhost:5173
 ```
 
-`EMAIL_PROVIDER` defaults to `console` (logs `email_outbound` with the full link). Set `EMAIL_PROVIDER=smtp` plus `SMTP_*` for real delivery; both modes use `FRONTEND_URL`.
+`EMAIL_PROVIDER=console` writes the message to `backend/.local-mailbox/latest.txt` in development and does not email it. The API log records the recipient and subject, not the link. `EMAIL_PROVIDER=smtp` submits to the configured server. A successful SMTP response means the server accepted the message, not that an inbox received it. Both modes build links from `FRONTEND_URL` and put the token in the URL fragment.
 
 ### Gmail SMTP
 
@@ -69,7 +69,7 @@ SMTP_PASS=your-16-char-app-password
 FRONTEND_URL=https://judgex.example.com
 ```
 
-Incomplete SMTP config logs a startup warning and falls back to console (the API still boots). SMTP passwords are never logged. Keep `EMAIL_PROVIDER=console` for local development when you do not need real delivery.
+If `EMAIL_PROVIDER=smtp` and `EMAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, or `SMTP_PASS` is missing, the process exits at startup. It does not fall back to console. Connection, authentication, recipient, and timeout failures return HTTP 503 on the signed-in resend route with a generic message; the API log records a redacted error and never the password, raw token, or full verification URL. Keep `EMAIL_PROVIDER=console` for local development. Use the SMTP test (`npm run test:smtp`) instead of a live mailbox when checking the transport. Production requires `EMAIL_PROVIDER=smtp` with those settings.
 
 ### Local production Docker testing (Vite on localhost)
 

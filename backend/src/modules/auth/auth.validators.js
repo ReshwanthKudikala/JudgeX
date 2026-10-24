@@ -32,6 +32,8 @@ const verifyEmailQuerySchema = z.object({
   token: z.string().min(1, 'A verification token is required.'),
 });
 
+const verifyEmailBodySchema = verifyEmailQuerySchema;
+
 const resetPasswordSchema = z.object({
   token: z.string().min(1, 'A reset token is required.'),
   newPassword: passwordSchema,
@@ -47,6 +49,7 @@ module.exports = {
   loginSchema,
   emailOnlySchema,
   verifyEmailQuerySchema,
+  verifyEmailBodySchema,
   resetPasswordSchema,
   changePasswordSchema,
 };

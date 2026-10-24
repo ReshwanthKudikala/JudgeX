@@ -6,7 +6,7 @@
 
 `backend/src/infrastructure/email/email.service.js` uses `nodemailer.createTransport` with host, port, `secure`, and user/password auth, then `sendMail({ from, to, subject, text, html })`.
 
-The default provider is `console`. SMTP is used only when `EMAIL_PROVIDER=smtp` and host, user, and password are set. `buildVerifyEmailMessage` and `buildPasswordResetMessage` return `{ to, subject, text }` only. They do not set `html`. There are no attachments, OAuth2 token fetches, or raw MIME bodies.
+The default provider is `console`. It stores the message in memory for tests and, in development, in `.local-mailbox/latest.txt`. It does not contact an SMTP server. `EMAIL_PROVIDER=smtp` requires `EMAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS`; incomplete configuration throws at startup and on send. `sendMail` uses a 10 second connection, greeting, and socket timeout. `buildVerifyEmailMessage` and `buildPasswordResetMessage` return `{ to, subject, text }` only. They do not set `html`. There are no attachments, OAuth2 token fetches, or raw MIME bodies. A returned `delivery: "submitted"` means the transport accepted the message.
 
 ## Tests
 

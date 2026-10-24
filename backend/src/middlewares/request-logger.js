@@ -4,6 +4,10 @@
 const { config } = require('../config');
 const { metrics } = require('../shared/observability/metrics');
 
+function redactRequestUrl(url) {
+  return String(url || '').replace(/([?&#]token=)[^&#\s]+/gi, '$1[REDACTED]');
+}
+
 /** Paths that are noisy under probes — sample in production. */
 const SAMPLED_PATHS = new Set([
   '/health',
@@ -44,7 +48,7 @@ function requestLogger() {
       log.info('http_request', {
         source: 'http',
         method: req.method,
-        path: req.originalUrl || req.url,
+        path: redactRequestUrl(req.originalUrl || req.url),
         statusCode: res.statusCode,
         durationMs: Math.round(durationMs * 100) / 100,
         ip: req.ip || req.socket?.remoteAddress || null,
@@ -58,4 +62,4 @@ function requestLogger() {
   };
 }
 
-module.exports = { requestLogger, SAMPLED_PATHS };
+module.exports = { requestLogger, SAMPLED_PATHS, redactRequestUrl };

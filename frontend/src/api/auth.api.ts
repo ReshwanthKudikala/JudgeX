@@ -5,6 +5,21 @@ import type { LoginInput, RegisterInput } from '@/types/auth';
 interface AuthSessionDto {
   user: UserDto;
   accessToken: string;
+  verification?: VerificationNoticeDto;
+}
+
+interface VerificationNoticeDto {
+  outcome: 'logged' | 'submitted' | 'already_verified' | 'recent' | 'accepted' | 'failed';
+  delivery: 'console' | 'smtp' | null;
+  message: string;
+  user?: UserDto;
+}
+
+export interface VerificationNotice {
+  outcome: VerificationNoticeDto['outcome'];
+  delivery: 'console' | 'smtp' | null;
+  message: string;
+  user?: User;
 }
 
 interface MeDto {
@@ -20,6 +35,7 @@ interface MessageDto {
 export interface AuthSession {
   user: User;
   accessToken: string;
+  verification?: VerificationNotice;
 }
 
 export async function login(input: LoginInput): Promise<AuthSession> {
@@ -50,6 +66,13 @@ export async function register(input: RegisterInput): Promise<AuthSession> {
   return {
     user: mapUser(data.user),
     accessToken: data.accessToken,
+    verification: data.verification
+      ? {
+          outcome: data.verification.outcome,
+          delivery: data.verification.delivery,
+          message: data.verification.message,
+        }
+      : undefined,
   };
 }
 
@@ -60,23 +83,32 @@ export async function fetchCurrentUser(): Promise<User> {
 
 export async function verifyEmail(token: string): Promise<{ message: string; user: User }> {
   const data = await unwrapData(
-    apiClient.get<ApiEnvelope<{ message: string; user: UserDto }>>('/auth/verify-email', {
-      params: { token },
-    }),
+    apiClient.post<ApiEnvelope<{ message: string; user: UserDto }>>('/auth/verify-email', { token }),
   );
   return { message: data.message, user: mapUser(data.user) };
 }
 
-export async function resendVerification(email: string): Promise<{ message: string }> {
-  return unwrapData(
-    apiClient.post<ApiEnvelope<MessageDto>>('/auth/resend-verification', { email }),
-  );
+function mapNotice(data: VerificationNoticeDto): VerificationNotice {
+  return {
+    outcome: data.outcome,
+    delivery: data.delivery ?? null,
+    message: data.message,
+    user: data.user ? mapUser(data.user) : undefined,
+  };
 }
 
-export async function resendVerificationMe(): Promise<{ message: string }> {
-  return unwrapData(
-    apiClient.post<ApiEnvelope<MessageDto>>('/auth/resend-verification/me'),
+export async function resendVerification(email: string): Promise<VerificationNotice> {
+  const data = await unwrapData(
+    apiClient.post<ApiEnvelope<VerificationNoticeDto>>('/auth/resend-verification', { email }),
   );
+  return mapNotice(data);
+}
+
+export async function resendVerificationMe(): Promise<VerificationNotice> {
+  const data = await unwrapData(
+    apiClient.post<ApiEnvelope<VerificationNoticeDto>>('/auth/resend-verification/me'),
+  );
+  return mapNotice(data);
 }
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
