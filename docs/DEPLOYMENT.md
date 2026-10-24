@@ -120,6 +120,9 @@ If `migrate` exits non-zero, Compose does not start the API. The API healthcheck
 `docker compose up -d --build` recreates `migrate` when the API image changes, then waits for that one-shot container to exit 0 before replacing the API. `--no-deps` skips that wait. Use it only to recreate `api` and `frontend` when the new image has no new SQL, as described in the README. If the image adds a migration, do not roll the API forward with `--no-deps`; the new process can start before the SQL is applied.
 
 ```bash
+# After recreating api/frontend without restarting nginx, refresh upstream IPs:
+#   docker exec judgex-prod-nginx nginx -s reload
+# After dependency upgrades, rebuild worker and cleanup-worker too — not only api.
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build migrate api worker cleanup-worker
 ```
 

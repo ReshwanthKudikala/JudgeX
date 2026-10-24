@@ -983,11 +983,24 @@ A source edit is not running until an image is built from it and a container is 
 To replace only the API and frontend containers when the new image has **no** new SQL, leaving Postgres, Redis, workers, and Nginx in place:
 
 ```bash
+export GIT_SHA="$(git rev-parse HEAD)"
+export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 docker compose -f docker-compose.prod.yml --env-file .env.production build api frontend
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-deps --no-build --force-recreate api frontend
+docker exec judgex-prod-nginx nginx -s reload
 ```
 
-`--no-deps` does not run `migrate`. If the image adds a migration, use the full deploy in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) so `migrate` exits 0 before the API starts. Nginx resolves the `api` and `frontend` upstreams from the static config. If `http://localhost/ready` fails after the API container is replaced, reload Nginx (`docker exec judgex-prod-nginx nginx -s reload`). A successful `/ready` means a reload is unnecessary.
+When a backend **dependency or shared config** changes (for example a Zod upgrade), rebuild and recreate **every** Node service that ships that lockfile — at least `api`, `worker`, and `cleanup-worker` — not only the API. Leaving workers on an older image is a production skew:
+
+```bash
+export GIT_SHA="$(git rev-parse HEAD)"
+export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+docker compose -f docker-compose.prod.yml --env-file .env.production build api worker cleanup-worker frontend
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-deps --no-build --force-recreate api worker cleanup-worker frontend
+docker exec judgex-prod-nginx nginx -s reload
+```
+
+`--no-deps` does not run `migrate`. If the image adds a migration, use the full deploy in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) so `migrate` exits 0 before the API starts. Nginx resolves the `api` and `frontend` upstreams from the static config at start time. After recreating `api` or `frontend`, reload Nginx (`docker exec judgex-prod-nginx nginx -s reload`) so it picks up the new container IPs — otherwise the edge can return **502 Bad Gateway** while the new containers are healthy. Stamp `GIT_SHA` / `BUILD_TIME` on builds so `/health.build` matches the deployed commit.
 
 ### Operational assumptions (implemented)
 
