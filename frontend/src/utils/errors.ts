@@ -15,8 +15,8 @@ export function getFriendlyErrorMessage(err: unknown, fallback = 'Something went
     if (err.status === 404) {
       return err.message || 'The requested resource was not found.';
     }
-    if (err.status === 429) {
-      return err.message || 'Too many requests. Please wait a moment and try again.';
+    if (err.status === 429 || err.code === 'RATE_LIMITED') {
+      return 'Too many requests. Please wait and try again.';
     }
     if (err.code === 'EMAIL_DELIVERY_FAILED' || err.code === 'EMAIL_NOT_CONFIGURED') {
       return err.message || 'The verification message could not be sent. Try again shortly.';

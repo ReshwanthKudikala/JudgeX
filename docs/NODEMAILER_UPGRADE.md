@@ -10,7 +10,9 @@ The default provider is `console`. It stores the message in memory for tests and
 
 ## Tests
 
-Console-mode registration and password-reset coverage stays in `backend/tests/integration/auth-email.test.js` (`npm test`). That process loads the email service as `console` and must not import the SMTP file, because config freezes `EMAIL_PROVIDER` on first import.
+Console-mode registration and password-reset coverage stays in `backend/tests/integration/auth-email.test.js` (`npm test`). The unit, integration, and e2e runners set `EMAIL_PROVIDER=console` before dotenv loads, so a developer SMTP configuration is not used. That process must not import the SMTP test file, because config freezes `EMAIL_PROVIDER` on first import.
+
+Forgot-password always responds with “If an account exists for that email, a password reset message has been requested.” A delivery failure rolls back the new reset token and still returns that sentence. It does not say the link was sent. Signed-in verification resend returns HTTP 503 instead of claiming the message was sent.
 
 SMTP delivery is a separate process:
 

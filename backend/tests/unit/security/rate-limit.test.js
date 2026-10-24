@@ -16,6 +16,11 @@ describe('Rate limit middleware', () => {
     assert.equal(preset.windowMs, 15 * 60 * 1000);
     assert.equal(preset.keyBy, 'ip');
     assert.equal(preset.failClosed, true);
+    const reset = resolvePreset('forgotPassword');
+    assert.equal(reset.max, 5);
+    assert.equal(reset.windowMs, 15 * 60 * 1000);
+    assert.equal(reset.keyBy, 'ip');
+    assert.equal(reset.failClosed, true);
   });
 
   it('returns 429 with Retry-After when the window is exceeded', async () => {

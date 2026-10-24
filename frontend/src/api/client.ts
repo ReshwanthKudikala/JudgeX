@@ -6,6 +6,7 @@ import axios, {
 
 import { useAuthStore } from '@/store/auth.store';
 import { ApiError, type ApiEnvelope } from '@/types';
+import { sessionFailureCopy } from '@/features/auth/verification-feedback.js';
 import { notifyUnauthorized } from '@/utils/auth-events';
 import { getFriendlyErrorMessage } from '@/utils/errors';
 
@@ -85,7 +86,7 @@ apiClient.interceptors.response.use(
       }
       // Session probe handles its own toast; avoid double notifications.
       if (hadSession && !isSessionProbe) {
-        notifyUnauthorized(message || 'Your session has expired. Please sign in again.');
+        notifyUnauthorized(sessionFailureCopy(message));
       }
     }
 

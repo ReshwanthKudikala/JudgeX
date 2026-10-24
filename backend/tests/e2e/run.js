@@ -28,6 +28,9 @@ if (timeoutMs) {
 }
 args.push(...files);
 
-const result = spawnSync(process.execPath, args, { stdio: 'inherit' });
+const result = spawnSync(process.execPath, args, {
+  stdio: 'inherit',
+  env: { ...process.env, EMAIL_PROVIDER: 'console' },
+});
 
 process.exit(result.status ?? 1);

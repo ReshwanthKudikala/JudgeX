@@ -131,8 +131,8 @@ Base: `/api/v1/auth`. Backed by the **Auth Module** (`BACKEND_STRUCTURE.md` §5.
 - **Status codes:** `200`, `401` (invalid/expired/revoked refresh), `500`.
 - **Possible errors:** `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_REVOKED`.
 
-### 2.6 Password Reset — `POST /auth/forgot-password` & `POST /auth/reset-password` — Auth: No `[Future]`
-- **Purpose:** email-based reset (`PRD` `FR-AUTH-7`). `forgot-password` accepts `{ email }` and always returns `200` (no enumeration); `reset-password` accepts `{ token, newPassword }`.
+### 2.6 Password Reset — `POST /auth/forgot-password` & `POST /auth/reset-password` — Auth: No
+- **Purpose:** email-based reset (`PRD` `FR-AUTH-7`). `forgot-password` accepts `{ email }` and always returns `200` with the same message for an unknown address, a suspended account, a requested message, and a delivery failure. That message says a reset message has been requested. It does not say a link was sent, and it does not reveal whether the address exists. A failed send rolls back the new reset token. `reset-password` accepts `{ token, newPassword }`.
 - **Status codes:** `200`, `400`, `410` (expired reset token), `500`.
 - **Possible errors:** `VALIDATION_ERROR`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`.
 
@@ -892,7 +892,7 @@ Content-Type: application/json
     Problem edits are partial (`PATCH` a subset). The test-case **set** must be replaced atomically for judging correctness, so `PUT` (full replace, transactional) models that all-or-nothing semantics (`DATABASE_DESIGN.md` §7.3).
 
 22. **How are large test-case payloads handled without bloating responses/DB?**
-    Admins can supply large cases that the backend stores in object storage with metadata in Postgres (`DATABASE_DESIGN.md` §3.6). The API contract stays the same; payloads stream server-side, not through the DB row.
+    The storage adapter recognizes an external object-storage reference and rejects it as not implemented. Inline test-case bodies live in Postgres. `STORAGE_*` can stay empty.
 
 23. **Is Submit idempotent, and how do you handle retries safely?**
     Submit itself creates a new submission per call (not idempotent by design), but the *judging* of a submission is idempotent server-side (unique `(submission_id, test_index)`, status guards). Optional client idempotency keys could be added additively.
@@ -907,7 +907,7 @@ Content-Type: application/json
 
 ## 15. Endpoint Summary Table (Quick Reference)
 
-OpenAPI-style summary of **every** endpoint: method, path, authentication requirement, scope, and purpose.
+OpenAPI-style summary of the original endpoint list. Implemented routes that this table does not number: `GET` and `POST /api/v1/auth/verify-email`, `POST /api/v1/auth/resend-verification`, `POST /api/v1/auth/resend-verification/me`, and `POST /api/v1/auth/change-password`. Logout, refresh, and Google OAuth are not implemented. `POST /api/v1/ai/coach/stream` is implemented beside `POST /api/v1/ai/coach`.
 
 | # | Method | Path | Auth | Scope | Purpose |
 |---|--------|------|------|-------|---------|
@@ -917,8 +917,8 @@ OpenAPI-style summary of **every** endpoint: method, path, authentication requir
 | 3 | GET | `/api/v1/auth/me` | User | MVP | Current authenticated user. |
 | 4 | POST | `/api/v1/auth/logout` | User | V1 | Invalidate session/refresh token. |
 | 5 | POST | `/api/v1/auth/refresh` | Refresh token | Future/V1 | Exchange refresh for new access token. |
-| 6 | POST | `/api/v1/auth/forgot-password` | None | Future | Start email password reset. |
-| 7 | POST | `/api/v1/auth/reset-password` | Reset token | Future | Complete password reset. |
+| 6 | POST | `/api/v1/auth/forgot-password` | None | Implemented | Always HTTP 200 with one message: a reset message has been requested. Delivery failure rolls the new token back and does not change that message. |
+| 7 | POST | `/api/v1/auth/reset-password` | Reset token in the body | Implemented | Single-use hashed token. Success bumps `token_version` and revokes older access tokens. |
 | 8 | GET | `/api/v1/auth/google` | None | Future | Begin Google OAuth. |
 | 9 | GET | `/api/v1/auth/google/callback` | None | Future | OAuth callback → JWT. |
 | **Problems** |
@@ -931,8 +931,8 @@ OpenAPI-style summary of **every** endpoint: method, path, authentication requir
 | 15 | GET | `/api/v1/submissions` | User | MVP | Current user's submission history. |
 | 16 | GET | `/api/v1/submissions/{id}` | User (owner) | MVP | Full submission detail + per-case results. |
 | 17 | GET | `/api/v1/submissions/{id}/status` | User (owner) | MVP | Lightweight status/verdict polling. |
-| 18 | POST | `/api/v1/code/run` | User | MVP | Run vs public/sample cases (not scored) → `202`. |
-| 19 | GET | `/api/v1/code/run/{runId}` | User | MVP | Fetch transient run results. |
+| 18 | POST | `/api/v1/code/run` | User | Implemented | Wait for the judge worker and return `200`. No submission row. |
+| 19 | GET | `/api/v1/code/run/{runId}` | User | Not implemented | The current Run path does not store a run id. |
 | **Leaderboard & Stats** |
 | 20 | GET | `/api/v1/leaderboard` | Optional | MVP | Global rankings (paginated). |
 | 21 | GET | `/api/v1/users/{username}/statistics` | Optional | MVP | Public user statistics. |

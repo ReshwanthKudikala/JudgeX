@@ -88,7 +88,7 @@ The project must demonstrate practical, defensible knowledge of:
 
 ## 3. Functional Requirements
 
-Functional requirements are grouped by domain. Each is tagged with a priority: **[MVP]**, **[V1]**, or **[Future]**.
+Functional requirements are grouped by domain. Each is tagged with a priority: **[MVP]**, **[V1]**, or **[Future]**. Those tags are the original plan. The current code also ships email verification and password reset (FR-AUTH-7), memory-limit verdicts (FR-JUDGE-7), custom Run input (FR-EDIT-6), contest scoreboards (FR-LEAD-4 and FR-CON-*), discussions and moderation (FR-DISC-*), admin analytics (FR-ADMIN-7), and coach actions for review, hints, wrong answers, complexity, and optimization. Refresh tokens, Google OAuth, and a logout endpoint are not implemented. Password change and reset bump `token_version`, which rejects older access tokens. The coach prompt asks the model not to paste a full solution unless the user asks; there is no output filter that enforces FR-AI-2. OpenAI is not on the coach path (FR-AI-3).
 
 ### 3.1 Authentication & Accounts
 
@@ -473,7 +473,7 @@ Ordered roughly by expected sequence after MVP:
 - **A7:** Traffic is moderate (portfolio/demo scale), so a modular monolith is appropriate; microservices are unnecessary now.
 - **A8:** Output comparison for most problems is deterministic; special judges (custom checkers) are out of MVP scope.
 - **A9:** Users access via modern web browsers; no native mobile app required for MVP.
-- **A10:** Email delivery infrastructure is only required once password reset is implemented (Future).
+- **A10:** Email delivery is implemented. Console mode is the development default. Production requires SMTP. A signed-in verification resend reports delivery failure. Forgot-password always says a reset message has been requested, including when delivery fails and the new token is rolled back.
 
 ---
 

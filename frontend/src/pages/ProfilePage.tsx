@@ -19,9 +19,10 @@ import { SubmissionsErrorState } from '@/features/submissions/components/Submiss
 import { SubmissionsTable } from '@/features/submissions/components/SubmissionsTable';
 import { VerdictBadge } from '@/features/submissions/components/VerdictBadge';
 import { useSubmissionStats } from '@/features/submissions/hooks/useSubmissionStats';
-import { resendTone } from '@/features/auth/verification-feedback.js';
+import { resendErrorCopy, resendTone, sessionFailureCopy } from '@/features/auth/verification-feedback.js';
 import { paths } from '@/routes/paths';
 import { useAuthStore } from '@/store';
+import { ApiError } from '@/types';
 import { LANGUAGE_LABELS, type SubmissionLanguage } from '@/types/submissions';
 import { applyApiFormErrors } from '@/utils/apply-api-form-errors';
 import { getFriendlyErrorMessage } from '@/utils/errors';
@@ -119,7 +120,14 @@ export function ProfilePage() {
       setResendMessage(result.message);
       if (result.user) setUser(result.user);
     } catch (err) {
-      setResendError(getFriendlyErrorMessage(err, 'Unable to resend verification email.'));
+      if (err instanceof ApiError && err.status === 401) {
+        setResendError(sessionFailureCopy(err.message));
+      } else {
+        const message = getFriendlyErrorMessage(err, 'Unable to resend verification email.');
+        const status = err instanceof ApiError ? err.status : undefined;
+        const code = err instanceof ApiError ? err.code : undefined;
+        setResendError(resendErrorCopy(message, status, code));
+      }
     } finally {
       setResendLoading(false);
     }
@@ -259,7 +267,7 @@ export function ProfilePage() {
               ) : null}
               {resendError ? (
                 <p className="text-sm text-error" role="alert">
-                  {resendError} You can try again.
+                  {resendError}
                 </p>
               ) : null}
             </div>

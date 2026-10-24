@@ -186,7 +186,7 @@ flowchart TB
   API -->|enqueue submit / run-code| RD
   JW -->|consume jobs| RD
   JW --> PG
-  CW -->|reaper: queued rows| PG
+  CW -->|reaper: queued and running rows| PG
   CW -->|check / re-enqueue| RD
   CODE -.->|only via worker| SB
   JW -->|dockerode| SB
@@ -304,7 +304,7 @@ Tradeoffs accepted at this layer: Run holds an API request open until the worker
 
 Prerequisite reading: [Architecture](#architecture) (AI is off the judge path), [Key Engineering Decisions](#key-engineering-decisions) (hidden-test / viewer posture), [Judge Pipeline](#judge-pipeline) (what Run/Submit actually return). This section covers **only** the Learning Coach: request lifecycle, context assembly, prompts, providers, and AI-specific trust boundaries.
 
-The coach never compiles or executes user code, never enqueues BullMQ jobs, and never opens Docker. It is an authenticated, rate-limited **LLM tutoring** path on the API process.
+The coach does not open Docker and does not create a submission. For a review, and for other actions that have public or named inputs, it enqueues one Run job on the judge worker and appends that sandbox result to the prompt and the answer. Explain, hint, and compile-error requests skip that job. Before either step, a scope check refuses non-educational requests with “I can help with coding, computer science, academic subjects, and studying. Please ask me an educational question.” An ambiguous request is asked to be rephrased. The API process still does not mount the Docker socket. `POST /api/v1/ai/coach/stream` uses the same preparation and then streams tokens.
 
 ### Why it is isolated from execution
 
@@ -737,7 +737,7 @@ The same process starts the sandbox janitor. The sweep does not contact Docker u
 | **Sandbox** | Docker, dockerode, `judgex-cpp` / `judgex-python` images |
 | **Authentication** | JWT (`jsonwebtoken`), bcrypt |
 | **Validation** | Zod (API), express middleware |
-| **Testing** | Node test runner; unit, integration, local e2e judge suites |
+| **Testing** | Node test runner; unit, integration, local e2e judge suites, isolated SMTP catcher. Frontend has lint and production build only |
 | **Deployment** | Docker Compose, Nginx, multi-stage builds |
 
 ---
@@ -878,6 +878,8 @@ docker exec judgex-postgres pg_dump -U judgex -d judgex
 
 Restore a plain SQL dump with `docker exec -i judgex-postgres psql -U judgex -d judgex`. Do not run either command against a different Postgres container.
 
+Development Compose and production Compose are separate stacks with separate Postgres and Redis volumes. Development Postgres is the `judgex-postgres` container, published on host port **5432**, database `judgex`, volume `pgdata`. Production Postgres is `judgex-prod-postgres`, is not published on a host port, and stores its own database (default name `judgex`) on the named volume `judgex_pgdata`. The shared database name does not mean shared data. `http://localhost:5173` uses the host API at `http://localhost:4000` and `backend/.env`. `http://localhost` is the production Nginx site and uses `.env.production` on the Compose network. Do not point the development API at the production database.
+
 The development Compose file creates the database `judgex` only. Integration and E2E tests refuse every other database name before they migrate or truncate. Create the test database once:
 
 ```powershell
@@ -888,7 +890,31 @@ That command fails if `judgex_test` already exists; leave the existing database 
 
 ### Optional services
 
-- **Email.** `EMAIL_PROVIDER=console` (the local and test default) writes the verification or reset message to `backend/.local-mailbox/latest.txt` and logs only the recipient, subject, and file path. It does not send mail. Open that file for the link. The link uses a URL fragment (`#token=`) so the token is not sent to the API as a query string. `EMAIL_PROVIDER=smtp` submits the message to `SMTP_HOST` and requires `EMAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS`. Missing SMTP settings stop the process; they do not fall back to console. SMTP acceptance means the server accepted the message. It does not guarantee the inbox received it. No feature currently requires a verified email: login, submissions, and contests stay available.
+- **Email.** `EMAIL_PROVIDER=console` is the schema default. In development it writes the verification or reset message to `backend/.local-mailbox/latest.txt` and logs only the recipient, subject, and file path. It does not send mail. Open that file for the link. Unit, integration, and end-to-end runners set `EMAIL_PROVIDER=console` before `.env` loads, so a developer SMTP configuration is not used and those suites do not send mail. `npm run test:smtp` is separate and uses a local catcher. `EMAIL_PROVIDER=smtp` submits the message to `SMTP_HOST` and needs `EMAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS` (`SMTP_PORT` defaults to 587, `SMTP_SECURE` to false). Missing SMTP settings stop the process; they do not fall back to console. Production boot requires `EMAIL_PROVIDER=smtp`. SMTP acceptance means the server accepted the message. It does not guarantee the inbox received it. No feature currently requires a verified email: login, submissions, and contests stay available.
+
+  A verification token lasts 24 hours. A password-reset token lasts 30 minutes. Both are single-use, stored as a SHA-256 hash, and new links put the raw token in the URL fragment (`#token=`). The verify page also accepts a `?token=` query, then removes it from the address bar. It sends one request per token, so a double mount does not consume the link twice. The account becomes verified only after the backend accepts the token. Requesting a message, or an SMTP server accepting one, does not set `email_verified_at`.
+
+  Replacing a token and sending the message happen in one transaction. If delivery throws, that transaction rolls back, the account stays unverified, and an older unused token remains usable. A signed-in resend waits 60 seconds before replacing an unused, unexpired token. The resend controls stay disabled while that request is in progress. Public and signed-in resend routes also allow 5 requests per 15 minutes per IP and fail closed when Redis is down.
+
+  User-facing results:
+
+  | Situation | What the user sees |
+  |-----------|-------------------|
+  | Link accepted | “Email verified successfully.” |
+  | Account already verified, including a used or expired link for that account | “This email address is already verified.” |
+  | Expired link, account still unverified | “This verification link has expired. Request a new one.” The page offers a new-link request. |
+  | Used link, account still unverified | “This verification link was already used.” |
+  | Missing, tampered, or unknown token | “This verification link is invalid.” A page opened with no token says the token is missing. |
+  | Signed-in resend submitted | “The verification message was submitted to the configured mail server. Submission does not guarantee inbox delivery.” |
+  | Signed-in resend in console mode | “The verification message was written to the local development mailbox. It was not emailed.” |
+  | Signed-in resend during the 60-second cooldown | “A verification message was requested recently. Wait a minute before requesting another.” |
+  | Signed-in delivery failure | HTTP 503, `EMAIL_DELIVERY_FAILED`: “The verification message could not be submitted to the mail server. Try again shortly.” The client does not receive SMTP errors, credentials, or the verification URL. Registration still creates the account and says: “The account was created, but the verification message could not be sent. Sign in and use Resend on your profile.” |
+  | Public resend | One response for a missing, verified, suspended, cooling-down, or failed delivery: a message “has been requested.” It does not say whether an account exists or whether delivery succeeded. |
+  | Too many resend requests | “Too many requests. Please wait and try again.” |
+  | Signed-out resend on a route that requires a session | “Your session has expired. Please sign in again.” A suspended account keeps its own message. |
+  | Network or server failure | “Unable to reach the server. Check your connection and try again.” or “The server is temporarily unavailable. Please try again later.” |
+  | Profile resend retry | The profile alert adds “You can try again.” once, and only for a delivery failure, missing email configuration, a network failure, or another HTTP 5xx response. A rate limit and an ended session do not get that suffix. |
+  | Password reset | Always HTTP 200, for an unknown address, a suspended account, a successful request, and a delivery failure: “If an account exists for that email, a password reset message has been requested.” It does not say a link was sent. Token replacement and the send are one transaction, so a failure leaves no new usable reset token. |
 - **AI Coach.** The rest of the app starts without Ollama. A coach request returns an unavailable error until Ollama is running and `ollama pull qwen2.5-coder:7b` has completed. OpenAI is not required.
 - **Object storage.** `STORAGE_*` can stay empty in local development.
 
@@ -910,7 +936,7 @@ See [`docker/README.md`](docker/README.md) for container details.
 
 ## Deployment
 
-This section documents the **self-hosted** stack defined by **`docker-compose.prod.yml`**. That Compose file is the repository’s production-*oriented* topology for running JudgeX on your own host (or lab VM)—not a claim that a public JudgeX instance is live, scaled, or under production load.
+This section documents the **self-hosted** stack defined by **`docker-compose.prod.yml`** (Compose project `judgex-prod`). Running it on this machine serves `http://localhost`. That site is the local production Compose stack. It is not a publicly deployed JudgeX website.
 
 Dev-only Postgres/Redis/Ollama for host-run apps remains in **`docker-compose.yml`**. Prefer [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for backups, TLS setup details, and troubleshooting.
 
@@ -923,10 +949,10 @@ Bring up the full app with Compose. The stack consists of:
 | `nginx` | Edge reverse proxy: SPA + `/api` upstream. Publishes host ports `80` (and optionally `443`). |
 | `frontend` | Multi-stage Vite production build served as static assets (consumed via nginx). |
 | `migrate` | One-shot schema update (`node scripts/migrate.js` on the API image). Must exit 0 before the API starts |
-| `api` | Express API (`Dockerfile.api`). **No Docker socket.** Serves HTTP only after `migrate` succeeds (`scripts/docker-entrypoint-api.sh`). |
+| `api` (`judgex-prod-api`) | Express API (`Dockerfile.api`). **No Docker socket and no host port.** Serves HTTP only after `migrate` succeeds (`scripts/docker-entrypoint-api.sh`). |
 | `worker` | Judge worker (`Dockerfile.judge`). Consumes the BullMQ `judge` queue; **only** this service mounts `/var/run/docker.sock` and the sandbox workspace bind. |
-| `cleanup-worker` | Separate process: reaps stuck **`queued`** submissions (re-enqueue safety net). No Docker socket. |
-| `postgres` | Durable source of truth (`judgex_pgdata` volume). |
+| `cleanup-worker` | Separate process: reaps stuck **`queued`** and **`running`** submissions (re-enqueue safety net). No Docker socket. |
+| `postgres` (`judgex-prod-postgres`) | Separate Postgres instance. No host port. Data is the named volume `judgex_pgdata`, not the development `pgdata` volume. |
 | `redis` | BullMQ, caches, rate-limit counters; AOF enabled (`--appendonly yes`). |
 
 **Why `worker` is separate from `api`:** untrusted code execution requires the Docker socket. Keeping the socket off the API process shrinks the HTTP attack surface and matches the architectural invariant that controllers enqueue work rather than compile/run user programs. Scale judging by adding worker replicas; the API stays a normal Node service.
@@ -950,7 +976,18 @@ cp .env.production.example .env.production   # set secrets
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Compose wires `DATABASE_URL` / `REDIS_URL` to the `postgres` and `redis` services, waits until Postgres is healthy, runs the one-shot `migrate` service to completion, and only then starts `api` and the workers. Point browsers at the nginx-published HTTP port (default host **80**).
+Compose wires `DATABASE_URL` / `REDIS_URL` to the `postgres` and `redis` services, waits until Postgres is healthy, runs the one-shot `migrate` service to completion, and only then starts `api` and the workers. Point browsers at the nginx-published HTTP port (default host **80**). Postgres and Redis are reachable only on the Compose network.
+
+A source edit is not running until an image is built from it and a container is recreated from that image. Building an image does not change a running container or a volume. Recreating a container does not delete `judgex_pgdata` or `judgex_redisdata`. `migrate` applies new SQL files and records them in `schema_migrations`. It does not reset data.
+
+To replace only the API and frontend containers when the new image has **no** new SQL, leaving Postgres, Redis, workers, and Nginx in place:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production build api frontend
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-deps --no-build --force-recreate api frontend
+```
+
+`--no-deps` does not run `migrate`. If the image adds a migration, use the full deploy in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) so `migrate` exits 0 before the API starts. Nginx resolves the `api` and `frontend` upstreams from the static config. If `http://localhost/ready` fails after the API container is replaced, reload Nginx (`docker exec judgex-prod-nginx nginx -s reload`). A successful `/ready` means a reload is unnecessary.
 
 ### Operational assumptions (implemented)
 
@@ -960,7 +997,7 @@ What this Compose file actually encodes:
 - **Migrations before serve** — the `migrate` service runs `node scripts/migrate.js` once and must exit 0 before any API replica starts. The API entrypoint does not migrate.
 - **Redis required in this mode** — `REDIS_REQUIRED=true` for API and workers in the prod compose env.
 - **Persistence** — Postgres and Redis data volumes survive container recreation.
-- **Healthchecks** — service-level health probes for postgres, redis, api, frontend, and nginx (as defined in the compose file).
+- **Healthchecks** — Postgres uses `pg_isready`. Redis uses `PING`. The API container probes `GET /ready` (Postgres, Redis, BullMQ, and the worker heartbeat). Liveness is `GET /health` and `GET /health/live`. The frontend container probes `GET /healthz`. Nginx probes `GET /nginx-health`. The public edge proxies `/health` and `/ready` to the API and answers `/metrics` with 404.
 - **Cleanup worker** — reaps stuck `queued` and `running` rows. The sandbox janitor removes exited containers only when `JUDGE_SANDBOX_OWNER` is set. This Compose service does not mount the Docker socket.
 
 ### TLS (optional)
@@ -981,7 +1018,7 @@ By default the checked-in nginx config serves **HTTP**. Compose maps host port *
 | `JWT_SECRET` | Signing secret (≥ 32 chars in production) |
 | `JWT_EXPIRES_IN` | Token TTL (default in `.env.example`: `15m`) |
 | `CORS_ORIGIN` | Allowed frontend origin(s) |
-| `FRONTEND_URL` | Base URL for email verification / reset links |
+| `FRONTEND_URL` | Base URL for email verification and reset links. Unset, the API uses deprecated `APP_PUBLIC_URL`, then `http://localhost:5173`. Production Compose should set the Nginx origin |
 | `BCRYPT_SALT_ROUNDS` | Password hashing cost |
 | `AI_PROVIDER` | Coach factory reads this today: set **`ollama`**. Other values are not wired on the coach path (`complete()` factory). |
 | `OLLAMA_BASE_URL` | Ollama API base URL |
@@ -1000,8 +1037,10 @@ By default the checked-in nginx config serves **HTTP**. Compose maps host port *
 | `JUDGE_SANDBOX_OWNER` | Optional owner label. Unset, the janitor does not contact Docker. Set, it removes exited sandboxes for that owner only. A running sandbox is never removed by age |
 | `JUDGE_WORKSPACE_DIR` | In-container workspace path |
 | `JUDGE_WORKSPACE_HOST_DIR` | Host path for sandbox bind mounts |
-| `EMAIL_PROVIDER` | `console` or `smtp` |
-| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | SMTP credentials |
+| `EMAIL_PROVIDER` | `console` (default) or `smtp`. Production boot requires `smtp` and does not fall back to console |
+| `EMAIL_FROM` | From address. Schema default is `JudgeX <noreply@judgex.local>` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | SMTP server. `SMTP_PORT` defaults to `587` |
+| `SMTP_SECURE` | `true` for implicit TLS. Default `false` (STARTTLS on 587) |
 | `LOG_LEVEL` | Logging verbosity |
 | `REAPER_*` | Stuck-queue sweeper tuning |
 
@@ -1070,7 +1109,7 @@ Prerequisite: sandbox lifecycle and hidden-test viewer rules are detailed in [Ju
 
 **Mitigation.** Slow hashes; constant-ish login work; tight auth rate limits.
 
-**Implementation.** `bcrypt` with `BCRYPT_SALT_ROUNDS` (default 12). Login compares against a cached dummy hash when the user is missing (`auth.service.js`) before failing. Auth routes use the Redis `auth` rate-limit tier (IP, fail-closed). Forgot-password / resend-verification use stricter IP tiers (`forgotPassword`, `resendVerification`: 5 requests per 15 minutes per IP, fail-closed). A signed-in resend also waits 60 seconds before replacing an unused verification token. Email/password-reset tokens: `crypto.randomBytes(32)` raw, **SHA-256** stored (`auth-token.repository.js`); the raw token is placed in the link fragment, locked with `FOR UPDATE` when consumed, and marked used in the same transaction that sets `email_verified_at`. Public resend returns one response for missing, verified, and suspended addresses. Authenticated resend returns `logged`, `submitted`, `recent`, `already_verified`, or HTTP 503 `EMAIL_DELIVERY_FAILED`.
+**Implementation.** `bcrypt` with `BCRYPT_SALT_ROUNDS` (default 12). Login compares against a cached dummy hash when the user is missing (`auth.service.js`) before failing. Auth routes use the Redis `auth` rate-limit tier (IP, fail-closed). Forgot-password / resend-verification use stricter IP tiers (`forgotPassword`, `resendVerification`: 5 requests per 15 minutes per IP, fail-closed). A signed-in resend also waits 60 seconds before replacing an unused, unexpired verification token. Email/password-reset tokens: `crypto.randomBytes(32)` raw, **SHA-256** stored (`auth-token.repository.js`); verification links expire in 24 hours and reset links in 30 minutes. The raw token is placed in the link fragment. Verification consumption locks the row with `FOR UPDATE`. Reset reuse is rejected by an update that succeeds only while `used_at` is null. The account is marked verified in the same transaction that consumes a still-unused verification token. A link for an account that is already verified returns success and does not clear `email_verified_at`. A used or expired link for an account that is still unverified stays an error. Issuing a replacement and sending it are one transaction, so a delivery failure leaves the previous unused token in place. Public resend returns one response for missing, verified, suspended, cooling-down, and failed delivery. Authenticated resend returns `logged`, `submitted`, `recent`, `already_verified`, or HTTP 503 `EMAIL_DELIVERY_FAILED`. The client message does not include SMTP diagnostics, credentials, or the verification URL. Forgot-password always returns HTTP 200 and “If an account exists for that email, a password reset message has been requested.” The same response is used when no account exists and when delivery fails. A failed send rolls the new reset token back, and the response does not say the link was sent.
 
 **Residual.** Password rules are length-bounded (Zod), not complexity-scored. Generic messaging reduces but does not eliminate all enumeration via timing/secondary channels.
 
@@ -1157,6 +1196,7 @@ How confidence is built for JudgeX: **what runs where**, what each layer actuall
 npm run test:unit            # no Docker/Postgres required
 npm run test:integration     # alias: npm test — Postgres judgex_test required; Redis DB 15 when a suite touches the queue
 npm run test:e2e             # Postgres judgex_test + Redis DB 15 + Docker daemon + sandbox images
+npm run test:smtp            # local SMTP catcher only; does not use Gmail or .env credentials
 
 # Frontend — from frontend/
 npm run lint
@@ -1182,7 +1222,7 @@ Anchors under `backend/tests/unit/` (non-exhaustive but representative of intent
 - **Run orchestration:** `code.service` DTO mapping and enqueue-and-wait behavior with **mocked** execution/queue edges.
 - **AI Coach:** action routing, sanitizer (strips hidden-shaped context), PromptBuilder shapes, provider factory, per-action suites (explain/review/hint/WA/optimize/CE) with **mocked** providers—no live Ollama. `npm run eval:coach` is a separate local model check and is not part of `npm test`.
 - **Reaper:** stuck `queued` re-enqueue, duplicate `jobId`, Redis-down stop.
-- **Security helpers:** rate-limit 429 headers; Helmet/CORS helpers; production config asserts.
+- **Security helpers:** rate-limit 429 headers; Helmet/CORS helpers; production config asserts. Email delivery tests mock SMTP authentication, rejection, timeout, and missing settings.
 - **Other:** migrator ordering, observability metrics naming, admin platform mapping, discussion helpers.
 
 **Does not prove:** real sandbox isolation, live LLM behavior, or end-to-end HTTP+Docker judging.
@@ -1191,14 +1231,14 @@ Anchors under `backend/tests/unit/` (non-exhaustive but representative of intent
 
 Supertest against `createApp()` with real Postgres (`tests/integration/helpers/`). Notable suites:
 
-- Auth register/login; email verify / forgot-reset / change-password (`auth`, `auth-email`)
+- Auth register/login; email verify / forgot-reset / change-password (`auth`, `auth-email`), including expired, invalid, reused, and already-verified links, concurrent consumption, and resend rollback when delivery throws
 - Admin RBAC 401/403/200 (`rbac`)
 - Problems list/detail; **hidden samples excluded** from public detail; admin problem/testcase CRUD (`problems`, `testcases`)
 - Submissions create **202 queued**, ownership, list/filters/stats—**does not wait for a verdict** (`submissions`)
 - Persist-before-enqueue and enqueue-failure leaving `queued` (`queue-enqueue`, often with mocked queue)
 - Contests visibility/join/scoreboard; discussions; editorials; leaderboard; admin dashboard/moderation/queue; health/ready/metrics; basic Helmet/UUID validation (`security`)
 
-**Prerequisites:** Postgres database **`judgex_test`** (required). The harness checks the URL and `current_database()` before migrate or `TRUNCATE`, and a development database named `judgex` fails the run instead of being wiped. When `DATABASE_URL` is unset, the integration bootstrap uses `judgex_test` and Redis DB 15. Redis is still optional for most HTTP suites (`REDIS_REQUIRED=false`); suites that drain or obliterate a queue require Redis DB 15. CI provides Postgres 17 as `judgex_test` and Redis 7. Rate limiting is typically **disabled** in CI (`RATE_LIMIT_ENABLED=false`).
+**Prerequisites:** Postgres database **`judgex_test`** (required). The harness checks the URL and `current_database()` before migrate or `TRUNCATE`, and a development database named `judgex` fails the run instead of being wiped. When `DATABASE_URL` is unset, the integration bootstrap uses `judgex_test` and Redis DB 15. The unit, integration, and e2e runners set `EMAIL_PROVIDER=console` in the child environment, so dotenv does not apply `backend/.env` SMTP settings and those runs do not send mail. Redis is still optional for most HTTP suites (`REDIS_REQUIRED=false`); suites that drain or obliterate a queue require Redis DB 15. CI provides Postgres 17 as `judgex_test` and Redis 7. Rate limiting is typically **disabled** in CI (`RATE_LIMIT_ENABLED=false`).
 
 **Does not prove:** Docker judging, Run Code HTTP→worker path, live AI `/ai/coach`, or rate-limit behavior under load.
 

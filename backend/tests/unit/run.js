@@ -25,7 +25,10 @@ if (files.length === 0) {
 const result = spawnSync(
   process.execPath,
   ['--test', '--test-concurrency=1', ...files],
-  { stdio: 'inherit' },
+  {
+    stdio: 'inherit',
+    env: { ...process.env, EMAIL_PROVIDER: 'console' },
+  },
 );
 
 process.exit(result.status ?? 1);

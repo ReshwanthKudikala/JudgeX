@@ -25,8 +25,17 @@ const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 
-const GENERIC_FORGOT =
-  'If an account exists for that email, a password reset link has been sent.';
+function publicForgotResult() {
+  const transportNote =
+    config.email?.provider === 'smtp'
+      ? 'When this server uses SMTP, an eligible message is submitted to the mail server. Submission does not guarantee inbox delivery.'
+      : 'This server is in console mode. An eligible message is written to the local development mailbox and is not emailed.';
+  return {
+    message:
+      'If an account exists for that email, a password reset message has been requested. ' +
+      transportNote,
+  };
+}
 
 let emailSender = sendEmail;
 
@@ -223,6 +232,31 @@ class AuthService {
           code: 'INVALID_VERIFICATION_TOKEN',
         });
       }
+
+      const existing = await this.userRepository.findById(tokenRow.user_id, client);
+      if (!existing) {
+        throw new AppError('This verification link is invalid.', {
+          statusCode: 400,
+          code: 'INVALID_VERIFICATION_TOKEN',
+        });
+      }
+
+      if (existing.email_verified_at) {
+        if (!tokenRow.used_at) {
+          await this.authTokenRepository.markUsed(tokenRow.id, client);
+          await this.authTokenRepository.invalidateUnusedForUser(
+            tokenRow.user_id,
+            PURPOSE.EMAIL_VERIFICATION,
+            client,
+          );
+        }
+        return {
+          user: toPublicUser(existing),
+          alreadyVerified: true,
+          message: 'This email address is already verified.',
+        };
+      }
+
       if (tokenRow.used_at) {
         throw new AppError('This verification link was already used.', {
           statusCode: 400,
@@ -246,7 +280,10 @@ class AuthService {
 
       const user = await this.userRepository.markEmailVerified(tokenRow.user_id, client);
       if (!user) {
-        throw new NotFoundError('User not found.');
+        throw new AppError('This verification link is invalid.', {
+          statusCode: 400,
+          code: 'INVALID_VERIFICATION_TOKEN',
+        });
       }
 
       await this.authTokenRepository.invalidateUnusedForUser(
@@ -257,6 +294,7 @@ class AuthService {
 
       return {
         user: toPublicUser(user),
+        alreadyVerified: false,
         message: 'Email verified successfully.',
       };
     });
@@ -366,7 +404,7 @@ class AuthService {
             client,
           );
           const resetUrl = frontendUrl('/reset-password', { token: issued.rawToken });
-          await sendEmail(
+          await emailSender(
             buildPasswordResetMessage({
               to: user.email,
               username: user.username,
@@ -381,7 +419,7 @@ class AuthService {
       await getDummyHash();
     }
 
-    return { message: GENERIC_FORGOT };
+    return publicForgotResult();
   }
 
   /**
@@ -519,7 +557,6 @@ module.exports = {
   AuthService,
   authService: new AuthService(),
   toPublicUser,
-  GENERIC_FORGOT,
   setEmailSenderForTests,
   RESEND_COOLDOWN_MS,
 };

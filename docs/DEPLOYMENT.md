@@ -50,6 +50,8 @@ FRONTEND_URL=https://judgex.example.com
 
 `EMAIL_PROVIDER=console` writes the message to `backend/.local-mailbox/latest.txt` in development and does not email it. The API log records the recipient and subject, not the link. `EMAIL_PROVIDER=smtp` submits to the configured server. A successful SMTP response means the server accepted the message, not that an inbox received it. Both modes build links from `FRONTEND_URL` and put the token in the URL fragment.
 
+Signed-in verification resend returns HTTP 503 when delivery fails and does not mark the account verified. Public verification resend stays generic. Forgot-password also stays generic: HTTP 200 and “If an account exists for that email, a password reset message has been requested.” A failed send rolls the new reset token back. The response does not say the link was sent and does not reveal whether the address exists.
+
 ### Gmail SMTP
 
 To send real verification / password-reset mail via Gmail:
@@ -71,9 +73,13 @@ FRONTEND_URL=https://judgex.example.com
 
 If `EMAIL_PROVIDER=smtp` and `EMAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, or `SMTP_PASS` is missing, the process exits at startup. It does not fall back to console. Connection, authentication, recipient, and timeout failures return HTTP 503 on the signed-in resend route with a generic message; the API log records a redacted error and never the password, raw token, or full verification URL. Keep `EMAIL_PROVIDER=console` for local development. Use the SMTP test (`npm run test:smtp`) instead of a live mailbox when checking the transport. Production requires `EMAIL_PROVIDER=smtp` with those settings.
 
-### Local production Docker testing (Vite on localhost)
+### Local production Compose is not the public site
 
-When running `docker-compose.prod.yml` against a host Vite app (`http://localhost:5173`), keep `NODE_ENV=production` and set:
+`docker-compose.prod.yml` (project `judgex-prod`) on this machine is a second local stack. `http://localhost` is Nginx in that stack. The API container is `judgex-prod-api` and does not publish port 4000. Postgres is `judgex-prod-postgres`, with no host port, on the volume `judgex_pgdata`. It is not `judgex-postgres` on host port 5432, and it is not a publicly deployed website. Development stays on `http://localhost:5173` and `http://localhost:4000`.
+
+### Optional: production Compose with the host Vite app
+
+This is not the default local production layout. When running `docker-compose.prod.yml` against a host Vite app (`http://localhost:5173`), keep `NODE_ENV=production` and set:
 
 ```bash
 CORS_ORIGIN=http://localhost:5173
@@ -111,7 +117,7 @@ If `migrate` exits non-zero, Compose does not start the API. The API healthcheck
 
 ### Later deploys
 
-`docker compose up -d --build` recreates `migrate` when the API image changes, then waits for that one-shot container to exit 0 before replacing the API. Do not roll the API forward with `--no-deps`. That flag skips the `migrate` dependency and can start the new API before new SQL has been applied.
+`docker compose up -d --build` recreates `migrate` when the API image changes, then waits for that one-shot container to exit 0 before replacing the API. `--no-deps` skips that wait. Use it only to recreate `api` and `frontend` when the new image has no new SQL, as described in the README. If the image adds a migration, do not roll the API forward with `--no-deps`; the new process can start before the SQL is applied.
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build migrate api worker cleanup-worker

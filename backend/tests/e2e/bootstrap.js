@@ -12,3 +12,6 @@ process.env.INFRA_STARTUP_RETRY_DELAY_MS = process.env.INFRA_STARTUP_RETRY_DELAY
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || 'postgres://judgex:judgex@localhost:5432/judgex_test';
 process.env.REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379/15';
+// dotenv does not override an existing variable. Pin console mode so a
+// developer SMTP configuration in .env cannot send real mail from this suite.
+process.env.EMAIL_PROVIDER = 'console';

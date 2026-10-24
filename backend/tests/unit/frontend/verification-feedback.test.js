@@ -55,6 +55,41 @@ describe('verification feedback', () => {
     assert.equal(resendTone('recent'), 'neutral');
     assert.equal(resendTone('failed'), 'error');
 
+    const { sessionFailureCopy, resendCanRetry } = await loadFrontend(
+      'frontend/src/features/auth/verification-feedback.js',
+    );
+    assert.equal(sessionFailureCopy('A Bearer access token is required.'), 'Your session has expired. Please sign in again.');
+    assert.match(sessionFailureCopy('This account has been suspended.'), /suspended/i);
+    assert.equal(resendCanRetry(503, 'EMAIL_DELIVERY_FAILED'), true);
+    assert.equal(resendCanRetry(503, 'EMAIL_NOT_CONFIGURED'), true);
+    assert.equal(resendCanRetry(0, 'NETWORK_ERROR'), true);
+    assert.equal(resendCanRetry(500, 'REQUEST_FAILED'), true);
+    assert.equal(resendCanRetry(429, 'RATE_LIMITED'), false);
+    assert.equal(resendCanRetry(401, 'UNAUTHENTICATED'), false);
+
+    const { resendErrorCopy } = await loadFrontend(
+      'frontend/src/features/auth/verification-feedback.js',
+    );
+    const delivery = resendErrorCopy(
+      'The verification message could not be submitted to the mail server. Try again shortly.',
+      503,
+      'EMAIL_DELIVERY_FAILED',
+    );
+    assert.equal(delivery.endsWith('You can try again.'), true);
+    assert.equal(delivery.split('You can try again.').length, 2);
+    assert.equal(
+      resendErrorCopy('Too many requests. Please wait and try again.', 429, 'RATE_LIMITED'),
+      'Too many requests. Please wait and try again.',
+    );
+    assert.equal(
+      resendErrorCopy('Your session has expired. Please sign in again.', 401, 'UNAUTHENTICATED'),
+      'Your session has expired. Please sign in again.',
+    );
+    assert.equal(
+      resendErrorCopy('Mail failed. You can try again.', 503, 'EMAIL_DELIVERY_FAILED'),
+      'Mail failed. You can try again.',
+    );
+
     const { verifyEmailOnce } = await loadFrontend(
       'frontend/src/features/auth/verification-feedback.js',
     );

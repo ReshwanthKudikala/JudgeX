@@ -70,9 +70,23 @@ describe('Email verification & password recovery', () => {
     assert.equal(responseContains(ok.body, token), false);
 
     const reuse = await api().get('/api/v1/auth/verify-email').query({ token });
-    assert.equal(reuse.status, 400);
-    assert.equal(reuse.body.error.code, 'USED_VERIFICATION_TOKEN');
+    assert.equal(reuse.status, 200);
+    assert.equal(reuse.body.data.alreadyVerified, true);
+    assert.match(reuse.body.data.message, /already verified/i);
+    assert.equal(reuse.body.data.user.email_verified, true);
     assert.equal(responseContains(reuse.body, token), false);
+
+    await query(
+      `UPDATE auth_tokens
+          SET expires_at = now() - interval '1 hour'
+        WHERE purpose = 'email_verification'
+          AND user_id = (SELECT id FROM users WHERE email = $1)`,
+      [email],
+    );
+    const expiredAfterVerify = await api().post('/api/v1/auth/verify-email').send({ token });
+    assert.equal(expiredAfterVerify.status, 200);
+    assert.equal(expiredAfterVerify.body.data.alreadyVerified, true);
+    assert.equal(responseContains(expiredAfterVerify.body, token), false);
   });
 
   it('forgot-password always returns a generic message', async (t) => {
@@ -82,7 +96,8 @@ describe('Email verification & password recovery', () => {
       .post('/api/v1/auth/forgot-password')
       .send({ email: `${unique('missing')}@example.com` });
     assert.equal(missing.status, 200);
-    assert.ok(missing.body.data.message);
+    assert.match(missing.body.data.message, /has been requested/i);
+    assert.equal(/has been sent/i.test(missing.body.data.message), false);
 
     const { email } = await registerUser({ username: unique('fp') });
     clearSentEmails();
@@ -90,6 +105,68 @@ describe('Email verification & password recovery', () => {
     assert.equal(existing.status, 200);
     assert.equal(existing.body.data.message, missing.body.data.message);
     assert.equal(getSentEmails().length, 1);
+    assert.match(getSentEmails()[0].text, /reset-password#token=/);
+  });
+
+  it('rolls back a reset token when delivery fails and stays generic', async (t) => {
+    if (!requireInfra(t)) return;
+
+    const username = unique('rf');
+    const email = `${username}@example.com`;
+    await api()
+      .post('/api/v1/auth/register')
+      .send({ username, email, password: 'password123' });
+    clearSentEmails();
+    const issued = await api().post('/api/v1/auth/forgot-password').send({ email });
+    assert.equal(issued.status, 200);
+    const resetToken = extractTokenFromMailbox('/reset-password');
+    const before = await query(
+      `SELECT count(*)::int AS unused
+         FROM auth_tokens
+        WHERE purpose = 'password_reset'
+          AND used_at IS NULL
+          AND expires_at > now()
+          AND user_id = (SELECT id FROM users WHERE email = $1)`,
+      [email],
+    );
+    assert.equal(before.rows[0].unused, 1);
+
+    setEmailSenderForTests(async () => {
+      throw new AppError('Invalid login: 535 secret-should-not-leak', {
+        statusCode: 503,
+        code: 'EMAIL_DELIVERY_FAILED',
+      });
+    });
+    try {
+      const failed = await api().post('/api/v1/auth/forgot-password').send({ email });
+      const unknown = await api()
+        .post('/api/v1/auth/forgot-password')
+        .send({ email: `${unique('ghost')}@example.com` });
+      assert.equal(failed.status, 200);
+      assert.equal(unknown.status, 200);
+      assert.equal(failed.body.data.message, unknown.body.data.message);
+      assert.equal(/has been sent/i.test(failed.body.data.message), false);
+      assert.equal(/535|smtp|secret-should-not-leak/i.test(JSON.stringify(failed.body)), false);
+      assert.equal(responseContains(failed.body, resetToken), false);
+    } finally {
+      setEmailSenderForTests(null);
+    }
+
+    const after = await query(
+      `SELECT count(*)::int AS unused
+         FROM auth_tokens
+        WHERE purpose = 'password_reset'
+          AND used_at IS NULL
+          AND expires_at > now()
+          AND user_id = (SELECT id FROM users WHERE email = $1)`,
+      [email],
+    );
+    assert.equal(after.rows[0].unused, 1);
+    const stillUsable = await api()
+      .post('/api/v1/auth/reset-password')
+      .send({ token: resetToken, newPassword: 'newpassword99' });
+    assert.equal(stillUsable.status, 200);
+    assert.equal(responseContains(stillUsable.body, resetToken), false);
   });
 
   it('resets password and revokes prior access tokens', async (t) => {
@@ -311,10 +388,13 @@ describe('Email verification & password recovery', () => {
       api().post('/api/v1/auth/verify-email').send({ token }),
       api().post('/api/v1/auth/verify-email').send({ token }),
     ]);
-    const statuses = [first.status, second.status].sort();
-    assert.deepEqual(statuses, [200, 400]);
-    const failed = first.status === 400 ? first : second;
-    assert.equal(failed.body.error.code, 'USED_VERIFICATION_TOKEN');
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    const messages = [first.body.data.message, second.body.data.message];
+    assert.equal(messages.some((message) => /successfully/i.test(message)), true);
+    assert.equal(messages.some((message) => /already verified/i.test(message)), true);
+    assert.equal(responseContains(first.body, token), false);
+    assert.equal(responseContains(second.body, token), false);
   });
 
   it('rolls back a resend when sending fails so the previous link still works', async (t) => {

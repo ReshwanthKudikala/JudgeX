@@ -41,7 +41,9 @@ export function ForgotPasswordPage() {
       <CardHeader>
         <CardTitle>Forgot password</CardTitle>
         <CardDescription>
-          Enter your account email and we will send a reset link if it exists.
+          If an account exists for this address, a password reset message is requested.
+          This page does not say whether the address is registered or whether delivery
+          succeeded.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -49,7 +51,7 @@ export function ForgotPasswordPage() {
           <div className="space-y-4">
             <div
               role="status"
-              className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
+              className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               {doneMessage}
             </div>
@@ -78,7 +80,7 @@ export function ForgotPasswordPage() {
               />
             </FormField>
             <Button type="submit" className="w-full" loading={isSubmitting} disabled={isSubmitting}>
-              Send reset link
+              Request reset link
             </Button>
             <p className="text-center text-sm text-muted">
               <Link to={paths.login} className="font-medium text-primary hover:underline">
