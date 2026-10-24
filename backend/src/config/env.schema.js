@@ -4,6 +4,9 @@ const { z } = require('zod');
 
 // Coerce helpers keep string env values typed while allowing sane defaults so
 // the app can boot for local development even without a populated .env.
+// Use `.prefault(...)` (not `.default(...)`) so omitted values still run through
+// the enum + transform. Zod 4 `.default()` short-circuits and would return the
+// raw string instead of a boolean.
 const booleanish = z
   .enum(['true', 'false', '1', '0'])
   .transform((v) => v === 'true' || v === '1');
@@ -18,7 +21,7 @@ const envSchema = z
     // Explicit opt-in: allow localhost / 127.0.0.1 in CORS_ORIGIN under
     // NODE_ENV=production (local production Docker / Vite hybrid testing only).
     // Default false — real deployments must keep this unset/false.
-    ALLOW_LOCALHOST_CORS_IN_PRODUCTION: booleanish.default('false'),
+    ALLOW_LOCALHOST_CORS_IN_PRODUCTION: booleanish.prefault('false'),
     // Max JSON body size (express body-parser syntax, e.g. 1mb, 512kb).
     JSON_BODY_LIMIT: z.string().default('1mb'),
 
@@ -30,12 +33,12 @@ const envSchema = z
     DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
     DB_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30000),
     // When true, the app aborts startup if PostgreSQL cannot be reached.
-    DB_REQUIRED: booleanish.default('true'),
+    DB_REQUIRED: booleanish.prefault('true'),
 
     // --- Redis ---
     REDIS_URL: z.string().default('redis://localhost:6379'),
     // When true, the app aborts startup if Redis cannot be reached.
-    REDIS_REQUIRED: booleanish.default('true'),
+    REDIS_REQUIRED: booleanish.prefault('true'),
 
     // --- Infrastructure startup retry policy ---
     INFRA_STARTUP_RETRIES: z.coerce.number().int().nonnegative().default(5),
@@ -49,9 +52,9 @@ const envSchema = z
     BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
 
     // --- Rate limiting (Redis fixed-window; tier overrides optional) ---
-    RATE_LIMIT_ENABLED: booleanish.default('true'),
+    RATE_LIMIT_ENABLED: booleanish.prefault('true'),
     // When true, apply limits even under NODE_ENV=test (for dedicated suites).
-    RATE_LIMIT_FORCE_IN_TEST: booleanish.default('false'),
+    RATE_LIMIT_FORCE_IN_TEST: booleanish.prefault('false'),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
@@ -85,7 +88,7 @@ const envSchema = z
     APP_PUBLIC_URL: z.string().optional(),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().positive().default(587),
-    SMTP_SECURE: booleanish.default('false'),
+    SMTP_SECURE: booleanish.prefault('false'),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
 
@@ -127,7 +130,7 @@ const envSchema = z
     // the job is marked stalled and another worker may start the same submission.
     JUDGE_LOCK_DURATION_MS: z.coerce.number().int().positive().default(300_000),
     // When true, stop after the first non-accepted test case (default).
-    JUDGE_FAIL_FAST: booleanish.default('true'),
+    JUDGE_FAIL_FAST: booleanish.prefault('true'),
     // Shared host-visible workspace for sandbox bind mounts (DinD). Empty → os.tmpdir().
     JUDGE_WORKSPACE_DIR: z.string().optional(),
     // Optional host path for Docker Binds when it differs from JUDGE_WORKSPACE_DIR
@@ -152,8 +155,8 @@ const envSchema = z
     LOG_FORMAT: z.enum(['json', 'pretty', 'auto']).default('auto'),
 
     // --- Feature flags ---
-    FEATURE_AI_COMPILE_EXPLANATION: booleanish.default('true'),
-    FEATURE_AI_ADVANCED: booleanish.default('true'),
+    FEATURE_AI_COMPILE_EXPLANATION: booleanish.prefault('true'),
+    FEATURE_AI_ADVANCED: booleanish.prefault('true'),
 
     // --- Stuck-submission reaper (persist-before-enqueue safety net) ---
     // How often the cleanup worker scans for orphaned queued rows.
