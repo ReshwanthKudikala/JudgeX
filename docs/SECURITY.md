@@ -56,4 +56,4 @@ Structured `security:*` warn events (no passwords/tokens):
 
 Zod at the route boundary: UUIDs, pagination bounds, allow-listed sort fields, markdown/source size caps, and `JSON_BODY_LIMIT` (default `1mb`) for body-parser.
 
-Both applications resolve `zod@3.25.76`. [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) marks every Zod release below 4.6.6 as high severity because oversized array validation can exhaust memory. The published fix is Zod 4.6.6. npm has no Zod 3 release after 3.25.76, so this tree does not upgrade. The 1mb body limit bounds request size until a planned Zod 4 migration.
+Both applications resolve `zod@4.6.7`, which includes the [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) fix for unbounded memory growth while validating oversized arrays. Request bodies remain capped by `JSON_BODY_LIMIT` (default `1mb`).
